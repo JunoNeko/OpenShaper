@@ -1,7 +1,8 @@
 # Fin designer — standalone Futures fin design for CNC and print
 
-Status: **planned, no code yet.** This is the agreed scope and build order. Update the
-status line and tick steps off as they land.
+Status: **steps 0–1 done.** Tab spec and fixture: `docs/specs/fins/futures-tabs.*`.
+Tab outline: `packages/kernel/src/fin-design/futures-tab.ts`. This is the agreed scope
+and build order. Update the status line as steps land.
 
 ## Goal
 
