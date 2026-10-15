@@ -10,8 +10,9 @@
  * - a drag moves a handle by the pointer's travel, never to the pointer, so a grab
  *   off-centre (normal with a finger) doesn't jump the curve;
  * - touch gets a wider hit radius;
- * - the view is fitted once (and again when `frameKey` changes), never while
- *   editing, so the curve doesn't slide out from under a drag.
+ * - the view is fitted on first size, when `frameKey` changes, and when the pane
+ *   resizes until the user pans or zooms; never while editing, so the curve doesn't
+ *   slide out from under a drag.
  *
  * Mouse and touch: drag a point or handle to move it; drag empty space to pan; wheel
  * to zoom about the cursor; double-click (double-tap) a curve to add a point there.
@@ -107,6 +108,10 @@ export function FinCurveEditor({
   const [hovered, setHovered] = useState<FinCurvePick | null>(null);
   const drag = useRef<Drag | null>(null);
   const framedFor = useRef<string | number | undefined | null>(null);
+  /** The pane size the view was last fitted to. */
+  const fittedSize = useRef({ w: 0, h: 0 });
+  /** Set once the user pans or zooms: from then on a resize keeps their framing. */
+  const userFramed = useRef(false);
 
   // Track the pane's size.
   useEffect(() => {
@@ -119,10 +124,14 @@ export function FinCurveEditor({
     return () => ro.disconnect();
   }, []);
 
-  // Fit the view on first size, and whenever frameKey changes; never mid-edit.
+  // Fit the view on first size and whenever frameKey changes; also when the pane
+  // resizes (a phone's pane settles after first paint), until the user has framed it
+  // themselves. Never mid-edit.
   useEffect(() => {
     if (size.w === 0 || size.h === 0 || drag.current) return;
-    if (vp && framedFor.current === frameKey) return;
+    const resized = size.w !== fittedSize.current.w || size.h !== fittedSize.current.h;
+    const newFrame = framedFor.current !== frameKey;
+    if (vp && !newFrame && (!resized || userFramed.current)) return;
     const extra = frameBounds && {
       minX: frameBounds.minX,
       maxX: frameBounds.maxX,
@@ -132,6 +141,8 @@ export function FinCurveEditor({
     const b = layersBounds(layers, yScale, extra);
     if (!b) return;
     framedFor.current = frameKey;
+    fittedSize.current = { w: size.w, h: size.h };
+    if (newFrame) userFramed.current = false;
     setVp(fitToBounds(b, size.w, size.h, 32));
   }, [size.w, size.h, frameKey, layers, frameBounds, yScale, vp]);
 
@@ -199,6 +210,7 @@ export function FinCurveEditor({
       const to = dragTo(d.grabbed, d.pointerAt, screenToWorld(vp, p));
       onDrag?.(d.pick, fromView(to, yScale));
     } else {
+      userFramed.current = true;
       setVp(pan(vp, p.x - d.last.x, p.y - d.last.y));
       drag.current = { ...d, last: p };
     }
@@ -222,6 +234,7 @@ export function FinCurveEditor({
   // wheel listener is passive).
   const zoom = useCallback((e: WheelEvent) => {
     e.preventDefault();
+    userFramed.current = true;
     setVp((v) => (v ? zoomAt(v, local(e), Math.exp(-e.deltaY * 0.0015)) : v));
   }, []);
   useEffect(() => {

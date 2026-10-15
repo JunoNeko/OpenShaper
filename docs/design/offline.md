@@ -1,4 +1,4 @@
-# Offline support (`/app` only)
+# Offline support (`/app` and `/fin` only)
 
 OpenShaper is a static, client-side SPA, and the editor already needs no network:
 board state lives in IndexedDB (`session-store.ts`, `trace-store.ts`), settings in
@@ -12,7 +12,9 @@ that gap.
 
 ## Scope: the editor, deliberately not the site
 
-Only `/app` works offline. The marketing and guide pages stay network-served and
+Only `/app` and the fin designer at `/fin` work offline (`/fin` was added with the
+fin designer, docs/design/fin-designer.md: same shell mechanism, its own precache
+entry, URL rewrite and guard check, and its own offline e2e test). The marketing and guide pages stay network-served and
 are **never** precached, for two reasons: cached marketing HTML goes stale in a way
 nothing invalidates, and `public/images/guides/` alone is ~2.7 MB that an editor
 user has no reason to carry.
@@ -37,7 +39,7 @@ Three routes, in order:
    straight from the cache.
 2. **`/app` variants** (`/app/`, `/app?x=1`) → the same precached shell via
    `createHandlerBoundToURL`. The regex is `/^\/app(?:\/|$)/`, which deliberately
-   does not match `/apple`.
+   does not match `/apple`. `/fin` is handled the same way (`SHELLS` in `sw.ts`).
 3. **Every other navigation** → `NetworkOnly`. Online this is indistinguishable
    from having no service worker: real HTML, and real 404s for unknown paths (the
    site has no SPA catch-all by design). Only a network _failure_ reaches

@@ -16,7 +16,7 @@
  */
 import type { View } from './view-toolkit';
 
-export type ShortcutGroup = 'File' | 'Edit' | 'View' | 'Cross-sections';
+export type ShortcutGroup = 'File' | 'Edit' | 'View' | 'Cross-sections' | 'Fin designer';
 
 export interface ShortcutMatch {
   /** Lowercased `KeyboardEvent.key`, or one of several for an either/or binding. */
@@ -139,6 +139,36 @@ export const SHORTCUTS: readonly Shortcut[] = [
     // Coordinate editors clear their own selection locally. Suppress the global
     // action in other fields so Escape can keep its field/dialog-specific meaning.
     match: { keys: ['escape'], notInField: true },
+  },
+  // The fin designer's nudge arrows (/fin). The board editor has no binding for these
+  // ids, so on /app the arrows keep their usual behaviour.
+  {
+    id: 'fin-nudge-forward',
+    keys: '→',
+    label: 'Move the fin forward on the tab (0.5 mm)',
+    group: 'Fin designer',
+    match: { keys: ['arrowright'], notInField: true },
+  },
+  {
+    id: 'fin-nudge-back',
+    keys: '←',
+    label: 'Move the fin back on the tab (0.5 mm)',
+    group: 'Fin designer',
+    match: { keys: ['arrowleft'], notInField: true },
+  },
+  {
+    id: 'fin-nudge-out',
+    keys: '↑',
+    label: 'Slide the blade outboard across the tab (0.1 mm)',
+    group: 'Fin designer',
+    match: { keys: ['arrowup'], notInField: true },
+  },
+  {
+    id: 'fin-nudge-in',
+    keys: '↓',
+    label: 'Slide the blade inboard across the tab (0.1 mm)',
+    group: 'Fin designer',
+    match: { keys: ['arrowdown'], notInField: true },
   },
   ...VIEW_KEYS.map(
     ({ key, label }): Shortcut => ({

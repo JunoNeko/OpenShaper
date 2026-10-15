@@ -117,8 +117,8 @@ const bladeMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
   return m.done();
 };
 
-/** The tab profile as a polygon (tab frame, counter-clockwise), arcs sampled. */
-const tabProfile = (segments: readonly TabSegment[], tolerance: number): Vec2[] =>
+/** The tab profile as a polygon (tab frame, counter-clockwise), arcs sampled to `tolerance` cm. */
+export const tabProfilePoints = (segments: readonly TabSegment[], tolerance: number): Vec2[] =>
   segments.flatMap((s) => {
     if (s.kind === 'line') return [s.from];
     const a = Math.atan2(s.from.y - s.center.y, s.from.x - s.center.x);
@@ -140,7 +140,7 @@ const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
   const tab = futuresTabOutline(finTabKind(d.position));
   const { height: H, thickness: t } = tab.spec;
   const yc = tabCentreY(d);
-  const profile = tabProfile(tab.segments, o.arcTolerance);
+  const profile = tabProfilePoints(tab.segments, o.arcTolerance);
   const m = builder();
   // Tab frame (x, y up from the bottom) to the fin frame: z = y − H.
   const side = (y: number) => profile.map((p) => m.add({ x: p.x, y, z: p.y - H }));

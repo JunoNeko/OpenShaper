@@ -21,6 +21,7 @@ import {
   installLayoutStubs,
   pane,
   removeLayoutStubs,
+  resizeTo,
 } from './test/spline-editor-harness';
 
 beforeEach(installLayoutStubs);
@@ -138,6 +139,24 @@ describe('FinCurveEditor', () => {
     const { canvas, calls, screenOf } = mount({ editable: false });
     fireEvent.pointerDown(canvas, { ...MOUSE, ...screenOf(vec2(10, 0)) });
     expect(calls.onDragStart).not.toHaveBeenCalled();
+  });
+
+  it('refits when the pane settles to a new size, until the user frames it', () => {
+    // A phone's pane often changes size after first paint: the fit must follow it.
+    const { canvas, view, screenOf } = mount();
+    const first = view();
+    resizeTo(390, 420);
+    const refit = view();
+    expect(refit).not.toBe(first);
+    expect(refit.scale).toBeLessThan(first.scale); // narrower pane, smaller scale
+    // Once panned, a resize keeps the user's framing.
+    const on = screenOf(vec2(5, -5)); // empty space below the arch
+    fireEvent.pointerDown(canvas, { ...MOUSE, ...on });
+    fireEvent.pointerMove(canvas, { ...MOUSE, clientX: on.clientX + 30, clientY: on.clientY });
+    fireEvent.pointerUp(canvas, { ...MOUSE, clientX: on.clientX + 30, clientY: on.clientY });
+    const panned = view();
+    resizeTo(390, 600);
+    expect(view().scale).toBe(panned.scale);
   });
 
   it('keeps its framing while the curves change, and refits when told to', () => {

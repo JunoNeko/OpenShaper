@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /// <reference lib="webworker" />
 /**
- * OpenShaper service worker — offline support for the `/app` editor only.
+ * OpenShaper service worker — offline support for the `/app` editor and the `/fin`
+ * fin designer only.
  *
  * Navigation model (the reason this is a hand-written `injectManifest` worker
  * rather than a generated one):
  *
- *  1. `/app` and its variants are served from the precache, so the editor opens
- *     with no network at all.
+ *  1. `/app`, `/fin` and their variants are served from the precache, so the editor
+ *     and the fin designer open with no network at all.
  *  2. Every other navigation is `NetworkOnly` — online it behaves exactly as if
  *     no service worker existed: real HTML, and real 404s for unknown paths
  *     (the site has no SPA catch-all by design). Only a network *failure* falls
@@ -30,23 +31,29 @@ import { NetworkOnly } from 'workbox-strategies';
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
 const OFFLINE_URL = '/offline.html';
-const APP_SHELL_URL = '/app';
-/** Matches /app, /app/, /app?x=1 — but never /apple. */
-const APP_PATH = /^\/app(?:\/|$)/;
+/** Each offline island: its precached shell, and the paths it answers (never /apple). */
+const SHELLS: readonly { url: string; path: RegExp }[] = [
+  { url: '/app', path: /^\/app(?:\/|$)/ },
+  { url: '/fin', path: /^\/fin(?:\/|$)/ },
+];
 
 // NOTE: this must stay spelled `self.__WB_MANIFEST` verbatim — workbox injects
 // the precache list by string-replacing that exact token in the built worker, so
 // routing it through the `sw` alias above makes the build fail.
 precacheAndRoute((self as unknown as ServiceWorkerGlobalScope).__WB_MANIFEST);
 
-// Editor navigations → the precached shell. A bare `/app` is already served by
-// the precache route registered above; this covers the trailing-slash and
-// query-string variants.
-registerRoute(
-  ({ request, url }) =>
-    request.mode === 'navigate' && url.origin === sw.location.origin && APP_PATH.test(url.pathname),
-  createHandlerBoundToURL(APP_SHELL_URL),
-);
+// Editor and fin designer navigations → their precached shells. A bare `/app` or
+// `/fin` is already served by the precache route registered above; this covers the
+// trailing-slash and query-string variants.
+for (const shell of SHELLS) {
+  registerRoute(
+    ({ request, url }) =>
+      request.mode === 'navigate' &&
+      url.origin === sw.location.origin &&
+      shell.path.test(url.pathname),
+    createHandlerBoundToURL(shell.url),
+  );
+}
 
 // Everything else: straight to the network, never cached.
 registerRoute(({ request }) => request.mode === 'navigate', new NetworkOnly());
@@ -69,5 +76,5 @@ sw.addEventListener('message', (event) => {
 
 // Safe with skipWaiting disabled: an updated worker only activates after the
 // user accepts, so claiming can never hand an old page new assets. On first
-// install it makes /app offline-capable without needing a second visit.
+// install it makes /app and /fin offline-capable without needing a second visit.
 clientsClaim();

@@ -54,6 +54,24 @@ test.describe('offline editor', () => {
     expect(errors).toEqual([]);
   });
 
+  // The fin designer is the second offline island (sw.ts SHELLS): warmed by the
+  // editor's install, it must open cold with the network cut, never having been
+  // visited online.
+  test('the fin designer opens with the network cut', async ({ page, context }) => {
+    await warmServiceWorker(page);
+    const errors = trackErrors(page);
+
+    await context.setOffline(true);
+    await page.goto('/fin');
+
+    await expect(page.getByRole('heading', { name: 'Fin designer' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Fin outline' })).toBeVisible();
+    // Readouts mean the kernel ran: the default fin's area, in mm².
+    await expect(page.getByLabel('Fin measurements')).toContainText('mm²');
+    await expect(page.getByText(/Unexpected Application Error/i)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
   // Docs are precached deliberately: being unable to read how a feature works is
   // worst precisely when there's no signal. This also pins the URL rewrite —
   // they're emitted as docs/fins/index.html but navigated to as /docs/fins, and

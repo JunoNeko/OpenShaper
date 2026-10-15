@@ -11,6 +11,7 @@ import {
 function validManifest(): PrecacheEntry[] {
   return [
     { url: 'app', revision: 'abc' },
+    { url: 'fin', revision: 'fin0' },
     { url: 'offline.html', revision: 'def' },
     { url: 'static-loader-data-manifest-8zwffmvx8g.json', revision: null },
     { url: 'manifest.webmanifest', revision: 'ghi' },
@@ -55,6 +56,11 @@ describe('rewriteAppShellUrl', () => {
     expect(out.map((e) => e.url)).toEqual(['docs', 'docs/fins']);
   });
 
+  it("maps the fin designer's shell to the canonical '/fin' URL", () => {
+    const out = rewriteAppShellUrl([{ url: 'fin/index.html', revision: 'x' }]);
+    expect(out).toEqual([{ url: 'fin', revision: 'x' }]);
+  });
+
   it('leaves every other entry untouched', () => {
     const entries = [
       { url: 'about/index.html', revision: 'a' },
@@ -73,6 +79,17 @@ describe('rewriteAppShellUrl', () => {
 describe('assertEditorPrecache', () => {
   it('accepts a well-formed manifest', () => {
     expect(() => assertEditorPrecache(validManifest())).not.toThrow();
+  });
+
+  it('requires the fin designer shell, rewritten', () => {
+    const missing = validManifest().filter((e) => e.url !== 'fin');
+    expect(messageOf(() => assertEditorPrecache(missing))).toContain(
+      "missing the fin designer shell ('fin')",
+    );
+    missing.push({ url: 'fin/index.html', revision: 'x' });
+    expect(messageOf(() => assertEditorPrecache(missing))).toContain(
+      "'fin/index.html' was not rewritten",
+    );
   });
 
   it('rejects a manifest whose app shell was never rewritten', () => {

@@ -76,6 +76,12 @@ export const routes: RouteRecord[] = [
         lazy: page(() => import('./pages/EditorPage')),
         errorElement: <RouteErrorBoundary />,
       },
+      {
+        // The fin designer: a second client-only island, offline like /app.
+        path: 'fin',
+        lazy: page(() => import('./pages/FinPage')),
+        errorElement: <RouteErrorBoundary />,
+      },
     ],
   },
 ];
