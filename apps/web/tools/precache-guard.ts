@@ -2,7 +2,8 @@
 /**
  * Build-time guard over the service worker's precache manifest.
  *
- * The offline feature is scoped to the `/app` editor: marketing and guide pages
+ * The offline feature is scoped to the `/app` editor and the `/fin` fin designer:
+ * marketing and guide pages
  * stay network-served and must never be precached (they would go stale, and the
  * guide images alone are ~2.7 MB). That scope is expressed as glob patterns in
  * vite.config.ts, which is easy to get subtly wrong and impossible to notice by
@@ -38,6 +39,7 @@ export interface PrecacheEntry {
 export function rewriteAppShellUrl<T extends PrecacheEntry>(entries: T[]): T[] {
   return entries.map((e) => {
     if (e.url === 'app/index.html') return { ...e, url: 'app' };
+    if (e.url === 'fin/index.html') return { ...e, url: 'fin' };
     if (e.url === 'docs/index.html') return { ...e, url: 'docs' };
     if (e.url.startsWith('docs/') && e.url.endsWith('/index.html')) {
       return { ...e, url: e.url.slice(0, -'/index.html'.length) };
@@ -52,7 +54,7 @@ export const MAX_PRECACHE_BYTES = 12 * 1024 * 1024;
 /** A glob matching nothing still builds — require a plausible floor of app chunks. */
 const MIN_JS_ENTRIES = 5;
 
-const isHtml = (url: string) => url.endsWith('.html') || url === 'app';
+const isHtml = (url: string) => url.endsWith('.html') || url === 'app' || url === 'fin';
 
 /**
  * HTML that is *meant* to be precached: the editor shell, the offline fallback,
@@ -60,7 +62,11 @@ const isHtml = (url: string) => url.endsWith('.html') || url === 'app';
  * stays network-served, so it can never go stale in a cache.
  */
 const isAllowedHtml = (url: string) =>
-  url === 'app' || url === 'offline.html' || url === 'docs/index.html' || url.startsWith('docs/');
+  url === 'app' ||
+  url === 'fin' ||
+  url === 'offline.html' ||
+  url === 'docs/index.html' ||
+  url.startsWith('docs/');
 
 export class PrecacheGuardError extends Error {
   constructor(problems: string[]) {
@@ -91,6 +97,12 @@ export function assertEditorPrecache(entries: readonly PrecacheEntry[]): void {
   }
   if (has('app/index.html')) {
     problems.push("'app/index.html' was not rewritten to 'app' (rewriteAppShellUrl did not run)");
+  }
+  if (!has('fin')) {
+    problems.push("missing the fin designer shell ('fin')");
+  }
+  if (has('fin/index.html')) {
+    problems.push("'fin/index.html' was not rewritten to 'fin' (rewriteAppShellUrl did not run)");
   }
   if (!has('offline.html')) {
     problems.push("missing 'offline.html' (the catch-handler fallback)");

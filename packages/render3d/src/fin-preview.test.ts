@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+import { describe, expect, it } from 'vitest';
+import { defaultFinDesign, FUTURES_TABS, finReadouts } from '@openshaper/kernel';
+import { Vector3 } from 'three';
+import { FIN_PREVIEW_FOV, finCameraPosition, finScene } from './fin-preview';
+
+describe('finScene', () => {
+  const d = defaultFinDesign('side', 'right');
+  const s = finScene(d);
+
+  it('keeps the kernel frame: tab under the blade, touching at z = 0', () => {
+    const blade = s.blade.boundingBox!;
+    const tab = s.tab.boundingBox!;
+    expect(blade.min.z).toBeCloseTo(0, 5);
+    expect(blade.max.z).toBeCloseTo(finReadouts(d).depth - 0.01, 4); // stops just under the tip
+    expect(tab.max.z).toBeCloseTo(0, 5);
+    expect(tab.min.z).toBeCloseTo(-FUTURES_TABS.side.height, 5);
+    expect(tab.max.x - tab.min.x).toBeCloseTo(FUTURES_TABS.side.length, 5);
+  });
+
+  it('frames everything', () => {
+    const c = new Vector3(...s.center);
+    for (const b of [s.blade.boundingBox!, s.tab.boundingBox!]) {
+      for (const p of [b.min, b.max]) expect(c.distanceTo(p)).toBeLessThanOrEqual(s.radius + 1e-6);
+    }
+  });
+
+  it('has normals for every vertex', () => {
+    expect(s.blade.getAttribute('normal').count).toBe(s.blade.getAttribute('position').count);
+  });
+});
+
+describe('finCameraPosition', () => {
+  it('looks at the outside face of either hand', () => {
+    expect(finCameraPosition([0, 0, 5], 10, 1)[1]).toBeGreaterThan(0);
+    expect(finCameraPosition([0, 0, 5], 10, -1)[1]).toBeLessThan(0);
+  });
+
+  it('stands far enough back to fit the sphere in the view', () => {
+    const p = new Vector3(...finCameraPosition([0, 0, 0], 10, 1));
+    const half = ((FIN_PREVIEW_FOV / 2) * Math.PI) / 180;
+    // The sphere's angular radius is under half the field of view.
+    expect(Math.asin(10 / p.length())).toBeLessThan(half);
+    // A narrow view (aspect < 1) stands further back.
+    expect(new Vector3(...finCameraPosition([0, 0, 0], 10, 1, 0.5)).length()).toBeGreaterThan(
+      p.length(),
+    );
+  });
+});

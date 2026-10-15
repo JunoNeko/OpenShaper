@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { fineLengthStep, fmtSmallLen, fmtVol, LENGTH_UNITS } from './format';
+import {
+  fineLengthStep,
+  fmtArea,
+  fmtSmallLen,
+  fmtVol,
+  LENGTH_UNITS,
+  lengthUnitByKey,
+} from './format';
 
 describe('fmtVol', () => {
   it('shows litres to one decimal place, suffixed L', () => {
@@ -29,5 +36,14 @@ describe('unit-aware small lengths and steps (P14)', () => {
     expect(fmtSmallLen(0.01, byKey('mm'))).toBe('0.1 mm');
     expect(fmtSmallLen(0.01, byKey('cm'))).toBe('0.01 cm');
     expect(fmtSmallLen(0.01, byKey('in'))).toBe('0.0039 in');
+  });
+});
+
+describe('fmtArea', () => {
+  it('shows an area in the chosen unit squared', () => {
+    // 72.853 cm² = 7285.3 mm² = 11.29 in²
+    expect(fmtArea(72.853, lengthUnitByKey('mm'))).toBe('7285 mm²');
+    expect(fmtArea(72.853, lengthUnitByKey('cm'))).toBe('72.9 cm²');
+    expect(fmtArea(72.853, lengthUnitByKey('in'))).toBe('11.29 in²');
   });
 });

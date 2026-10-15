@@ -11,6 +11,8 @@ export { BRAND_LINE } from './brand';
 export { exportStl, exportStlAscii, type StlOptions } from './stl';
 export { exportDxf, type DxfOptions, type DxfCurveMode } from './dxf';
 export { exportStep, stepExportSupport, type StepOptions, type StepSupport } from './step';
+export { exportFinStep, type FinStepOptions } from './fin-step';
+export { exportFinStl, type FinStlOptions } from './fin-stl';
 export {
   exportBoardPdf1to1,
   exportBoardPdf1to1Files,

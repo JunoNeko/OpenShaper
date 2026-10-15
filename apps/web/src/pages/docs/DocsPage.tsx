@@ -21,6 +21,7 @@ export const DOCS_NAV: Record<DocsRoute, string> = {
   '/docs/editing': 'Editing a board',
   '/docs/specs': 'Specs & measurements',
   '/docs/fins': 'Fins',
+  '/docs/fin-designer': 'Fin designer',
   '/docs/construction': 'Construction templates',
   '/docs/export': 'Exporting',
   '/docs/files': 'Files & templates',

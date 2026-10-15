@@ -469,7 +469,7 @@ const chordAtDepth = (template: readonly Vec2[], v: number): [number, number] | 
 export const buildFinBladeMesh = (fin: ResolvedFin): BoardMesh => {
   const { template, cant, side, surfaceZ, maxThickness, foil } = fin;
   const maxD = maxDepth(template);
-  if (maxD <= 1e-6) return finalizeMesh([], []);
+  if (maxD <= 1e-6) return meshWithNormals([], []);
 
   // Orientation, as for the 2D placement.
   const baseDir = unit(sub2(fin.baseLine.fore, fin.baseLine.aft)); // toward nose, toed
@@ -530,7 +530,7 @@ export const buildFinBladeMesh = (fin: ResolvedFin): BoardMesh => {
     indices.push(outer[0]![k]!, inner[0]![k + 1]!, outer[0]![k + 1]!);
   }
 
-  return finalizeMesh(positions, indices);
+  return meshWithNormals(positions, indices);
 };
 
 const maxDepth = (template: readonly Vec2[]): number => {
@@ -554,7 +554,7 @@ const pushVert = (positions: number[], v: [number, number, number]): number => {
 };
 
 /** Compute area-weighted vertex normals and return a {@link BoardMesh}. */
-const finalizeMesh = (positions: number[], indices: number[]): BoardMesh => {
+export const meshWithNormals = (positions: number[], indices: number[]): BoardMesh => {
   const normals = new Float32Array(positions.length);
   for (let t = 0; t < indices.length; t += 3) {
     const ia = indices[t]!;

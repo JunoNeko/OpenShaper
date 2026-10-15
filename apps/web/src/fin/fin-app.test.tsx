@@ -1,0 +1,144 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+import { defaultFinDesign, finReadouts } from '@openshaper/kernel';
+import { writeFinJson } from '@openshaper/io';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FinApp } from './FinApp';
+
+// No WebGL under jsdom: the preview is checked in a real browser instead.
+vi.mock('@openshaper/render3d', () => ({ FinPreview3D: () => null }));
+import { finStore } from './fin-store';
+
+beforeEach(() => {
+  act(() => finStore.getState().load(defaultFinDesign('side', 'left')));
+});
+
+const measurements = () => within(screen.getByLabelText('Fin measurements'));
+const overhang = () => finReadouts(finStore.getState().design!).frontOverhang;
+
+describe('FinApp', () => {
+  it('shows the fin’s measurements in mm', () => {
+    render(<FinApp />);
+    expect(screen.getByRole('heading', { name: 'Fin designer' })).toBeTruthy();
+    expect(measurements().getByText(/mm²$/)).toBeTruthy();
+    expect(measurements().getByText('49.8°')).toBeTruthy(); // the default sweep
+  });
+
+  it('starts a new fin from the picker, undoably', () => {
+    render(<FinApp />);
+    fireEvent.change(screen.getByLabelText('Start a new fin'), { target: { value: '4' } }); // Centre
+    expect(finStore.getState().design!.position).toBe('centre');
+    expect(screen.queryByLabelText(/Cant/)).toBeNull(); // a centre fin has no cant
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(finStore.getState().design!.position).toBe('side');
+  });
+
+  it('switches the side', () => {
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'Right' }));
+    expect(finStore.getState().design!.hand).toBe('right');
+    expect(screen.getByRole('button', { name: 'Right' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('nudges the fin with the arrow buttons and the arrow keys', () => {
+    render(<FinApp />);
+    const before = overhang();
+    fireEvent.click(screen.getByRole('button', { name: 'Move the fin forward' }));
+    expect(overhang()).toBeCloseTo(before + 0.05, 9);
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(overhang()).toBeCloseTo(before + 0.1, 9);
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(finStore.getState().design!.lateralOffset).toBeCloseTo(0.01, 12);
+    fireEvent.keyDown(window, { key: 'z', metaKey: true });
+    expect(finStore.getState().design!.lateralOffset).toBe(0);
+  });
+
+  it('clamps the cant field to the allowed range', () => {
+    render(<FinApp />);
+    const field = screen.getByLabelText(/Cant/);
+    fireEvent.change(field, { target: { value: '35' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(finStore.getState().design!.cant).toBe(20);
+  });
+
+  it('lists the rules the design breaks', () => {
+    act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
+    render(<FinApp />);
+    expect(screen.getByRole('status').textContent).toMatch(/Cant must be 0–20°/);
+  });
+});
+
+describe('FinApp: files', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('saves the fin to a .fin.json download, from the button and ⌘S', () => {
+    URL.createObjectURL = vi.fn(() => 'blob:fin');
+    URL.revokeObjectURL = vi.fn();
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(names).toEqual(['fin-side-left.fin.json', 'fin-side-left.fin.json']);
+  });
+
+  it('opens a .fin.json file, replacing the fin', async () => {
+    render(<FinApp />);
+    const file = new File([writeFinJson(defaultFinDesign('centre'))], 'centre.fin.json');
+    fireEvent.change(screen.getByLabelText('Open a fin file'), { target: { files: [file] } });
+    await waitFor(() => expect(finStore.getState().design!.position).toBe('centre'));
+    expect(finStore.getState().canUndo()).toBe(false); // opening starts a fresh history
+  });
+
+  it('explains a file it cannot open', async () => {
+    render(<FinApp />);
+    const file = new File(['{"format":"openshaper","version":2}'], 'board.board.json');
+    fireEvent.change(screen.getByLabelText('Open a fin file'), { target: { files: [file] } });
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toMatch(/can't be opened as a fin/),
+    );
+    expect(finStore.getState().design!.position).toBe('side');
+  });
+});
+
+describe('FinApp: export', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const captureDownloads = () => {
+    URL.createObjectURL = vi.fn(() => 'blob:fin');
+    URL.revokeObjectURL = vi.fn();
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    return names;
+  };
+
+  it('exports STEP and STL, named after the fin', async () => {
+    const names = captureDownloads();
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'Export STL' }));
+    await waitFor(() => expect(names).toEqual(['fin-side-left.stl']));
+    fireEvent.click(screen.getByRole('button', { name: 'Export STEP' }));
+    await waitFor(() => expect(names).toEqual(['fin-side-left.stl', 'fin-side-left.step']), {
+      timeout: 10_000,
+    });
+  }, 20_000);
+
+  it('is unavailable while the fin breaks a rule', () => {
+    act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
+    render(<FinApp />);
+    expect(
+      (screen.getByRole('button', { name: 'Export STEP' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect((screen.getByRole('button', { name: 'Export STL' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+});

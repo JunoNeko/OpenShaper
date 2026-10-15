@@ -1,0 +1,65 @@
+{
+  "$comment": "Futures fin tab geometry, the reference for the fin designer's tab outline (docs/design/fin-designer.md step 1). Spec and provenance: futures-tabs.md. Units mm. Frame: x from the rear (trailing) end, 0, to the front (leading, grub-screw) end, +x = toward the nose; y up from the tab bottom, 0, to the tab top = blade root plane. Tab thickness is the extrusion across the fin.",
+  "units": "mm",
+  "thickness": 6.35,
+  "frontFaceAngleDeg": 101,
+  "tolerance": 0.001,
+  "tabs": {
+    "centre": {
+      "usedBy": ["centre", "quad-rear"],
+      "length": 113,
+      "height": 12.7,
+      "rearSlot": {
+        "diameter": 4.4,
+        "centreBelowTop": 6.4,
+        "arcCentreFromEnd": 3.3
+      },
+      "rearBottomCornerRadius": 1.0,
+      "frontNotch": {
+        "includedAngleDeg": 100,
+        "upperMouthBelowTop": 4.5,
+        "apexInsetFromFront": 2.0,
+        "apexHeight": 6,
+        "bottomCornerInsetFromFront": 0.7
+      },
+      "unconfirmed": [],
+      "derived": {
+        "T": [113, 12.7],
+        "U": [113, 8.2],
+        "A": [111, 6],
+        "D": [112.971, 3.452],
+        "B": [112.3, 0],
+        "upperFlankDeg": 47.726,
+        "lowerFlankDeg": 52.274
+      }
+    },
+    "side": {
+      "usedBy": ["side"],
+      "length": 113,
+      "height": 17.7,
+      "rearSlot": {
+        "diameter": 4.4,
+        "centreBelowTop": 6.4,
+        "arcCentreFromEnd": 3.3
+      },
+      "rearBottomCornerRadius": 1.0,
+      "frontNotch": {
+        "includedAngleDeg": 90,
+        "upperMouthBelowTop": 5.5,
+        "apexInsetFromFront": 3.8,
+        "apexHeight": 7.7,
+        "bottomCornerInsetFromFront": 2.1
+      },
+      "unconfirmed": [],
+      "derived": {
+        "T": [113, 17.7],
+        "U": [113, 12.2],
+        "A": [109.2, 7.7],
+        "D": [111.946, 5.381],
+        "B": [110.9, 0],
+        "upperFlankDeg": 49.821,
+        "lowerFlankDeg": 40.179
+      }
+    }
+  }
+}

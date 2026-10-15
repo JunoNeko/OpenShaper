@@ -92,6 +92,16 @@ export const fineLengthStep = (u: LengthUnit): number =>
 export const fmtSmallLen = (cm: number, u: LengthUnit): string =>
   `${Number(cmToUnitNumber(cm, u).toPrecision(2))} ${unitSuffix(u)}`;
 
+/**
+ * An area (internal cm²) in the chosen unit squared: "7285 mm²", "72.9 cm²", "11.29 in²".
+ * Fin profiles are specced by area; the board's planshape is not shown this way.
+ */
+export const fmtArea = (cm2: number, u: LengthUnit): string => {
+  const per = cmToUnitNumber(1, u);
+  const decimals = u.unit === Unit.MILLIMETERS ? 0 : u.unit === Unit.CENTIMETERS ? 1 : 2;
+  return `${(cm2 * per * per).toFixed(decimals)} ${unitSuffix(u)}²`;
+};
+
 /** Short suffix shown beside editable fields. */
 export const unitSuffix = (u: LengthUnit): string => {
   switch (u.unit) {

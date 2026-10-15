@@ -1,0 +1,175 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+import {
+  FIN_MAX_CANT,
+  FIN_MAX_FRONT_OVERHANG,
+  FIN_MIN_THICKNESS,
+  FUTURES_TABS,
+  rearClearance,
+} from '@openshaper/kernel';
+import { Link } from 'react-router-dom';
+import { shortcutKeys } from '../../shortcuts';
+import { DocsPage, Section, Term, Terms } from './DocsPage';
+
+/** Kernel cm to a "12.7 mm" string. Numbers come from the kernel so the page can't drift. */
+const mm = (cm: number) => `${Number((cm * 10).toFixed(2))} mm`;
+const deg = (d: number) => `${Number(d.toFixed(1))}°`;
+
+export default function DocsFinDesigner() {
+  const side = FUTURES_TABS.side;
+  const centre = FUTURES_TABS.centre;
+  return (
+    <DocsPage
+      route="/docs/fin-designer"
+      title="Fin designer"
+      lede="Design a Futures-tab surf fin from scratch — outline, foil and flex — and export it for a CNC mill or a 3D printer."
+      toc={[
+        { id: 'start', label: 'Starting a fin' },
+        { id: 'outline', label: 'The outline' },
+        { id: 'foil', label: 'The foil' },
+        { id: 'taper', label: 'Thickness and flex' },
+        { id: 'tab', label: 'Placing the fin on its tab' },
+        { id: 'rules', label: 'The rules it keeps' },
+        { id: 'files', label: 'Saving your work' },
+        { id: 'export', label: 'Exporting for CNC and printing' },
+      ]}
+    >
+      <Section id="start" title="Starting a fin">
+        <p>
+          Open the <Link to="/fin">fin designer</Link> and choose a starting fin from{' '}
+          <strong>New fin</strong>. The starting fins are a place to begin, not a catalogue: reshape
+          them as far as you like. Each one sits on a standard Futures tab, which you don&apos;t
+          edit — every Futures box takes the same tab.
+        </p>
+        <Terms>
+          <Term name="Side, left or right">
+            The {mm(side.height)}-deep side tab, with cant. Left and right are mirror images: the
+            outside face points to the rail.
+          </Term>
+          <Term name="Quad rear, left or right">
+            The shallower {mm(centre.height)} tab (quad rears sit where the tail is thinner), with
+            cant.
+          </Term>
+          <Term name="Centre">The {mm(centre.height)} tab, upright, with a symmetric foil.</Term>
+        </Terms>
+        <p>
+          Both tabs are {mm(side.length)} long and {mm(side.thickness)} thick. Lengths are shown in
+          millimetres.
+        </p>
+      </Section>
+
+      <Section id="outline" title="The outline">
+        <p>
+          The big pane shows the fin from the side, drawn over its tab. Drag a point or a handle to
+          reshape it; double-click the curve to add a point; select a point and press Delete to
+          remove it. Drag empty space to pan and scroll to zoom. The outline starts and ends on the
+          base: its two ends slide along it.
+        </p>
+        <p>
+          <strong>Depth</strong> stretches the outline to a new height over the same base. Readouts
+          show the area (the profile above the tab), depth, base length and sweep — the angle from
+          the leading-edge root to the tip, measured from upright.
+        </p>
+      </Section>
+
+      <Section id="foil" title="The foil">
+        <p>
+          The section pane is a horizontal slice through the fin: the outside face above the chord
+          line, the inside face below, drawn four times taller than true so a thin foil can be
+          shaped by hand. Its size follows the outline and the taper; this pane sets only its shape.
+        </p>
+        <Terms>
+          <Term name="Flat inside">The usual side-fin foil: the inside face is flat.</Term>
+          <Term name="Symmetric">
+            The same curve on both faces — always the case on a centre fin.
+          </Term>
+          <Term name="NACA presets">
+            Type a NACA 4-digit code (2412, 0010, …) and Apply to replace both faces with that foil;
+            they stay editable afterwards. The convex face goes outside. A centre fin takes only
+            symmetric 00xx foils. The foil keeps its proportions, so a 2412 stays 2 : 12 camber to
+            thickness however thick the fin.
+          </Term>
+        </Terms>
+      </Section>
+
+      <Section id="taper" title="Thickness and flex">
+        <p>
+          The thickness pane shows how thick the fin is at the foil&apos;s thickest point, from the
+          root (left) to the tip (right). A straight run that curves down near the tip is the usual
+          shape: that curve is what controls how the tip flexes. <strong>Root thickness</strong>{' '}
+          scales the whole curve.
+        </p>
+      </Section>
+
+      <Section id="tab" title="Placing the fin on its tab">
+        <p>
+          Starting fins are rear-aligned: the blade&apos;s trailing edge meets the tab&apos;s rear
+          end. A flat inside face sits flush with the tab; a symmetric foil is centred on it.
+        </p>
+        <Terms>
+          <Term name={`${shortcutKeys('fin-nudge-back')} ${shortcutKeys('fin-nudge-forward')}`}>
+            Move the fin back or forward along the tab.
+          </Term>
+          <Term name={`${shortcutKeys('fin-nudge-out')} ${shortcutKeys('fin-nudge-in')}`}>
+            Slide the blade across the tab — for a strongly curved inside face that overhangs the
+            tab, slide it back over.
+          </Term>
+          <Term name={`Cant (0–${FIN_MAX_CANT}°)`}>
+            How far the blade leans out from the tab. Futures builds cant into the fin, not the box.
+            A centre fin has none.
+          </Term>
+        </Terms>
+      </Section>
+
+      <Section id="rules" title="The rules it keeps">
+        <p>
+          The designer won&apos;t let a drag break these; a point stops where it would. Anything
+          that does break one (an old file, say) is listed under the readouts.
+        </p>
+        <Terms>
+          <Term name="Front overhang">
+            The leading edge may overhang the front of the tab by at most{' '}
+            {mm(FIN_MAX_FRONT_OVERHANG)}: the box&apos;s grub screw sits there.
+          </Term>
+          <Term name="Raised rear">
+            A Futures fin is fitted rear first, hooked on the pin at the back of the box, then
+            rocked down — about {deg(rearClearance('side').tilt)} on a side tab,{' '}
+            {deg(rearClearance('centre').tilt)} on a centre tab. Anything behind the tab swings
+            toward the board, so a fin whose base runs past the tab&apos;s rear end needs a raised
+            rear. The dashed orange line behind the tab is the clearance it needs.
+          </Term>
+          <Term name="Minimum thickness">
+            Nowhere thinner than {mm(FIN_MIN_THICKNESS)} — edges and tip included — so the fin is
+            safe to bump into and something a cutter can make.
+          </Term>
+          <Term name="One clean shape">
+            The edges keep rising to a single tip, and the foil&apos;s faces never cross.
+          </Term>
+        </Terms>
+      </Section>
+
+      <Section id="files" title="Saving your work">
+        <p>
+          The fin saves itself in your browser as you work, so a reload or a closed tab doesn&apos;t
+          lose it. <strong>Save</strong> ({shortcutKeys('save')}) downloads it as a{' '}
+          <code>.fin.json</code> file to keep or share; <strong>Open…</strong> loads one back. Like
+          the rest of OpenShaper, the designer works offline.
+        </p>
+      </Section>
+
+      <Section id="export" title="Exporting for CNC and printing">
+        <Terms>
+          <Term name="STEP">
+            For CNC. True curved surfaces, in millimetres: the blade and the tab as two solids that
+            meet on the tab top. In Fusion 360 or similar, Combine / Join them into one body before
+            machining. Within 0.05 mm of the design, except the last fraction of a millimetre under
+            the tip.
+          </Term>
+          <Term name="STL">
+            For 3D printing. A fine triangle mesh in millimetres, the unit slicers assume.
+          </Term>
+        </Terms>
+        <p>Export is unavailable while the fin breaks a rule; the readouts say which.</p>
+      </Section>
+    </DocsPage>
+  );
+}

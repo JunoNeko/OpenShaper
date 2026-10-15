@@ -193,11 +193,17 @@ const stlFacets = (board: BezierBoard, opts: StlOptions): number[] => {
  * reads it. The header deliberately does not start with "solid", which some
  * readers take as the mark of an ASCII file.
  */
-export const exportStl = (board: BezierBoard, opts: StlOptions = {}): Uint8Array => {
-  const facets = stlFacets(board, opts);
+export const exportStl = (board: BezierBoard, opts: StlOptions = {}): Uint8Array =>
+  encodeBinaryStl(stlFacets(board, opts), opts.name ?? 'openshaper');
+
+/**
+ * Facets (12 numbers each: normal, then three vertices) as a binary STL, named in the
+ * header. Shared by the board and fin exporters.
+ */
+export const encodeBinaryStl = (facets: readonly number[], name: string): Uint8Array => {
   const count = facets.length / 12;
   const bytes = new Uint8Array(84 + count * 50);
-  const header = `OpenShaper STL ${opts.name ?? 'openshaper'}`.slice(0, 80);
+  const header = `OpenShaper STL ${name}`.slice(0, 80);
   for (let i = 0; i < header.length; i++) bytes[i] = header.charCodeAt(i) & 0x7f;
   const view = new DataView(bytes.buffer);
   view.setUint32(80, count, true);
@@ -236,13 +242,17 @@ export const exportStlAscii = (board: BezierBoard, opts: StlOptions = {}): strin
 };
 
 /** Write every triangle of a kernel mesh as STL facets. */
-const writeMesh = (out: number[], mesh: BoardMesh): void => {
+/** Append a mesh's triangles as facets, coordinates multiplied by `scale` (a unit change). */
+export const writeMesh = (out: number[], mesh: BoardMesh, scale = 1): void => {
   const { positions, indices } = mesh;
-  const at = (i: number): P3 => ({
-    x: positions[i * 3]!,
-    y: positions[i * 3 + 1]!,
-    z: positions[i * 3 + 2]!,
-  });
+  const at = (i: number): P3 =>
+    scale === 1
+      ? { x: positions[i * 3]!, y: positions[i * 3 + 1]!, z: positions[i * 3 + 2]! }
+      : {
+          x: positions[i * 3]! * scale,
+          y: positions[i * 3 + 1]! * scale,
+          z: positions[i * 3 + 2]! * scale,
+        };
   for (let t = 0; t < indices.length; t += 3) {
     writeFacet(out, at(indices[t]!), at(indices[t + 1]!), at(indices[t + 2]!));
   }
