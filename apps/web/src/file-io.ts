@@ -64,7 +64,7 @@ const REVOKE_AFTER_MS = 60_000;
  */
 export const MULTI_DOWNLOAD_GAP_MS = 400;
 
-function download(data: BlobPart, filename: string, type: string): void {
+export function download(data: BlobPart, filename: string, type: string): void {
   const blob = new Blob([data], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

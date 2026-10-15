@@ -3,8 +3,8 @@
  * The fin designer (docs/design/fin-designer.md, steps 11–12): pick a starting fin,
  * edit its outline over the Futures tab, its foil section and its thickness taper,
  * set its side, cant, thickness and depth, nudge it on the tab, and read its numbers.
- * A 3D preview (step 13) sits above the controls. Saving and export follow in later
- * steps.
+ * A 3D preview (step 13) sits above the controls. The fin autosaves, and Open / Save
+ * read and write `.fin.json` files (step 14). Export follows in step 15.
  *
  * Lengths show in mm, the owner's choice for fins. Components still take a `units`
  * prop (apps/web/CLAUDE.md), so a unit selector can be added here without touching
@@ -18,14 +18,16 @@ import {
   type FinPosition,
 } from '@openshaper/kernel';
 import { Button, Tooltip } from '@openshaper/ui';
-import { lazy, Suspense, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { DegField, LenField } from '../components/fields';
 import { fmtArea, fmtLen, lengthUnitByKey, type LengthUnit } from '../format';
 import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane } from './FinSectionPane';
 import { FinTaperPane } from './FinTaperPane';
+import { downloadFin, readFinFile } from './fin-file';
 import { finStore } from './fin-store';
+import { useFinAutosave } from './use-fin-autosave';
 import { NUDGE_FORE_CM, NUDGE_LATERAL_CM, useFinShortcuts } from './use-fin-shortcuts';
 import { useFinState } from './use-fin';
 import { useSettledDesign } from './use-settled-design';
@@ -235,13 +237,57 @@ function History() {
   );
 }
 
+/** Open and Save: `.fin.json` files. Opening replaces the fin and starts a fresh history. */
+function FileButtons({ onSave }: { onSave: () => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const open = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      finStore.getState().load(await readFinFile(file));
+      setProblem(null);
+    } catch (e) {
+      setProblem((e as Error).message);
+    }
+  };
+  return (
+    <>
+      <Button variant="ghost" size="sm" onClick={() => input.current?.click()}>
+        Open…
+      </Button>
+      <input
+        ref={input}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        aria-label="Open a fin file"
+        onChange={(e) => {
+          void open(e.target.files?.[0]);
+          e.target.value = ''; // the same file can be opened again
+        }}
+      />
+      <Tooltip label="Save to a .fin.json file" shortcut={shortcutKeys('save')}>
+        <Button variant="ghost" size="sm" onClick={onSave}>
+          Save
+        </Button>
+      </Tooltip>
+      {problem && (
+        <span role="alert" className="text-xs text-destructive">
+          {problem}
+        </span>
+      )}
+    </>
+  );
+}
+
 export function FinApp() {
   const units = lengthUnitByKey('mm');
-  useFinShortcuts(finStore);
-  // Start from a left side fin; saving and autosave (step 14) will restore instead.
-  useEffect(() => {
-    if (!finStore.getState().design) finStore.getState().newFin('side', 'left');
+  const save = useCallback(() => {
+    const d = finStore.getState().design;
+    if (d) downloadFin(d);
   }, []);
+  useFinShortcuts(finStore, { onSave: save });
+  const ready = useFinAutosave(finStore);
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -268,11 +314,15 @@ export function FinApp() {
             ))}
           </select>
         </label>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+          <FileButtons onSave={save} />
           <History />
         </div>
       </header>
-      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+      <main
+        aria-busy={!ready}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden"
+      >
         <section className="min-h-[50vh] flex-1 lg:min-h-0" aria-label="Outline">
           <FinOutlinePane store={finStore} />
         </section>

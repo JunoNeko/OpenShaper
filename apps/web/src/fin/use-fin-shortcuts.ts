@@ -14,13 +14,19 @@ import { isTextEntry, matches, SHORTCUTS } from '../shortcuts';
 export const NUDGE_FORE_CM = 0.05;
 export const NUDGE_LATERAL_CM = 0.01;
 
-export function useFinShortcuts(store: StoreApi<FinState>): void {
+export function useFinShortcuts(
+  store: StoreApi<FinState>,
+  { onSave }: { onSave: () => void },
+): void {
   useEffect(() => {
     const run = (id: string): boolean => {
       const s = store.getState();
       switch (id) {
         case 'undo':
           s.undo();
+          return true;
+        case 'save':
+          onSave();
           return true;
         case 'redo':
         case 'redo-alt':
@@ -59,5 +65,5 @@ export function useFinShortcuts(store: StoreApi<FinState>): void {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [store]);
+  }, [store, onSave]);
 }

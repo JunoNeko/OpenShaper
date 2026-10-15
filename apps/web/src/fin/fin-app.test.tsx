@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { defaultFinDesign, finReadouts } from '@openshaper/kernel';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { writeFinJson } from '@openshaper/io';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FinApp } from './FinApp';
 
 // No WebGL under jsdom: the preview is checked in a real browser instead.
@@ -64,5 +65,42 @@ describe('FinApp', () => {
     act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
     render(<FinApp />);
     expect(screen.getByRole('status').textContent).toMatch(/Cant must be 0–20°/);
+  });
+});
+
+describe('FinApp: files', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('saves the fin to a .fin.json download, from the button and ⌘S', () => {
+    URL.createObjectURL = vi.fn(() => 'blob:fin');
+    URL.revokeObjectURL = vi.fn();
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(names).toEqual(['fin-side-left.fin.json', 'fin-side-left.fin.json']);
+  });
+
+  it('opens a .fin.json file, replacing the fin', async () => {
+    render(<FinApp />);
+    const file = new File([writeFinJson(defaultFinDesign('centre'))], 'centre.fin.json');
+    fireEvent.change(screen.getByLabelText('Open a fin file'), { target: { files: [file] } });
+    await waitFor(() => expect(finStore.getState().design!.position).toBe('centre'));
+    expect(finStore.getState().canUndo()).toBe(false); // opening starts a fresh history
+  });
+
+  it('explains a file it cannot open', async () => {
+    render(<FinApp />);
+    const file = new File(['{"format":"openshaper","version":2}'], 'board.board.json');
+    fireEvent.change(screen.getByLabelText('Open a fin file'), { target: { files: [file] } });
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toMatch(/can't be opened as a fin/),
+    );
+    expect(finStore.getState().design!.position).toBe('side');
   });
 });
