@@ -46,4 +46,5 @@ export * from './fin-design/fin-readouts';
 export * from './fin-design/blade';
 export * from './fin-design/blade-surface';
 export * from './fin-design/fin-placement';
+export * from './fin-design/naca';
 export { defaultFinDesign, defaultTaper, flatFace } from './fin-design/fin-defaults';

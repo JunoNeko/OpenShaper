@@ -1,8 +1,8 @@
 # Fin designer — standalone Futures fin design for CNC and print
 
-Status: **steps 0–5 done; 4a (NACA presets) next.** Tab spec and fixture: `docs/specs/fins/futures-tabs.*`.
+Status: **steps 0–5 and 4a done; 7 (preview / STL mesh) next.** Tab spec and fixture: `docs/specs/fins/futures-tabs.*`.
 Kernel: `packages/kernel/src/fin-design/` (tab outline, `FinDesign` model, defaults,
-rules, readouts, blade sections, blade surface); export: `fin-step.ts`. This is the agreed scope and build order. Update the status line as steps land.
+rules, readouts, blade sections, blade surface, placement, NACA presets); export: `fin-step.ts`. This is the agreed scope and build order. Update the status line as steps land.
 
 ## Goal
 
@@ -80,11 +80,18 @@ user signs off before anything depends on it.
     outside, so one curve is edited. Symmetric NACA sections (NACA 00xx) are allowed.
   - **Side fins default to a flat inside face** with an editable outside curve. Both
     curves can be edited, so cambered or concave-inside foils are possible.
-  - **NACA presets:** NACA 4-digit (camber, camber position, thickness) generates both
-    curves, which stay editable afterwards. Other NACA series can be added later as
-    further presets on the same two-curve model.
-  - Section thickness always comes from the taper. A NACA thickness digit sets only the
-    _shape_ of the thickness distribution; camber stays a fraction of chord.
+  - **NACA presets** (`naca.ts`): NACA 4-digit (camber, camber position, thickness)
+    generates both curves, which stay editable afterwards. The convex face is the
+    outside face; 00XX is symmetric. Closed trailing edge (the blade's 0.5 mm minimum
+    blunts it), and thickness applied square to the chord rather than the camber
+    line, so a cambered face never curls back past its leading edge: within 0.16%
+    chord of the textbook shape for a 2412, 0.35% for a 4412. Other series can be
+    added as further presets on the same two-curve model.
+  - Section thickness always comes from the taper, and the whole section scales with
+    it, so a preset keeps its camber-to-thickness ratio (a 2412 stays 2 : 12) at any
+    thickness. (The first draft of this plan said camber stays a fraction of chord;
+    uniform scaling is what the owner specified: the foil's thickest point scales to
+    the taper.)
   - The foil may be thicker than the tab (e.g. 7.0) and overlap the box slot.
 - **Taper (thickness from base to tip):** the thickness at the thickest point of the
   section, as a function of height.
