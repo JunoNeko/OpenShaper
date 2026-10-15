@@ -24,6 +24,14 @@ export {
   type BoardJson,
 } from './board-json';
 export {
+  writeFinJson,
+  readFinJson,
+  FinJsonError,
+  FIN_JSON_VERSION,
+  FIN_JSON_FORMAT,
+  type FinJson,
+} from './fin-json';
+export {
   encodeShareFragment,
   decodeShareFragment,
   shareCodecSupported,
