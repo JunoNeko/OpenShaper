@@ -56,6 +56,21 @@ export {
   type EditorOverlays,
 } from './draw';
 export { SplineEditor, type SplineEditorProps, type Calibration } from './SplineEditor';
+export { FinCurveEditor, type FinCurveEditorProps } from './FinCurveEditor';
+export {
+  HIT_TOL_PX,
+  TOUCH_HIT_TOL_PX,
+  dragTo,
+  drawFinCurves,
+  fromView,
+  layersBounds,
+  pickCurve,
+  pickHandle,
+  splineToView,
+  toView,
+  type FinCurveLayer,
+  type FinCurvePick,
+} from './fin-curve-view';
 export {
   solveSimilarity,
   scaleFromTypedLength,
