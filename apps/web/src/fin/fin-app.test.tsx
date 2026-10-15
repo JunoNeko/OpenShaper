@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { defaultFinDesign, finReadouts } from '@openshaper/kernel';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FinApp } from './FinApp';
+
+// No WebGL under jsdom: the preview is checked in a real browser instead.
+vi.mock('@openshaper/render3d', () => ({ FinPreview3D: () => null }));
 import { finStore } from './fin-store';
 
 beforeEach(() => {

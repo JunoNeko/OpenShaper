@@ -12,3 +12,11 @@ export {
 export { Guides3D } from './Guides3D';
 export { guideLines, type GuideLine, type GuideLines } from './guide-lines';
 export { useBoardOffset, type BoardPlacement } from './use-board-offset';
+export { FinPreview3D, type FinPreview3DProps } from './FinPreview3D';
+export {
+  FIN_PREVIEW_FOV,
+  finCameraPosition,
+  finMeshGeometry,
+  finScene,
+  type FinScene,
+} from './fin-preview';

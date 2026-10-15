@@ -3,7 +3,8 @@
  * The fin designer (docs/design/fin-designer.md, steps 11–12): pick a starting fin,
  * edit its outline over the Futures tab, its foil section and its thickness taper,
  * set its side, cant, thickness and depth, nudge it on the tab, and read its numbers.
- * The 3D preview, saving and export follow in later steps.
+ * A 3D preview (step 13) sits above the controls. Saving and export follow in later
+ * steps.
  *
  * Lengths show in mm, the owner's choice for fins. Components still take a `units`
  * prop (apps/web/CLAUDE.md), so a unit selector can be added here without touching
@@ -17,7 +18,7 @@ import {
   type FinPosition,
 } from '@openshaper/kernel';
 import { Button, Tooltip } from '@openshaper/ui';
-import { useEffect, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useMemo } from 'react';
 import { DegField, LenField } from '../components/fields';
 import { fmtArea, fmtLen, lengthUnitByKey, type LengthUnit } from '../format';
 import { shortcutKeys } from '../shortcuts';
@@ -27,6 +28,25 @@ import { FinTaperPane } from './FinTaperPane';
 import { finStore } from './fin-store';
 import { NUDGE_FORE_CM, NUDGE_LATERAL_CM, useFinShortcuts } from './use-fin-shortcuts';
 import { useFinState } from './use-fin';
+import { useSettledDesign } from './use-settled-design';
+
+// three.js is the heavy part of the page: load it after the 2D editor is up.
+const FinPreview3D = lazy(() =>
+  import('@openshaper/render3d').then((m) => ({ default: m.FinPreview3D })),
+);
+
+function Preview() {
+  const design = useSettledDesign(finStore);
+  const position = useFinState(finStore, (s) => s.design?.position);
+  const hand = useFinState(finStore, (s) => s.design?.hand);
+  return (
+    <div className="h-64 overflow-hidden rounded-md border border-border" aria-label="3D preview">
+      <Suspense fallback={null}>
+        <FinPreview3D design={design} frameKey={`${position}-${hand}`} />
+      </Suspense>
+    </div>
+  );
+}
 
 /** The starting fins, as the owner names them. */
 const STARTS: { label: string; position: FinPosition; hand?: FinHand }[] = [
@@ -107,6 +127,7 @@ function Controls({ units }: { units: LengthUnit }) {
   const r = finReadouts(design);
   return (
     <div className="space-y-4 text-sm">
+      <Preview />
       <div className="text-xs text-muted-foreground">{POSITION_LABEL[design.position]}</div>
       {design.hand && (
         <div className="flex items-center gap-2" role="group" aria-label="Side">
