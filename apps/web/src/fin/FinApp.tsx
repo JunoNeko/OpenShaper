@@ -4,7 +4,7 @@
  * edit its outline over the Futures tab, its foil section and its thickness taper,
  * set its side, cant, thickness and depth, nudge it on the tab, and read its numbers.
  * A 3D preview (step 13) sits above the controls. The fin autosaves, and Open / Save
- * read and write `.fin.json` files (step 14). Export follows in step 15.
+ * read and write `.fin.json` files (step 14); STEP and STL export (step 15).
  *
  * Lengths show in mm, the owner's choice for fins. Components still take a `units`
  * prop (apps/web/CLAUDE.md), so a unit selector can be added here without touching
@@ -25,7 +25,7 @@ import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane } from './FinSectionPane';
 import { FinTaperPane } from './FinTaperPane';
-import { downloadFin, readFinFile } from './fin-file';
+import { downloadFin, exportFin, readFinFile } from './fin-file';
 import { finStore } from './fin-store';
 import { useFinAutosave } from './use-fin-autosave';
 import { NUDGE_FORE_CM, NUDGE_LATERAL_CM, useFinShortcuts } from './use-fin-shortcuts';
@@ -280,6 +280,48 @@ function FileButtons({ onSave }: { onSave: () => void }) {
   );
 }
 
+/** Export for manufacture: STEP for CNC, STL for printing. Off while a rule is broken. */
+function ExportButtons() {
+  const design = useFinState(finStore, (s) => s.design);
+  const issues = useMemo(() => (design ? validateFinDesign(design) : []), [design]);
+  const [busy, setBusy] = useState<'step' | 'stl' | null>(null);
+  const run = (format: 'step' | 'stl') => {
+    const d = finStore.getState().design;
+    if (!d || busy) return;
+    setBusy(format);
+    // Let "Exporting…" paint before the work starts.
+    window.setTimeout(() => {
+      void exportFin(d, format).finally(() => setBusy(null));
+    }, 0);
+  };
+  const blocked = issues.length > 0;
+  const why = blocked ? 'Fix the issues listed under the measurements first' : undefined;
+  return (
+    <>
+      <Tooltip label={why ?? 'Export a STEP file for CNC (mm)'}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={blocked || busy !== null}
+          onClick={() => run('step')}
+        >
+          {busy === 'step' ? 'Exporting…' : 'Export STEP'}
+        </Button>
+      </Tooltip>
+      <Tooltip label={why ?? 'Export an STL file for 3D printing (mm)'}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={blocked || busy !== null}
+          onClick={() => run('stl')}
+        >
+          {busy === 'stl' ? 'Exporting…' : 'Export STL'}
+        </Button>
+      </Tooltip>
+    </>
+  );
+}
+
 export function FinApp() {
   const units = lengthUnitByKey('mm');
   const save = useCallback(() => {
@@ -316,7 +358,14 @@ export function FinApp() {
         </label>
         <div className="ml-auto flex flex-wrap items-center gap-1">
           <FileButtons onSave={save} />
+          <ExportButtons />
           <History />
+          <a
+            className="px-2 text-sm text-muted-foreground underline-offset-4 hover:underline"
+            href="/docs/fin-designer"
+          >
+            Help
+          </a>
         </div>
       </header>
       <main

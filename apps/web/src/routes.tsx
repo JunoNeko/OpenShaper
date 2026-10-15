@@ -64,6 +64,10 @@ export const routes: RouteRecord[] = [
           { path: 'docs/editing', lazy: page(() => import('./pages/docs/Editing')) },
           { path: 'docs/specs', lazy: page(() => import('./pages/docs/Specs')) },
           { path: 'docs/fins', lazy: page(() => import('./pages/docs/Fins')) },
+          {
+            path: 'docs/fin-designer',
+            lazy: page(() => import('./pages/docs/FinDesigner')),
+          },
           { path: 'docs/construction', lazy: page(() => import('./pages/docs/Construction')) },
           { path: 'docs/export', lazy: page(() => import('./pages/docs/Export')) },
           { path: 'docs/files', lazy: page(() => import('./pages/docs/Files')) },

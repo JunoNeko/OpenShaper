@@ -19,6 +19,7 @@ export const DOCS_ROUTES = [
   '/docs/editing',
   '/docs/specs',
   '/docs/fins',
+  '/docs/fin-designer',
   '/docs/construction',
   '/docs/export',
   '/docs/files',

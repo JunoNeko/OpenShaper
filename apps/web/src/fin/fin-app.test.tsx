@@ -104,3 +104,41 @@ describe('FinApp: files', () => {
     expect(finStore.getState().design!.position).toBe('side');
   });
 });
+
+describe('FinApp: export', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const captureDownloads = () => {
+    URL.createObjectURL = vi.fn(() => 'blob:fin');
+    URL.revokeObjectURL = vi.fn();
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    return names;
+  };
+
+  it('exports STEP and STL, named after the fin', async () => {
+    const names = captureDownloads();
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'Export STL' }));
+    await waitFor(() => expect(names).toEqual(['fin-side-left.stl']));
+    fireEvent.click(screen.getByRole('button', { name: 'Export STEP' }));
+    await waitFor(() => expect(names).toEqual(['fin-side-left.stl', 'fin-side-left.step']), {
+      timeout: 10_000,
+    });
+  }, 20_000);
+
+  it('is unavailable while the fin breaks a rule', () => {
+    act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
+    render(<FinApp />);
+    expect(
+      (screen.getByRole('button', { name: 'Export STEP' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect((screen.getByRole('button', { name: 'Export STL' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+});

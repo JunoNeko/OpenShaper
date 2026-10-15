@@ -1,8 +1,8 @@
 # Fin designer — standalone Futures fin design for CNC and print
 
-Status: **steps 0–5, 4a and 7–14 done, plus insertion clearance; 15 (export buttons and docs) next.** The `/fin` page edits the outline, foil section and taper, with a 3D preview, autosave and `.fin.json` Open / Save. Tab spec and fixture: `docs/specs/fins/futures-tabs.*`.
+Status: **steps 0–16 and 4a done, plus insertion clearance; 17 (end-to-end tests) left.** The `/fin` page edits the outline, foil section and taper, with a 3D preview, autosave, `.fin.json` Open / Save and STEP / STL export; documented at `/docs/fin-designer`. Tab spec and fixture: `docs/specs/fins/futures-tabs.*`.
 Kernel: `packages/kernel/src/fin-design/` (tab outline, `FinDesign` model, defaults,
-rules, readouts, blade sections, blade surface, placement, NACA presets, meshes); export: `fin-step.ts`; io: `fin-json.ts`; store: `fin-store.ts`, `fin-edits.ts`; render2d: `FinCurveEditor.tsx`, `fin-curve-view.ts`; web: `apps/web/src/fin/`, route `/fin` (offline, like `/app`). This is the agreed scope and build order. Update the status line as steps land.
+rules, readouts, blade sections, blade surface, placement, NACA presets, meshes); export: `fin-step.ts`; io: `fin-json.ts`; export: `fin-stl.ts`; store: `fin-store.ts`, `fin-edits.ts`; render2d: `FinCurveEditor.tsx`, `fin-curve-view.ts`; web: `apps/web/src/fin/`, route `/fin` (offline, like `/app`). This is the agreed scope and build order. Update the status line as steps land.
 
 ## Goal
 
