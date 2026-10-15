@@ -3,7 +3,8 @@
 Status: **shipped**. `Export ▸ STEP (surfaces)` writes an ISO 10303-21 (Part 21)
 file describing the board as a solid bounded by true B-spline surfaces.
 Code: `packages/kernel/src/bspline-surface.ts`,
-`packages/kernel/src/board-surface.ts`, `packages/export/src/step.ts`.
+`packages/kernel/src/board-surface.ts`, `packages/export/src/step.ts`. The Part 21
+encoding is shared with the fin exporter in `packages/export/src/step-writer.ts`.
 
 ## Why
 

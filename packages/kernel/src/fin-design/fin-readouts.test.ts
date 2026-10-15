@@ -96,7 +96,8 @@ describe.each(FIN_POSITIONS)('finReadouts(default %s)', (position) => {
 
   it('matches the source sizes', () => {
     expect(r.depth).toBeCloseTo(position === 'quad-rear' ? 8 : 10, 12);
-    expect(r.frontOverhang).toBeCloseTo(0, 12);
+    // Rear-aligned, so the leading edge is set back from the tab front by 113 mm − chord.
+    expect(r.frontOverhang).toBeCloseTo(r.rootChord - 11.3, 12);
     // The FinFoil outline's own rake: its highest point sits about 275 units behind the
     // leading-edge root and 229 up, atan(275 / 229) ≈ 50°. Pinned so a change to the
     // default outline is deliberate.

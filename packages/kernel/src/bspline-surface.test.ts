@@ -309,6 +309,61 @@ describe('interpolateSurface: creases via uBreaks', () => {
   });
 });
 
+describe('interpolateSurface: creases via vBreaks', () => {
+  const ROWS = 8;
+  const COLS = 13;
+  const KINK = 6;
+
+  /** z is piecewise linear in the column index, with a kink at column KINK. */
+  const kinked = (): Vert3[][] =>
+    Array.from({ length: ROWS }, (_, r) =>
+      Array.from({ length: COLS }, (_, c) => v3(r, c, c <= KINK ? c : KINK - 3 * (c - KINK))),
+    );
+
+  const kinkError = (s: BSplineSurface): number => {
+    let worst = 0;
+    for (let k = 0; k <= 200; k++) {
+      const p = evalSurface(s, 0.5, k / 200);
+      const want = p.y <= KINK ? p.y : KINK - 3 * (p.y - KINK);
+      worst = Math.max(worst, Math.abs(p.z - want));
+    }
+    return worst;
+  };
+
+  it('reproduces the crease exactly when told where it is', () => {
+    expect(kinkError(interpolateSurface(kinked(), { vBreaks: [KINK] }))).toBeLessThan(1e-9);
+    expect(kinkError(interpolateSurface(kinked()))).toBeGreaterThan(0.05);
+  });
+
+  it('lands multiplicity `degree` on the break knot, with a consistent net', () => {
+    const s = interpolateSurface(kinked(), { vBreaks: [KINK] });
+    const { mults } = knotMultiplicities(s.vKnots);
+    expect(mults.slice(1, -1).filter((m) => m === CUBIC)).toHaveLength(1);
+    expect(s.vKnots).toHaveLength(s.ctrl[0]!.length + s.vDegree + 1);
+    expect(s.uKnots).toHaveLength(s.ctrl.length + s.uDegree + 1);
+  });
+
+  it('combines with uBreaks', () => {
+    const grid = Array.from({ length: 13 }, (_, r) =>
+      Array.from({ length: COLS }, (_, c) => {
+        const zu = r <= 6 ? r : 6 - 3 * (r - 6);
+        const zv = c <= KINK ? c : KINK - 3 * (c - KINK);
+        return v3(r, c, zu + zv);
+      }),
+    );
+    const s = interpolateSurface(grid, { uBreaks: [6], vBreaks: [KINK] });
+    // Bilinear-in-strips data is reproduced exactly at every grid point and between.
+    for (let i = 0; i <= 40; i++) {
+      for (let j = 0; j <= 40; j++) {
+        const p = evalSurface(s, i / 40, j / 40);
+        const zu = p.x <= 6 ? p.x : 6 - 3 * (p.x - 6);
+        const zv = p.y <= KINK ? p.y : KINK - 3 * (p.y - KINK);
+        expect(Math.abs(p.z - (zu + zv))).toBeLessThan(1e-9);
+      }
+    }
+  });
+});
+
 describe('surfaceNormal', () => {
   it('points along +z for a grid in the z = const plane', () => {
     const grid = Array.from({ length: 6 }, (_, r) =>

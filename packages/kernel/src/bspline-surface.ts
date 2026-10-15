@@ -382,6 +382,8 @@ export interface SurfaceFitOptions {
    * tangent break. Each becomes an interior knot of multiplicity `uDegree`.
    */
   readonly uBreaks?: readonly number[];
+  /** Column indices (strictly interior, ascending) with a tangent break along v. */
+  readonly vBreaks?: readonly number[];
   readonly uDegree?: number;
   readonly vDegree?: number;
   /** Parameterization exponent along u (default chord length). */
@@ -391,8 +393,9 @@ export interface SurfaceFitOptions {
 }
 
 /**
- * Interpolate `u` through one column of intermediate control points, splitting at
- * `breaks` and concatenating the strips.
+ * Interpolate each list of points along one parameter direction (u through columns
+ * of intermediate control points, or v through grid rows), splitting at `breaks`
+ * and concatenating the strips.
  *
  * Concatenation is exact: each strip is clamped, so its first and last control
  * points ARE the data points at the break rows, and the two strips meeting there
@@ -469,9 +472,11 @@ export const interpolateSurface = (
 
   // v first: interpolate each row across the profile, giving intermediate control
   // points that are then interpolated along the length.
+  // Creases along v split each row into strips exactly as along u, below. Without
+  // any, this is one strip: averaged knots over the whole row, solved in one go.
   const vParams = averageParams(grid.map((row) => pointParams(row, opts.vExponent ?? CENTRIPETAL)));
-  const vKnots = averagedKnots(vParams, vDegree);
-  const intermediate = solveRows(grid, vParams, vDegree, vKnots);
+  const vBreaks = (opts.vBreaks ?? []).filter((b) => b > 0 && b < cols - 1);
+  const { ctrl: intermediate, knots: vKnots } = interpolateStrips(grid, vParams, vDegree, vBreaks);
 
   // u second, on the columns of the intermediate net.
   const columns: Vert3[][] = [];

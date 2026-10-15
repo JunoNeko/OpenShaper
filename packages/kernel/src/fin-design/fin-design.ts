@@ -62,8 +62,19 @@ export interface FinDesign {
    * front (+x toward the nose), y = height above the tab top (the blade root plane).
    * One open chain: leading-edge root → up the leading edge → tip → down the trailing
    * edge → trailing-edge root. The root edge between the two ends is implied.
+   *
+   * Being in the tab frame, the outline also places the fin fore and aft on the tab:
+   * nudging the fin forward or back moves the whole outline (fin-placement.ts).
    */
   readonly outline: Spline;
+  /**
+   * How far the blade sits outboard of its default position across the tab (cm);
+   * negative is inboard. By default a foil with a flat or curved inside face has its
+   * chord line flush with the tab's inboard face, and a symmetric foil is centred
+   * (fin-placement.ts). A strongly curved inside face overhangs the tab inboard, and
+   * this lets the user slide the blade back over it.
+   */
+  readonly lateralOffset: number;
   readonly section: FinSection;
   /**
    * Thickness at the section's thickest point, up the blade. Frame: x = height as a

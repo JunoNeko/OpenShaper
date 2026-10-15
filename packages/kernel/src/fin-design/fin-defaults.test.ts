@@ -75,10 +75,13 @@ describe.each(FIN_POSITIONS)('defaultFinDesign(%s)', (position) => {
     expect(splineExtremes(d.outline, 'y').max.point.y).toBeCloseTo(size.height * 100, 12);
   });
 
-  it('puts the leading-edge root on the tab top-front corner', () => {
-    const le = d.outline.knots[0]!.end;
-    expect(le.x).toBeCloseTo(11.3, 12);
-    expect(le.y).toBe(-0);
+  it('is rear-aligned: the trailing-edge root on the tab rear end', () => {
+    const k = d.outline.knots;
+    const te = k[k.length - 1]!.end;
+    expect(te.x).toBeCloseTo(0, 12);
+    expect(te.y).toBe(-0);
+    expect(k[0]!.end.y).toBe(-0);
+    expect(d.lateralOffset).toBe(0);
   });
 
   it('keeps the source aspect: root chord / depth = 232.86 / outline peak', () => {

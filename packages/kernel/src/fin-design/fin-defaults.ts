@@ -15,7 +15,9 @@
  * - the section's outside face (`profile.topProfile`).
  *
  * Chosen here:
- * - The leading-edge root sits on the tab's top-front corner (no overhang).
+ * - Rear-aligned: the trailing-edge root sits on the tab's rear end, the usual
+ *   convention. The tab sits flush with a flat inside face, centred under a symmetric
+ *   foil (fin-placement.ts).
  * - Side and quad-rear inside faces are flat, per the owner. The sources' inside curves
  *   are not used.
  * - The taper is straight to 70% of the depth, then curves to the 0.5 mm minimum at the
@@ -28,13 +30,11 @@ import { vec2, type Vec2 } from '../vec2';
 import { splineExtremes } from './curve-shape';
 import {
   FIN_MIN_THICKNESS,
-  finTabKind,
   type FinDesign,
   type FinHand,
   type FinPosition,
   type FinSection,
 } from './fin-design';
-import { FUTURES_TABS } from './futures-tab';
 
 /** A `.foil` cubic: control 1, control 2, end — each (x, y). */
 export type FoilCubic = readonly [number, number, number, number, number, number];
@@ -108,12 +108,16 @@ const M_TO_CM = 100;
 /** `.foil` stores cant in radians to 5 decimals (7° → 0.12217); back to whole-ish degrees. */
 const cantDeg = (rx: number): number => Math.round(Math.abs(rx) * RAD_TO_DEG * 100) / 100;
 
-/** The outline scaled to `depth` (cm), its leading-edge root at `leRootX`. */
-const defaultOutline = (depth: number, leRootX: number): Spline => {
+/**
+ * The outline scaled to `depth` (cm), rear-aligned: its trailing-edge root on the
+ * tab's rear end (x = 0).
+ */
+const defaultOutline = (depth: number): Spline => {
   // `.foil` x runs from the leading-edge root toward the trailing edge, so it flips.
   const raw = splineFromKnots(foilKnots(FOIL_OUTLINE, (x, y) => vec2(-x, -y)));
   const s = depth / splineExtremes(raw, 'y').max.point.y;
-  return splineFromKnots(foilKnots(FOIL_OUTLINE, (x, y) => vec2(leRootX - x * s, -y * s)));
+  const chord = FOIL_OUTLINE.cubics[FOIL_OUTLINE.cubics.length - 1]![4] * s;
+  return splineFromKnots(foilKnots(FOIL_OUTLINE, (x, y) => vec2(chord - x * s, -y * s)));
 };
 
 /** A face normalised to unit chord, outside offsets positive. */
@@ -160,7 +164,6 @@ export const defaultTaper = (root: number): Spline => {
 /** The fin a position starts from. `hand` applies to side and quad-rear fins only. */
 export const defaultFinDesign = (position: FinPosition, hand: FinHand = 'left'): FinDesign => {
   const size = FOIL_SIZES[position];
-  const tab = FUTURES_TABS[finTabKind(position)];
   const centre = position === 'centre';
   const section: FinSection = {
     outside: sectionFace(FOIL_SECTIONS[position]),
@@ -170,7 +173,8 @@ export const defaultFinDesign = (position: FinPosition, hand: FinHand = 'left'):
     position,
     hand: centre ? null : hand,
     cant: cantDeg(size.rx),
-    outline: defaultOutline(size.height * M_TO_CM, tab.length),
+    outline: defaultOutline(size.height * M_TO_CM),
+    lateralOffset: 0,
     section,
     taper: defaultTaper(size.thick * M_TO_CM),
   };

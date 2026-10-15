@@ -18,6 +18,7 @@ import {
   finTabKind,
   type FinDesign,
 } from './fin-design';
+import { lateralOffsetRange } from './fin-placement';
 import { FUTURES_TABS } from './futures-tab';
 
 export type FinIssueCode =
@@ -26,6 +27,8 @@ export type FinIssueCode =
   | 'outline-root'
   | 'outline-rising'
   | 'front-overhang'
+  | 'tab-rear'
+  | 'tab-contact'
   | 'section-ends'
   | 'section-direction'
   | 'section-crossing'
@@ -82,6 +85,17 @@ const checkOutline = (d: FinDesign, issues: FinIssue[]): void => {
       code: 'front-overhang',
       message: `The leading edge overhangs the front of the tab by more than ${FIN_MAX_FRONT_OVERHANG * 10} mm.`,
     });
+  }
+  if (le.x < -EPS) {
+    issues.push({ code: 'tab-rear', message: 'The fin has slid off the back of the tab.' });
+  }
+};
+
+/** The tab stays under the foil (fin-placement.ts). Needs a buildable section. */
+const checkTabContact = (d: FinDesign, issues: FinIssue[]): void => {
+  const { min, max } = lateralOffsetRange(d);
+  if (d.lateralOffset < min - EPS || d.lateralOffset > max + EPS) {
+    issues.push({ code: 'tab-contact', message: 'The fin has slid sideways off the tab.' });
   }
 };
 
@@ -176,5 +190,8 @@ export const validateFinDesign = (d: FinDesign): FinIssue[] => {
   checkOutline(d, issues);
   checkSection(d, issues);
   checkTaper(d, issues);
+  // Placing the tab under the foil means building the root section, which needs the
+  // rest of the design to be sound.
+  if (issues.length === 0) checkTabContact(d, issues);
   return issues;
 };

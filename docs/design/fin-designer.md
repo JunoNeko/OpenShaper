@@ -1,8 +1,8 @@
 # Fin designer — standalone Futures fin design for CNC and print
 
-Status: **steps 0–4 done.** Tab spec and fixture: `docs/specs/fins/futures-tabs.*`.
+Status: **steps 0–5 done; 4a (NACA presets) next.** Tab spec and fixture: `docs/specs/fins/futures-tabs.*`.
 Kernel: `packages/kernel/src/fin-design/` (tab outline, `FinDesign` model, defaults,
-rules, readouts, blade sections). This is the agreed scope and build order. Update the status line as steps land.
+rules, readouts, blade sections, blade surface); export: `fin-step.ts`. This is the agreed scope and build order. Update the status line as steps land.
 
 ## Goal
 
@@ -89,6 +89,17 @@ user signs off before anything depends on it.
   builds cant into the fin (FCS builds it into the box).
 - **Left / right:** side and quad-rear fins mirror; the inside curve always faces
   inboard.
+- **Placement on the tab** (added after the step 5 review; `fin-placement.ts`):
+  - **Defaults are rear-aligned:** the trailing-edge root on the tab's rear end, the
+    usual convention.
+  - **Across the tab:** a flat inside face is flush with the tab, and a symmetric foil
+    is centred. A curved inside face (most NACA foils) has its chord line flush, so
+    the curve overhangs the tab inboard.
+  - **Nudge arrows:** forward / back moves the fin along the tab, with a hard stop at
+    the 2.5 mm front overhang and at the tab's rear end. Left / right slides the blade
+    across the tab, so a strongly curved inside face can be brought back over it,
+    within the range that keeps the tab under the foil (its centre plane between the
+    root section's faces at their thickest point).
 
 ### Readouts
 
@@ -142,31 +153,70 @@ All shown in mm and degrees:
 
 ### STEP topology
 
+As built in step 5 (`packages/kernel/src/fin-design/blade-surface.ts`,
+`packages/export/src/fin-step.ts`):
+
 ```
-blade: outside skin + inside skin   B-spline surfaces, sharing seam edges at LE and TE
-       root face + tip cap          planes (the 0.5 mm minimum means the tip is a small
-                                    flat cap, not a point where the surfaces close up)
-tab:   planar faces with line and circle edges (U-slot, R1.0 corner, V-notch)
+blade  3 faces: one bicubic B-spline surface wrapped around the blade, closed in u
+       on a seam (outside face, trailing-edge cap, inside face, leading-edge cap),
+       plus flat root and tip caps
+tab    14 faces: two flat sides, then one face per profile segment: PLANE for a line,
+       CYLINDRICAL_SURFACE for the slot end and the R1.0 corner
 ```
 
-This mirrors the board STEP: two hull patches sharing the stringer seam, plus two flat
-caps. So the seam sharing, measured orientation and structural tests in
-`packages/export/src/step.ts` carry over (see `docs/design/step-export.md`).
+- **One wrapped surface, not two skins.** The 0.5 mm minimum makes the edges blunt,
+  so each section is a closed loop with four corners. One surface with C0 knots at
+  the corners (`uBreaks`) shares its edges with itself and the caps exactly, the way
+  the board's two patches share the stringer. Corners in the outline or taper crease
+  along the height the same way (`vBreaks`, added to `interpolateSurface` for this;
+  the board's output is byte-identical).
+- **Tip:** sections stop 0.1 mm under the tip and a flat sliver closes the blade. A
+  surface pinched to a point is legal but often fails to import.
+- **Accuracy:** fitted to 0.05 mm and refined until met. What remains is in the last
+  0.2 mm under the tip, at the edge corners (about 0.08 mm on the defaults). CI holds
+  the whole blade to the board STEP's 0.15 mm and all but the top 0.5% to 0.05 mm.
+- **Touching, not overlapping (changed from the plan).** The plan sank the blade 1 mm
+  into the tab. But the root foil is wider than the 6.35 mm tab (8 mm by default) and
+  often longer, so a sunk blade leaves a 1 mm lip below the base outside the tab, and
+  the fin would not seat. The blade and tab are two solids that **touch on the
+  tab-top plane** (z = 0); CAD Combine / Join merges them. A single fused solid is
+  still a possible later step.
+- **Tab position across the fin:** from `tabCentreY` (flush with a flat inside face,
+  centred under a symmetric foil, plus the user's sideways nudge). First built centred
+  under the thickest point; changed after review, since a flat inside face is
+  conventionally flush with the tab.
+- **Orientation** is measured from the geometry, as for the board. Tests read the file
+  back and check every edge is used once in each direction per solid, every flat face
+  winds counter-clockwise about its outward normal, and every face points out.
 
-The blade root is sunk 1 mm into the tab and **the two are written as two overlapping
-solids in one file**. This was chosen as the easiest path; the user combines them in
-CAM if needed. A single fused solid needs exact curve trimming at the tab edges. It is a
-possible later step, not part of this plan.
+The Part 21 encoding moved to `packages/export/src/step-writer.ts`, shared with the
+board exporter, whose output was diffed byte-for-byte before and after (12 files:
+test board and the three golden boards, in mm, cm and in).
 
-The Part 21 writer is extracted from `step.ts` for reuse. **The board STEP output must
-stay byte-identical** (`step.test.ts` already asserts byte-identical output for the
-same inputs).
+Building this exposed a board STEP bug: the hull loops run clockwise, so hull and caps
+use their shared edges in the same direction. Recorded as P46 in `PROPOSALS.md`.
+
+#### Verification
+
+OpenCascade (via `occt-import-js` 0.0.23, run outside the repo) reads each sample as
+two closed solids with positive volume; blade volumes agree with the kernel's
+integrated section areas to 0.1–0.2% (tessellation reads slightly low), and the tab
+volume equals profile area × 6.35 mm exactly.
+
+| date       | app                       | fins                                                  | result                                                                                                     |
+| ---------- | ------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 2026-10-15 | OpenCascade (wasm 0.0.23) | side R 7°, side L 20°, quad rear R, centre (defaults) | 2 solids each, closed, volumes match                                                                       |
+| 2026-10-15 | Fusion 360                | same                                                  | Imports; Combine / Join gives one body. Review asked for rear alignment and sideways placement (now built) |
+
+Manual pass for Fusion (and any other CAD/CAM): imports without repair; two bodies;
+Combine / Join gives one body; depth, root chord and thickness match the designer;
+a 3-axis toolpath generates on each side of the blade.
 
 ### Related finding (separate fix)
 
 The board STL (`packages/export/src/stl.ts`) writes kernel cm with no unit conversion,
 so slicers that assume mm import boards 10× too small. The fin STL writes mm. The board
-STL needs its own change, which is user-visible and so goes in `PROPOSALS.md`.
+STL needs its own change, which is user-visible: P47 in `PROPOSALS.md`.
 
 ## Build order
 
@@ -184,9 +234,9 @@ before the UI so the biggest unknown is answered first.
 | 5   | **⚠ Riskiest.** STEP of the default fin: blade skins + caps, tab faces, two solids. Part 21 writer extracted with board output byte-identical. Structural tests, plus manual import into Fusion/FreeCAD recorded here. | L    | Opus                 |
 | 7   | Kernel: preview/STL mesh, two closed shells. Every edge shared by exactly two triangles.                                                                                                                               | M    | Sonnet               |
 | 8   | io: `.fin.json` v1 read/write, round-trip test.                                                                                                                                                                        | S    | Sonnet               |
-| 9   | Store: `createFinStore` with undo; pure `fin-edits.ts` enforcing the rules (clamped drags).                                                                                                                            | M    | Sonnet + Opus review |
+| 9   | Store: `createFinStore` with undo; pure `fin-edits.ts` enforcing the rules (clamped drags); nudge actions over `nudgeFore` / `nudgeLateral`.                                                                           | M    | Sonnet + Opus review |
 | 10  | render2d: `FinCurveEditor` (drag points/handles, rule callbacks).                                                                                                                                                      | M    | Sonnet               |
-| 11  | Web: `/fin` route, tab picker, L/R, cant 0–20°, mm readouts, overhang warning.                                                                                                                                         | M    | Sonnet               |
+| 11  | Web: `/fin` route, tab picker, L/R, cant 0–20°, mm readouts, overhang warning, fore/aft and sideways nudge arrows (with keyboard shortcuts in `shortcuts.ts`).                                                         | M    | Sonnet               |
 | 12  | Web: outline pane (over the true tab), section pane (both curves; symmetric lock for centre; NACA preset picker), taper pane.                                                                                          | M    | Sonnet               |
 | 13  | Web: 3D preview (the `Fins3D.tsx` pattern, `frameloop="demand"`).                                                                                                                                                      | S    | Sonnet               |
 | 14  | Web: IndexedDB autosave + save/open `.fin.json`.                                                                                                                                                                       | S    | Sonnet               |

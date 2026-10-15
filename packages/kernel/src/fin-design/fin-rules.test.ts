@@ -52,24 +52,24 @@ describe('validateFinDesign', () => {
   });
 
   describe('outline', () => {
-    const shift = (dx: number): FinDesign => ({
-      ...side,
-      outline: mapSpline(side.outline, (p) => vec2(p.x + dx, p.y)),
-    });
+    /** The side fin moved so its leading-edge root is at `x` (cm). */
+    const placeLe = (x: number, d: FinDesign = side): FinDesign => {
+      const dx = x - d.outline.knots[0]!.end.x;
+      return { ...d, outline: mapSpline(d.outline, (p) => vec2(p.x + dx, p.y)) };
+    };
 
     it('lets the leading edge overhang the tab front by up to 2.5 mm', () => {
-      expect(codes(shift(FIN_MAX_FRONT_OVERHANG))).toEqual([]);
-      expect(codes(shift(FIN_MAX_FRONT_OVERHANG + 0.001))).toEqual(['front-overhang']);
+      expect(codes(placeLe(11.3 + FIN_MAX_FRONT_OVERHANG))).toEqual([]);
+      expect(codes(placeLe(11.3 + FIN_MAX_FRONT_OVERHANG + 0.001))).toEqual(['front-overhang']);
     });
 
-    it('allows any rear overhang', () => {
-      expect(codes(shift(-5))).toEqual([]);
+    it('lets the fin hang off the back, as long as its leading edge is on the tab', () => {
+      expect(codes(placeLe(0))).toEqual([]);
+      expect(codes(placeLe(-0.001))).toEqual(['tab-rear']);
     });
 
     it('measures the overhang from the fin position’s own tab', () => {
-      const q = defaultFinDesign('quad-rear');
-      const moved = mapSpline(q.outline, (p) => vec2(p.x + 0.3, p.y));
-      expect(codes({ ...q, outline: moved })).toEqual(['front-overhang']);
+      expect(codes(placeLe(11.3 + 0.3, defaultFinDesign('quad-rear')))).toEqual(['front-overhang']);
     });
 
     it('needs both roots on the tab top', () => {
@@ -79,7 +79,7 @@ describe('validateFinDesign', () => {
 
     it('needs the leading-edge root in front of the trailing-edge root', () => {
       // Mirror the outline front to back: the chain now starts at the rear.
-      const flipped = mapSpline(side.outline, (p) => vec2(11.3 - p.x, p.y));
+      const flipped = mapSpline(side.outline, (p) => vec2(10 - p.x, p.y));
       expect(codes({ ...side, outline: flipped })).toContain('outline-root');
     });
 

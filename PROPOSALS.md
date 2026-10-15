@@ -147,6 +147,25 @@ Effort M · visible: metadata and warnings.
 `click()`, which is fragile in Safari and Firefox. The multi-PDF loop can be blocked as
 multiple downloads. Effort S · visible: downloads more reliable.
 
+**P46 · Board STEP hull loops run the wrong way round.** Found while building the fin
+STEP export (2026-10-15). In the board's file, each of the four edges where a hull patch
+meets an end cap is used in the _same_ direction by both faces (`.T.`/`.T.` or
+`.F.`/`.F.`), where a closed, consistently oriented shell needs one of each. The
+stringer seams are fine. `step.ts`'s `hullFace` walks u=0 up, v=1 along, u=1 down,
+v=0 back, which is clockwise in (u, v) and so clockwise about the face normal when
+`same_sense` is true; ISO 10303-42 wants an outer bound counter-clockwise about the
+face normal. The hull normals themselves point out (that is what `step.test.ts`
+checks), so only the loop direction is off. Rhino 8 and the Autodesk viewer import it,
+presumably repairing it; a strict kernel may not. Fix: reverse the two hull walks, and
+add the fin tests' edge-use check (`fin-step.test.ts`: every edge once each way) to
+`step.test.ts`. Changes exported bytes. Effort XS · risk low · visible: STEP file.
+
+**P47 · Board STL is written in cm.** `exportStl` writes kernel coordinates unscaled,
+and STL has no unit field. Slicers and CAM read STL as mm, so a board imports 10× too
+small. The fin STL (fin designer, step 16) will write mm. Fix: scale to mm (or offer a
+unit like the STEP dialog). Changes exported bytes and every existing user's workflow
+that rescales by 10. Effort XS · risk med · visible: STL size on import.
+
 ## Geometry (need golden or divergence handling)
 
 **P31 · ✅ Done (af1f087) — `getMaxWidth` is `-Infinity` for a single-segment outline.** The widest point is
