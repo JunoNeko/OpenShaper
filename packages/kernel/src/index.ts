@@ -43,4 +43,5 @@ export * from './fin-design/futures-tab';
 export * from './fin-design/fin-design';
 export * from './fin-design/fin-rules';
 export * from './fin-design/fin-readouts';
+export * from './fin-design/blade';
 export { defaultFinDesign, defaultTaper, flatFace } from './fin-design/fin-defaults';

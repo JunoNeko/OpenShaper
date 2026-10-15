@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
- * Exact shape queries on a spline, for the fin designer's rules: which way each
- * coordinate runs along the curve, and where it peaks. Both read the roots of the
- * derivative of each cubic segment, so neither depends on a sampling resolution.
+ * Exact shape queries on a spline, for the fin designer: which way each coordinate runs
+ * along the curve, where it peaks, and where it crosses a given value. All split each
+ * cubic segment at the roots of its derivative, so none depends on a sampling
+ * resolution. Crossings are then found by bisection on a monotone piece, to full
+ * floating-point precision.
  */
 import type { Coeffs } from '../bezier-curve';
 import type { Spline } from '../bezier-spline';
@@ -64,6 +66,12 @@ export interface SplinePoint {
 const pointOn = (k: Coeffs, t: number): Vec2 =>
   vec2(((k.ax * t + k.bx) * t + k.cx) * t + k.dx, ((k.ay * t + k.by) * t + k.cy) * t + k.dy);
 
+/** Point at t on a segment; the segment's own end points exactly at t = 0 and 1. */
+const pointAt = (s: Spline, segment: number, t: number): Vec2 => {
+  const c = s.curves[segment]!;
+  return t === 0 ? c.p0 : t === 1 ? c.p3 : pointOn(s.coeffs[segment]!, t);
+};
+
 /** The exact lowest and highest points of the spline along `axis`. */
 export const splineExtremes = (
   s: Spline,
@@ -74,7 +82,7 @@ export const splineExtremes = (
   s.coeffs.forEach((k, segment) => {
     const [a, b, c] = cubicCoeffs(k, axis);
     for (const t of [0, ...derivativeRoots(a, b, c), 1]) {
-      const point = pointOn(k, t);
+      const point = pointAt(s, segment, t);
       const v = point[axis];
       if (!min || v < min.point[axis]) min = { segment, t, point };
       if (!max || v > max.point[axis]) max = { segment, t, point };
@@ -82,4 +90,54 @@ export const splineExtremes = (
   });
   if (!min || !max) throw new Error('splineExtremes: spline has no segments');
   return { min, max };
+};
+
+const BISECT_STEPS = 60;
+
+/** The t in [t0, t1] where `at(t)` equals v; it must be monotone there. */
+const solveMonotone = (at: (t: number) => number, v: number, t0: number, t1: number): number => {
+  // Exact on an end: bisection would only approach it.
+  if (at(t0) === v) return t0;
+  if (at(t1) === v) return t1;
+  const rising = at(t1) >= at(t0);
+  let lo = t0;
+  let hi = t1;
+  for (let i = 0; i < BISECT_STEPS; i++) {
+    const mid = (lo + hi) / 2;
+    if (at(mid) < v === rising) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+};
+
+/**
+ * Every point where the spline's `axis` coordinate equals `v`, in order along the curve.
+ * A crossing at a piece boundary can be reported twice, once from each side.
+ */
+export const crossings = (s: Spline, axis: Axis, v: number): SplinePoint[] => {
+  const out: SplinePoint[] = [];
+  s.coeffs.forEach((k, segment) => {
+    const [a, b, c] = cubicCoeffs(k, axis);
+    const cuts = [0, ...derivativeRoots(a, b, c), 1];
+    const at = (t: number) => pointAt(s, segment, t)[axis];
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const lo = Math.min(at(cuts[i]!), at(cuts[i + 1]!));
+      const hi = Math.max(at(cuts[i]!), at(cuts[i + 1]!));
+      if (v < lo || v > hi) continue;
+      const t = solveMonotone(at, v, cuts[i]!, cuts[i + 1]!);
+      out.push({ segment, t, point: pointAt(s, segment, t) });
+    }
+  });
+  return out;
+};
+
+/**
+ * y at x on a spline whose x never decreases (a section face or a taper; the rules
+ * guarantee it). Exact, unlike the board's Newton-based `valueAt`, whose 0.03 mm
+ * tolerance suits a board but not a normalised unit-chord curve.
+ */
+export const yAtX = (s: Spline, x: number): number => {
+  const hit = crossings(s, 'x', x)[0];
+  if (!hit) throw new RangeError(`yAtX: x = ${x} is outside the curve`);
+  return hit.point.y;
 };
