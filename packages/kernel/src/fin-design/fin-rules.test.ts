@@ -63,9 +63,14 @@ describe('validateFinDesign', () => {
       expect(codes(placeLe(11.3 + FIN_MAX_FRONT_OVERHANG + 0.001))).toEqual(['front-overhang']);
     });
 
-    it('lets the fin hang off the back, as long as its leading edge is on the tab', () => {
-      expect(codes(placeLe(0))).toEqual([]);
-      expect(codes(placeLe(-0.001))).toEqual(['tab-rear']);
+    it('flags a fin whose leading edge has left the tab', () => {
+      expect(codes(placeLe(-0.001))).toContain('tab-rear');
+      expect(codes(placeLe(0))).not.toContain('tab-rear');
+    });
+
+    it('flags a base that runs behind the tab without a raised rear', () => {
+      // Moved back 1 mm, the default's flat base sits behind the tab on the base line.
+      expect(codes(placeLe(side.outline.knots[0]!.end.x - 0.1))).toEqual(['rear-clearance']);
     });
 
     it('measures the overhang from the fin position’s own tab', () => {

@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
-import { splineFromKnots } from '../bezier-spline';
-import { knot } from '../knot';
 import type { BoardMesh } from '../tessellate';
 import { vec2 } from '../vec2';
 import { bladeSection, cosineStations, prepareBlade } from './blade';
@@ -12,6 +10,7 @@ import { FIN_MESH_FINE, finMesh } from './fin-mesh';
 import { tabCentreY } from './fin-placement';
 import { FUTURES_TABS, futuresTabOutline } from './futures-tab';
 import { nacaSection } from './naca';
+import { raisedRearDesign } from '../test-support/fin-designs';
 import { polygonArea } from './triangulate';
 
 /**
@@ -28,28 +27,12 @@ const tabArea = (kind: 'side' | 'centre'): number => {
   return spec.length * spec.height - slot - corner - notch;
 };
 
-const raisedRear = (): FinDesign => {
-  const d = defaultFinDesign('side', 'right');
-  const [k0, k1, k2, k3] = d.outline.knots;
-  return {
-    ...d,
-    outline: splineFromKnots([
-      k0!,
-      k1!,
-      k2!,
-      knot(k3!.end, k3!.tangentToPrev, vec2(-0.236, 4.857), true),
-      knot(vec2(-1.8, 0.5), vec2(-1.9, 1.8), vec2(-1.2, 0.4), false),
-      knot(vec2(0.5, 0), vec2(-0.2, 0.08), vec2(0.5, 0), false),
-    ]),
-  };
-};
-
 const designs: [string, FinDesign][] = [
   ['side', defaultFinDesign('side', 'right')],
   ['left side, 20° cant', { ...defaultFinDesign('side', 'left'), cant: 20 }],
   ['quad rear', defaultFinDesign('quad-rear', 'left')],
   ['centre', defaultFinDesign('centre')],
-  ['raised rear', raisedRear()],
+  ['raised rear', raisedRearDesign()],
   ['side, NACA 4412', { ...defaultFinDesign('side', 'right'), section: nacaSection('4412') }],
   ['centre, NACA 0010', { ...defaultFinDesign('centre'), section: nacaSection('0010') }],
 ];

@@ -9,39 +9,18 @@
  */
 import { describe, expect, it } from 'vitest';
 import { value } from '../bezier-curve';
-import { splineFromKnots } from '../bezier-spline';
-import { knot } from '../knot';
-import { vec2, type Vec2 } from '../vec2';
+import type { Vec2 } from '../vec2';
+import { RAISED_BASE_END, RAISED_LOW, raisedRearDesign } from '../test-support/fin-designs';
 import { bladeSection, chordAt, prepareBlade } from './blade';
 import { BLADE_CI_TOLERANCE, bladeSurfaceDeviation, fitBladeSurface } from './blade-surface';
 import { splineExtremes } from './curve-shape';
-import { defaultFinDesign } from './fin-defaults';
 import type { FinDesign } from './fin-design';
 import { finReadouts } from './fin-readouts';
 import { validateFinDesign } from './fin-rules';
 
-/** Raised low point (cm): 18 mm behind the tab, 5 mm up. Underside meets the base at 5 mm. */
-const LOW = vec2(-1.8, 0.5);
-const BASE_END = vec2(0.5, 0);
-
-/** The default side fin with its trailing edge ending in a raised rear. */
-const raisedRear = (): FinDesign => {
-  const d = defaultFinDesign('side', 'right');
-  const [k0, k1, k2, k3] = d.outline.knots;
-  return {
-    ...d,
-    outline: splineFromKnots([
-      k0!,
-      k1!,
-      k2!,
-      // Down the trailing edge, now swinging back to the raised low point.
-      knot(k3!.end, k3!.tangentToPrev, vec2(-0.236, 4.857), true),
-      // A sharp low point: in from above, out forward along the underside.
-      knot(LOW, vec2(-1.9, 1.8), vec2(-1.2, 0.4), false),
-      knot(BASE_END, vec2(-0.2, 0.08), BASE_END, false),
-    ]),
-  };
-};
+const LOW = RAISED_LOW;
+const BASE_END = RAISED_BASE_END;
+const raisedRear = raisedRearDesign;
 
 const shoelace = (d: FinDesign, n = 4000): number => {
   const pts: Vec2[] = [];

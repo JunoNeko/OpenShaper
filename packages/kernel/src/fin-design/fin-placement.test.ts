@@ -6,14 +6,10 @@ import { vec2, type Vec2 } from '../vec2';
 import { bladeSection, prepareBlade } from './blade';
 import { defaultFinDesign } from './fin-defaults';
 import { FIN_MAX_FRONT_OVERHANG, type FinDesign } from './fin-design';
-import {
-  lateralOffsetRange,
-  leadingRootRange,
-  nudgeFore,
-  nudgeLateral,
-  tabCentreY,
-} from './fin-placement';
+import { lateralOffsetRange, nudgeFore, nudgeLateral, tabCentreY } from './fin-placement';
+import { finClearanceShortfall } from './fin-clearance';
 import { validateFinDesign } from './fin-rules';
+import { raisedRearDesign, shiftFin } from '../test-support/fin-designs';
 import { FUTURES_TABS } from './futures-tab';
 
 const T = FUTURES_TABS.side.thickness;
@@ -58,10 +54,20 @@ describe('nudgeFore', () => {
     expect(nudgeFore(f, 0.05)).toBe(f); // at the stop, nothing changes
   });
 
-  it('stops at the tab rear end going back', () => {
-    const f = nudgeFore(d, -100);
-    expect(le(f)).toBe(leadingRootRange(f).min);
-    expect(validateFinDesign(f)).toEqual([]);
+  it('cannot move a rear-aligned fin back: its base would hit the board', () => {
+    // The default's base runs to the tab's rear end at height 0; any further back and
+    // that base is behind the tab, below the insertion-clearance line.
+    expect(nudgeFore(d, -0.1)).toBe(d);
+  });
+
+  it('moves a raised-rear fin back exactly to its clearance limit', () => {
+    const r = raisedRearDesign();
+    const back = nudgeFore(r, -100);
+    expect(le(back)).toBeLessThan(le(r));
+    expect(finClearanceShortfall(back)).toBeLessThanOrEqual(1e-9);
+    // A hundredth of a millimetre further and the tail would hit the board.
+    expect(finClearanceShortfall(shiftFin(back, -0.001))).toBeGreaterThan(0);
+    expect(validateFinDesign(back)).toEqual([]);
   });
 });
 

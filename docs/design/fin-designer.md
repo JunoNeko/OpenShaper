@@ -1,6 +1,6 @@
 # Fin designer — standalone Futures fin design for CNC and print
 
-Status: **steps 0–5, 4a and 7 done; 8 (`.fin.json`) next.** Tab spec and fixture: `docs/specs/fins/futures-tabs.*`.
+Status: **steps 0–5, 4a and 7 done, plus insertion clearance; 8 (`.fin.json`) next.** Tab spec and fixture: `docs/specs/fins/futures-tabs.*`.
 Kernel: `packages/kernel/src/fin-design/` (tab outline, `FinDesign` model, defaults,
 rules, readouts, blade sections, blade surface, placement, NACA presets, meshes); export: `fin-step.ts`. This is the agreed scope and build order. Update the status line as steps land.
 
@@ -112,13 +112,12 @@ user signs off before anything depends on it.
     is centred. A curved inside face (most NACA foils) has its chord line flush, so
     the curve overhangs the tab inboard.
   - **Nudge arrows:** forward / back moves the fin along the tab, with a hard stop at
-    the 2.5 mm front overhang and, for now, where the leading-edge root reaches the
-    tab's rear end (to become the insertion-clearance limit below). Left / right slides the blade
+    the 2.5 mm front overhang and, going back, at the insertion-clearance limit below. Left / right slides the blade
     across the tab, so a strongly curved inside face can be brought back over it,
     within the range that keeps the tab under the foil (its centre plane between the
     root section's faces at their thickest point).
 
-### Proposed: insertion clearance (awaiting confirmation)
+### Insertion clearance (agreed working model; `fin-clearance.ts`)
 
 A Futures fin is fitted rear first: its rear slot hooks the pin at the back of the box,
 then the fin rocks down about the pin until the tab seats. While tilted, anything
@@ -130,8 +129,11 @@ about **9.4° for the side tab, 6.7° for the centre tab**. A point x mm behind 
 rear end must then sit at least `(6.4 + (3.3 + x)·sin θ) / cos θ − 6.4` above the
 base: for a side fin, 0.6 mm at the rear end, 2.0 mm at 8 mm back and 3.6 mm at 18 mm back; for a centre or quad-rear tab, 0.4, 1.4 and 2.5 mm.
 
-If confirmed, this becomes a rule (`rear-clearance`, shown as a dashed clearance
-line in the outline pane), and the backward nudge stops where it would break.
+Agreed with the owner as a working model (defaults are not critical; what matters is
+that the raised rear can be edited). Built as the `rear-clearance` rule, which reports
+how much to raise the rear, and the backward nudge stops at the last clear position.
+A rear-aligned fin with a flat base therefore cannot move back at all. The outline
+pane should draw the line dashed behind the tab (steps 10 and 12).
 
 ### Readouts
 

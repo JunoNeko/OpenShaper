@@ -18,6 +18,7 @@ import {
   finTabKind,
   type FinDesign,
 } from './fin-design';
+import { finClearanceShortfall } from './fin-clearance';
 import { lateralOffsetRange } from './fin-placement';
 import { FUTURES_TABS } from './futures-tab';
 
@@ -28,6 +29,7 @@ export type FinIssueCode =
   | 'outline-rising'
   | 'front-overhang'
   | 'tab-rear'
+  | 'rear-clearance'
   | 'tab-contact'
   | 'section-ends'
   | 'section-direction'
@@ -88,6 +90,16 @@ const checkOutline = (d: FinDesign, issues: FinIssue[]): void => {
   }
   if (le.x < -EPS) {
     issues.push({ code: 'tab-rear', message: 'The fin has slid off the back of the tab.' });
+  }
+  // Only meaningful once the outline itself is sound.
+  if (issues.every((i) => i.code !== 'outline-root' && i.code !== 'outline-rising')) {
+    const short = finClearanceShortfall(d);
+    if (short > EPS) {
+      issues.push({
+        code: 'rear-clearance',
+        message: `Behind the tab, the fin would hit the board as it rocks onto the rear pin. Raise the rear by ${(short * 10).toFixed(1)} mm.`,
+      });
+    }
   }
 };
 

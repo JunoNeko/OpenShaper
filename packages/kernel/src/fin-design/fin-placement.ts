@@ -6,8 +6,9 @@
  * - **Fore and aft** is the outline's own x, in the tab frame. Defaults are
  *   rear-aligned, the usual convention: the trailing-edge root on the tab's rear end.
  *   Forward stops hard when the leading edge overhangs the tab front by
- *   {@link FIN_MAX_FRONT_OVERHANG} (the grub screw). Back stops when the leading-edge
- *   root reaches the tab's rear end, beyond which the fin would be off the tab.
+ *   {@link FIN_MAX_FRONT_OVERHANG} (the grub screw). Back stops where the part behind
+ *   the tab would hit the board while the fin rocks onto the rear pin
+ *   (fin-clearance.ts), and in any case at the tab's rear end.
  * - **Across** is {@link FinDesign.lateralOffset}. By default:
  *   - a symmetric foil is centred on the tab;
  *   - any other foil has its chord line flush with the tab's inboard face, so a flat
@@ -20,6 +21,7 @@
  * The frame is blade.ts's: the blade is fixed and the tab is placed under it.
  */
 import { bladeSection, prepareBlade } from './blade';
+import { clearanceShortfall, rearClearance } from './fin-clearance';
 import { FIN_MAX_FRONT_OVERHANG, finTabKind, type FinDesign } from './fin-design';
 import { FUTURES_TABS } from './futures-tab';
 import { splineFromKnots } from '../bezier-spline';
@@ -73,13 +75,32 @@ const shiftOutline = (d: FinDesign, dx: number): FinDesign => {
 };
 
 /**
- * Move the fin `dx` cm toward the nose (negative: toward the tail), stopping hard at
- * the front-overhang limit and at the tab's rear end.
+ * Move the fin `dx` cm toward the nose (negative: toward the tail). Forward stops hard
+ * at the front-overhang limit. Back stops at the tab's rear end, or sooner where the
+ * part behind the tab would hit the board as the fin rocks in (fin-clearance.ts). A
+ * fin already short of clearance cannot be moved further back.
  */
 export const nudgeFore = (d: FinDesign, dx: number): FinDesign => {
   const le = d.outline.knots[0]!.end.x;
   const { min, max } = leadingRootRange(d);
-  const to = Math.min(max, Math.max(min, le + dx));
+  let to = Math.min(max, Math.max(min, le + dx));
+  if (to < le) {
+    const c = rearClearance(finTabKind(d.position));
+    const clear = (x: number) => clearanceShortfall(shiftOutline(d, x - le).outline, c) <= 1e-9;
+    if (!clear(le)) to = le;
+    else if (!clear(to)) {
+      // Moving back only adds shortfall, so bisect for the last clear position.
+      let ok = le;
+      let bad = to;
+      for (let i = 0; i < 50; i++) {
+        const mid = (ok + bad) / 2;
+        if (clear(mid)) ok = mid;
+        else bad = mid;
+      }
+      // Under a micron is rounding at the tab's rear end, not a move.
+      to = le - ok < 1e-4 ? le : ok;
+    }
+  }
   return to === le ? d : shiftOutline(d, to - le);
 };
 
