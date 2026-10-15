@@ -1,8 +1,8 @@
 # Fin designer — standalone Futures fin design for CNC and print
 
-Status: **steps 0–5 and 4a done; 7 (preview / STL mesh) next.** Tab spec and fixture: `docs/specs/fins/futures-tabs.*`.
+Status: **steps 0–5, 4a and 7 done; 8 (`.fin.json`) next.** Tab spec and fixture: `docs/specs/fins/futures-tabs.*`.
 Kernel: `packages/kernel/src/fin-design/` (tab outline, `FinDesign` model, defaults,
-rules, readouts, blade sections, blade surface, placement, NACA presets); export: `fin-step.ts`. This is the agreed scope and build order. Update the status line as steps land.
+rules, readouts, blade sections, blade surface, placement, NACA presets, meshes); export: `fin-step.ts`. This is the agreed scope and build order. Update the status line as steps land.
 
 ## Goal
 

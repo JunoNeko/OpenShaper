@@ -47,4 +47,5 @@ export * from './fin-design/blade';
 export * from './fin-design/blade-surface';
 export * from './fin-design/fin-placement';
 export * from './fin-design/naca';
+export * from './fin-design/fin-mesh';
 export { defaultFinDesign, defaultTaper, flatFace } from './fin-design/fin-defaults';
