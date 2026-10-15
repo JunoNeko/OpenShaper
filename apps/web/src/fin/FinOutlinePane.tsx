@@ -15,16 +15,11 @@ import {
   tabProfilePoints,
   type FinPosition,
 } from '@openshaper/kernel';
-import {
-  FinCurveEditor,
-  boundsOf,
-  sampleSpline,
-  type FinCurvePick,
-  type Viewport,
-} from '@openshaper/render2d';
+import { FinCurveEditor, boundsOf, sampleSpline, type Viewport } from '@openshaper/render2d';
 import type { FinState } from '@openshaper/store';
 import { memo, useCallback, useMemo } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
+import { curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { useFinState } from './use-fin';
 
 const TAB_FILL = 'rgba(138,155,179,0.18)';
@@ -107,30 +102,17 @@ export const FinOutlinePane = memo(function FinOutlinePane({
     [design, tab, tabLen, kind],
   );
 
-  const pick = selection
-    ? { layer: selection.curve, index: selection.index, kind: selection.kind ?? 'end' }
-    : null;
-  const s = store.getState;
+  const handlers = useMemo(() => curveEditorHandlers(store), [store]);
   return (
     <FinCurveEditor
       label="Fin outline"
       layers={layers}
-      selection={pick}
+      selection={pickFromSelection(selection, ['outline'])}
       frameBounds={frameBounds}
       frameKey={position}
       drawUnder={drawUnder}
       onViewport={onViewport}
-      onSelect={(p: FinCurvePick | null) =>
-        s().select(p && { curve: 'outline', index: p.index, kind: p.kind })
-      }
-      onDragStart={() => s().beginEdit('Move control point')}
-      onDrag={(p, to) =>
-        p.kind === 'end'
-          ? s().moveControlPoint('outline', p.index, to)
-          : s().moveTangent('outline', p.index, p.kind, to)
-      }
-      onDragEnd={() => s().endEdit()}
-      onAddPoint={(_, at) => s().addControlPoint('outline', at)}
+      {...handlers}
     />
   );
 });

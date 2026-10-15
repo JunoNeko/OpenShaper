@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
- * The fin designer (docs/design/fin-designer.md, step 11): pick a starting fin, edit
- * its outline over the Futures tab, set its side, cant, thickness and depth, nudge it
- * on the tab, and read its numbers. Section and taper panes, the 3D preview, saving
- * and export follow in later steps.
+ * The fin designer (docs/design/fin-designer.md, steps 11–12): pick a starting fin,
+ * edit its outline over the Futures tab, its foil section and its thickness taper,
+ * set its side, cant, thickness and depth, nudge it on the tab, and read its numbers.
+ * The 3D preview, saving and export follow in later steps.
  *
  * Lengths show in mm, the owner's choice for fins. Components still take a `units`
  * prop (apps/web/CLAUDE.md), so a unit selector can be added here without touching
@@ -22,6 +22,8 @@ import { DegField, LenField } from '../components/fields';
 import { fmtArea, fmtLen, lengthUnitByKey, type LengthUnit } from '../format';
 import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
+import { FinSectionPane } from './FinSectionPane';
+import { FinTaperPane } from './FinTaperPane';
 import { finStore } from './fin-store';
 import { NUDGE_FORE_CM, NUDGE_LATERAL_CM, useFinShortcuts } from './use-fin-shortcuts';
 import { useFinState } from './use-fin';
@@ -249,10 +251,22 @@ export function FinApp() {
           <History />
         </div>
       </header>
-      <main className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
         <section className="min-h-[50vh] flex-1 lg:min-h-0" aria-label="Outline">
           <FinOutlinePane store={finStore} />
         </section>
+        {/* Section over taper beside the outline on wide screens; stacked below it on narrow. */}
+        <div className="flex shrink-0 flex-col border-border lg:w-[26rem] lg:border-l">
+          <section
+            className="h-[40vh] border-t border-border lg:h-1/2 lg:border-t-0"
+            aria-label="Foil"
+          >
+            <FinSectionPane store={finStore} />
+          </section>
+          <section className="h-[40vh] border-t border-border lg:h-1/2" aria-label="Taper">
+            <FinTaperPane store={finStore} units={units} />
+          </section>
+        </div>
         <aside className="w-full shrink-0 overflow-y-auto border-t border-border p-3 lg:w-80 lg:border-l lg:border-t-0">
           <Controls units={units} />
         </aside>
