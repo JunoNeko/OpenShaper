@@ -15,6 +15,9 @@ import {
   evalCurve,
   evalSurface,
   fitBladeSurface,
+  knot,
+  splineFromKnots,
+  vec2,
   futuresTabOutline,
   finTabKind,
   prepareBlade,
@@ -38,8 +41,26 @@ import {
 const FIXED = '2026-10-15T12:00:00';
 const MM = 10; // kernel cm → file mm
 
+/** A long-based fin with a raised rear (as in the kernel's raised-rear.test.ts). */
+const raisedRear = (): FinDesign => {
+  const d = defaultFinDesign('side', 'right');
+  const [k0, k1, k2, k3] = d.outline.knots;
+  return {
+    ...d,
+    outline: splineFromKnots([
+      k0!,
+      k1!,
+      k2!,
+      knot(k3!.end, k3!.tangentToPrev, vec2(-0.236, 4.857), true),
+      knot(vec2(-1.8, 0.5), vec2(-1.9, 1.8), vec2(-1.2, 0.4), false),
+      knot(vec2(0.5, 0), vec2(-0.2, 0.08), vec2(0.5, 0), false),
+    ]),
+  };
+};
+
 const designs: [string, FinDesign][] = [
   ['side', defaultFinDesign('side', 'right')],
+  ['side with a raised rear', raisedRear()],
   ['left side, 20° cant', { ...defaultFinDesign('side', 'left'), cant: 20 }],
   ['quad rear', defaultFinDesign('quad-rear', 'right')],
   ['centre', defaultFinDesign('centre')],

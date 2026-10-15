@@ -62,6 +62,15 @@ user signs off before anything depends on it.
     The grub screw sits at the front of the box.
   - The leading and trailing edges must each keep rising from root to tip, so every
     horizontal slice cuts the outline exactly twice. A drag that breaks this is clamped.
+  - **Raised rear** (long-based fins, e.g. keels and twins). Behind the tab, the blade's
+    underside may rise from the base to a raised low point before the trailing edge
+    climbs to the tip, so the fin can be rocked onto the box's rear pin without its
+    tail hitting the board. The outline chain then runs down the trailing edge to the
+    low point and forward along the underside to the base. Height still falls all
+    the way from the tip, so the rules above already allow it, and the editor must
+    let control points form it: add points on the trailing edge, move them behind
+    and above the base, and end the chain anywhere on the base.
+    `raised-rear.test.ts` and `fin-step.test.ts` build one end to end.
 - **Section (horizontal foil):**
   - One shape, scaled to the local chord.
   - Modelled as **two independent curves**, inside and outside, each measured from the
@@ -96,10 +105,26 @@ user signs off before anything depends on it.
     is centred. A curved inside face (most NACA foils) has its chord line flush, so
     the curve overhangs the tab inboard.
   - **Nudge arrows:** forward / back moves the fin along the tab, with a hard stop at
-    the 2.5 mm front overhang and at the tab's rear end. Left / right slides the blade
+    the 2.5 mm front overhang and, for now, where the leading-edge root reaches the
+    tab's rear end (to become the insertion-clearance limit below). Left / right slides the blade
     across the tab, so a strongly curved inside face can be brought back over it,
     within the range that keeps the tab under the foil (its centre plane between the
     root section's faces at their thickest point).
+
+### Proposed: insertion clearance (awaiting confirmation)
+
+A Futures fin is fitted rear first: its rear slot hooks the pin at the back of the box,
+then the fin rocks down about the pin until the tab seats. While tilted, anything
+behind the tab swings toward the board.
+
+Model: pivot at the rear slot's centre (3.3 mm from the tab's rear end, 6.4 mm below
+the tab top). The fin must tilt until the tab's bottom-front corner clears the board:
+about **9.4° for the side tab, 6.7° for the centre tab**. A point x mm behind the tab's
+rear end must then sit at least `(6.4 + (3.3 + x)·sin θ) / cos θ − 6.4` above the
+base: for a side fin, 0.6 mm at the rear end, 2.0 mm at 8 mm back and 3.6 mm at 18 mm back; for a centre or quad-rear tab, 0.4, 1.4 and 2.5 mm.
+
+If confirmed, this becomes a rule (`rear-clearance`, shown as a dashed clearance
+line in the outline pane), and the backward nudge stops where it would break.
 
 ### Readouts
 
