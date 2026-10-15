@@ -40,3 +40,6 @@ export * from './fins';
 export * from './tunni';
 export * from './curvature-comb';
 export * from './fin-design/futures-tab';
+export * from './fin-design/fin-design';
+export * from './fin-design/fin-rules';
+export { defaultFinDesign, defaultTaper, flatFace } from './fin-design/fin-defaults';

@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * A standalone fin design: the persisted intent of the fin designer
+ * (docs/design/fin-designer.md). Everything a fin is made from — outline, foil section,
+ * thickness taper, cant — is an editable curve or number here; the 3D blade and the
+ * exports are computed from it and never stored.
+ *
+ * Independent of the board's `FinSpec`/`FinConfig` (fins.ts), which place fins on a
+ * board; this describes one fin for manufacture.
+ *
+ * Units are the kernel's cm and degrees, except where a curve is normalised (stated
+ * per field).
+ */
+import type { Spline } from '../bezier-spline';
+import type { FuturesTabKind } from './futures-tab';
+
+/** Where the fin goes. Quad rears use the shallower centre tab but take cant and a side. */
+export type FinPosition = 'side' | 'quad-rear' | 'centre';
+
+export const FIN_POSITIONS: readonly FinPosition[] = ['side', 'quad-rear', 'centre'];
+
+/** Which side of the board a side or quad-rear fin is for. */
+export type FinHand = 'left' | 'right';
+
+/** The Futures tab each position uses. */
+export const finTabKind = (position: FinPosition): FuturesTabKind =>
+  position === 'side' ? 'side' : 'centre';
+
+/** Largest cant (blade lean from the tab, deg) the designer allows. */
+export const FIN_MAX_CANT = 20;
+
+/** How far the leading-edge root may sit in front of the tab's top-front corner (cm). */
+export const FIN_MAX_FRONT_OVERHANG = 0.25;
+
+/** Thinnest the blade may get anywhere — edges and tip — for rider safety (cm). */
+export const FIN_MIN_THICKNESS = 0.05;
+
+/**
+ * The horizontal foil, as two faces offset from the chord line. Frame: x = chord fraction
+ * u (0 leading edge → 1 trailing edge), y = offset in chords, + toward the outside face.
+ * Both faces run (0, 0) → (1, 0). Only the shape matters: step 4 scales the section so
+ * its thickest point matches the taper.
+ */
+export interface FinSection {
+  /** The outside (outboard) face. */
+  readonly outside: Spline;
+  /**
+   * The inside face, or `null` for a symmetric foil (the outside face mirrored). A flat
+   * inside face is the straight line y = 0; a negative offset bulges inboard.
+   */
+  readonly inside: Spline | null;
+}
+
+export interface FinDesign {
+  readonly position: FinPosition;
+  /** `left` or `right` for side and quad-rear fins; `null` for a centre fin. */
+  readonly hand: FinHand | null;
+  /** Lean of the blade out from the tab (deg), 0 to {@link FIN_MAX_CANT}; 0 for centre. */
+  readonly cant: number;
+  /**
+   * The blade's side profile in the tab frame (cm): x from the tab's rear end toward its
+   * front (+x toward the nose), y = height above the tab top (the blade root plane).
+   * One open chain: leading-edge root → up the leading edge → tip → down the trailing
+   * edge → trailing-edge root. The root edge between the two ends is implied.
+   */
+  readonly outline: Spline;
+  readonly section: FinSection;
+  /**
+   * Thickness at the section's thickest point, up the blade. Frame: x = height as a
+   * fraction of the blade's depth (0 root → 1 tip), y = thickness (cm). Normalising
+   * the height keeps the taper valid when the outline's depth changes.
+   */
+  readonly taper: Spline;
+}
