@@ -63,8 +63,18 @@ user signs off before anything depends on it.
     horizontal slice cuts the outline exactly twice. A drag that breaks this is clamped.
 - **Section (horizontal foil):**
   - One shape, scaled to the local chord.
-  - Side fins: flat inside face, editable outside curve.
-  - Centre: symmetric, one curve mirrored.
+  - Modelled as **two independent curves**, inside and outside, each measured from the
+    chord line. One model covers every foil below, and more can be added without
+    changing the file format.
+  - **Centre fins: always symmetric**, like a boat keel. The inside curve mirrors the
+    outside, so one curve is edited. Symmetric NACA sections (NACA 00xx) are allowed.
+  - **Side fins default to a flat inside face** with an editable outside curve. Both
+    curves can be edited, so cambered or concave-inside foils are possible.
+  - **NACA presets:** NACA 4-digit (camber, camber position, thickness) generates both
+    curves, which stay editable afterwards. Other NACA series can be added later as
+    further presets on the same two-curve model.
+  - Section thickness always comes from the taper. A NACA thickness digit sets only the
+    _shape_ of the thickness distribution; camber stays a fraction of chord.
   - The foil may be thicker than the tab (e.g. 7.0) and overlap the box slot.
 - **Taper (thickness from base to tip):** the thickness at the thickest point of the
   section, as a function of height.
@@ -76,7 +86,8 @@ user signs off before anything depends on it.
   knife edges.
 - **Cant:** the lean of the blade relative to the tab, 0–20°, typed by the user. Futures
   builds cant into the fin (FCS builds it into the box).
-- **Left / right:** side and quad-rear fins mirror; the flat face is always inboard.
+- **Left / right:** side and quad-rear fins mirror; the inside curve always faces
+  inboard.
 
 ### Readouts
 
@@ -168,13 +179,14 @@ before the UI so the biggest unknown is answered first.
 | 2   | Kernel: `FinDesign` model (LE/TE curves, section, taper, cant, side, tab), default fins, rule checks (overhang ≤ 2.5, rising edges, taper ≥ 0.5).                                                                      | M    | Opus                 |
 | 3   | Kernel: readouts (area excluding the tab, depth, sweep, root chord, overhang). Analytic tests.                                                                                                                         | S    | Haiku                |
 | 4   | Kernel: `bladeSection(design, h)`: closed foil from chord × section × taper, cant lean + cos correction, L/R mirroring, 0.5 mm minimum. Tests: thickest point = taper value; L/R mirror exactly; measured lean = cant. | M    | Opus                 |
+| 4a  | Kernel: NACA 4-digit section generator → inside/outside curves, trailing edge blunted to 0.5 mm. Tests against published NACA ordinates (e.g. 0012, 2412); 00xx comes out exactly symmetric.                           | S    | Sonnet               |
 | 5   | **⚠ Riskiest.** STEP of the default fin: blade skins + caps, tab faces, two solids. Part 21 writer extracted with board output byte-identical. Structural tests, plus manual import into Fusion/FreeCAD recorded here. | L    | Opus                 |
 | 7   | Kernel: preview/STL mesh, two closed shells. Every edge shared by exactly two triangles.                                                                                                                               | M    | Sonnet               |
 | 8   | io: `.fin.json` v1 read/write, round-trip test.                                                                                                                                                                        | S    | Sonnet               |
 | 9   | Store: `createFinStore` with undo; pure `fin-edits.ts` enforcing the rules (clamped drags).                                                                                                                            | M    | Sonnet + Opus review |
 | 10  | render2d: `FinCurveEditor` (drag points/handles, rule callbacks).                                                                                                                                                      | M    | Sonnet               |
 | 11  | Web: `/fin` route, tab picker, L/R, cant 0–20°, mm readouts, overhang warning.                                                                                                                                         | M    | Sonnet               |
-| 12  | Web: outline pane (over the true tab), section pane, taper pane.                                                                                                                                                       | M    | Sonnet               |
+| 12  | Web: outline pane (over the true tab), section pane (both curves; symmetric lock for centre; NACA preset picker), taper pane.                                                                                          | M    | Sonnet               |
 | 13  | Web: 3D preview (the `Fins3D.tsx` pattern, `frameloop="demand"`).                                                                                                                                                      | S    | Sonnet               |
 | 14  | Web: IndexedDB autosave + save/open `.fin.json`.                                                                                                                                                                       | S    | Sonnet               |
 | 15  | Web: STEP/STL export buttons; docs page, `docs/registry.ts`, precache entries.                                                                                                                                         | S    | Haiku                |

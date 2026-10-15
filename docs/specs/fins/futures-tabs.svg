@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 931 412.79999999999995" width="931" height="412.79999999999995">
+<style>
+  .bg{fill:#fff} .tab{fill:#fff6b0;stroke:#333;stroke-width:1}
+  .ext{stroke:#888;stroke-dasharray:4 3;stroke-width:0.8}
+  .pt{fill:#c0392b} .t{font:600 13px sans-serif;fill:#111} .l{font:11px sans-serif;fill:#333}
+</style>
+<rect class="bg" width="100%" height="100%"/>
+<!-- Generated from futures-tabs.json for visual sign-off. Dashed: 101° front-face line. -->
+<text x="40" y="50" class="t">Centre / quad rear — 113 × 12.7 × 6.35 mm</text>
+<path d="M 47.00 148.90 L 826.10 148.90 L 830.80 124.74 L 817.00 106.90 L 831.00 91.50 L 831.00 60.00 L 40.00 60.00 L 40.00 89.40 L 63.10 89.40 A 15.400000000000002 15.400000000000002 0 0 1 63.10 120.20 L 40.00 120.20 L 40.00 141.90 A 7 7 0 0 0 47.00 148.90 Z" class="tab"/>
+<line x1="826.10" y1="148.90" x2="848.82" y2="32.00" class="ext"/>
+<circle cx="831.00" cy="60.00" r="2.5" class="pt"/><text x="837.00" y="64.00" class="l">T</text>
+<circle cx="831.00" cy="91.50" r="2.5" class="pt"/><text x="837.00" y="95.50" class="l">U</text>
+<circle cx="817.00" cy="106.90" r="2.5" class="pt"/><text x="823.00" y="110.90" class="l">A</text>
+<circle cx="830.80" cy="124.74" r="2.5" class="pt"/><text x="836.80" y="128.74" class="l">D</text>
+<circle cx="826.10" cy="148.90" r="2.5" class="pt"/><text x="832.10" y="152.90" class="l">B</text>
+<text x="435.50" y="108.45" class="l" text-anchor="middle">rear ← tail · front (grub screw) → nose</text>
+<text x="40" y="218.89999999999998" class="t">Side / quad front — 113 × 17.7 × 6.35 mm</text>
+<path d="M 47.00 352.80 L 816.30 352.80 L 823.62 315.13 L 804.40 298.90 L 831.00 267.40 L 831.00 228.90 L 40.00 228.90 L 40.00 258.30 L 63.10 258.30 A 15.400000000000002 15.400000000000002 0 0 1 63.10 289.10 L 40.00 289.10 L 40.00 345.80 A 7 7 0 0 0 47.00 352.80 Z" class="tab"/>
+<line x1="816.30" y1="352.80" x2="845.83" y2="200.90" class="ext"/>
+<circle cx="831.00" cy="228.90" r="2.5" class="pt"/><text x="837.00" y="232.90" class="l">T</text>
+<circle cx="831.00" cy="267.40" r="2.5" class="pt"/><text x="837.00" y="271.40" class="l">U</text>
+<circle cx="804.40" cy="298.90" r="2.5" class="pt"/><text x="810.40" y="302.90" class="l">A</text>
+<circle cx="823.62" cy="315.13" r="2.5" class="pt"/><text x="829.62" y="319.13" class="l">D</text>
+<circle cx="816.30" cy="352.80" r="2.5" class="pt"/><text x="822.30" y="356.80" class="l">B</text>
+<text x="435.50" y="294.85" class="l" text-anchor="middle">rear ← tail · front (grub screw) → nose</text>
+</svg>
