@@ -33,7 +33,7 @@
 import { DEG_TO_RAD } from '../constants';
 import type { Vert3 } from '../loft';
 import { crossings, splineExtremes, yAtX } from './curve-shape';
-import { FIN_MIN_THICKNESS, type FinDesign } from './fin-design';
+import { FIN_MIN_THICKNESS, type FinDesign, type FinSection } from './fin-design';
 
 /** Chord stations from leading edge (0) to trailing edge (1), clustered at both edges. */
 export const cosineStations = (n: number): number[] =>
@@ -82,8 +82,23 @@ const shapeAt = (d: FinDesign, u: number): [number, number] => {
 
 const SEARCH_SAMPLES = 400;
 
-/** Where the shape is thickest: a coarse scan, then a golden-section refine. */
+/**
+ * Where the shape is thickest: a coarse scan, then a golden-section refine. It depends
+ * only on the section, and is the bulk of preparing a blade (a few ms), so it is cached
+ * per section object: edits that leave the section alone (outline drags, nudges, cant)
+ * reuse it. A WeakMap, so the cache never keeps a section alive.
+ */
+const thickestCache = new WeakMap<FinSection, { at: number; thickness: number }>();
+
 const thickest = (d: FinDesign): { at: number; thickness: number } => {
+  const hit = thickestCache.get(d.section);
+  if (hit) return hit;
+  const found = findThickest(d);
+  thickestCache.set(d.section, found);
+  return found;
+};
+
+const findThickest = (d: FinDesign): { at: number; thickness: number } => {
   const t = (u: number) => {
     const [o, i] = shapeAt(d, u);
     return o - i;

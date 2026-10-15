@@ -32,3 +32,23 @@ export {
   type SplineTarget,
 } from './edits';
 export { selectSpecs, type BoardSpecs } from './selectors';
+export {
+  createFinStore,
+  type FinState,
+  type FinHistoryEntry,
+  type FinSelection,
+} from './fin-store';
+export {
+  applyNaca,
+  clampEdit,
+  constrainKnot,
+  getFinCurve,
+  newIssues,
+  setCant,
+  setDepth,
+  setHand,
+  setInsideFace,
+  setRootThickness,
+  withFinCurve,
+  type FinCurve,
+} from './fin-edits';
