@@ -21,6 +21,7 @@ import { Button } from '@openshaper/ui';
 import { memo, useCallback, useMemo, useState } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
 import { curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
+import { PointTools } from './PointTools';
 import { useFinState } from './use-fin';
 
 /** Drawn this many times taller than true. */
@@ -31,6 +32,8 @@ const SECTION_FRAME = { minX: 0, maxX: 1, minY: -0.03, maxY: 0.01 };
 
 /** The presets in the dropdown; "Other…" takes any 4-digit code. */
 const SUGGESTED = ['0008', '0010', '0012', '2408', '2410', '2412', '4409', '4412', '6409'];
+
+const SECTION_CURVES = ['outside', 'inside'] as const;
 
 const OUTSIDE = '#22D3EE';
 const INSIDE = '#A78BFA';
@@ -157,6 +160,7 @@ export const FinSectionTools = memo(function FinSectionTools({
         </div>
       )}
       <NacaPicker store={store} centre={centre} />
+      <PointTools store={store} curves={SECTION_CURVES} />
     </>
   );
 });

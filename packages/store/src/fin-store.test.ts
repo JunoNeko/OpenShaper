@@ -217,3 +217,62 @@ describe('fin store: fin-wide edits', () => {
     expect(validateFinDesign(design(s))).toEqual([]);
   });
 });
+
+describe('fin store: point tools', () => {
+  const cross = (k: {
+    end: { x: number; y: number };
+    tangentToPrev: { x: number; y: number };
+    tangentToNext: { x: number; y: number };
+  }) => {
+    const a = { x: k.tangentToPrev.x - k.end.x, y: k.tangentToPrev.y - k.end.y };
+    const b = { x: k.tangentToNext.x - k.end.x, y: k.tangentToNext.y - k.end.y };
+    return (a.x * b.y - a.y * b.x) / (Math.hypot(a.x, a.y) * Math.hypot(b.x, b.y));
+  };
+
+  it('adds a point halfway along the span after the selected one, and selects it', () => {
+    const s = storeWith();
+    const n = design(s).taper.knots.length;
+    expect(s.getState().addControlPointAfter('taper', 0)).toBe(true);
+    expect(design(s).taper.knots.length).toBe(n + 1);
+    expect(s.getState().selection).toEqual({ curve: 'taper', index: 1, kind: 'end' });
+    // The new point is on the old curve, so the shape is unchanged.
+    expect(validateFinDesign(design(s))).toEqual([]);
+  });
+
+  it('adds before the last point, which has no span after it', () => {
+    const s = storeWith();
+    const last = design(s).taper.knots.length - 1;
+    expect(s.getState().addControlPointAfter('taper', last)).toBe(true);
+    expect(s.getState().selection!.index).toBe(last);
+  });
+
+  it('turns a corner smooth by lining up its handles, keeping their lengths', () => {
+    const s = storeWith();
+    const i = 1;
+    const k0 = design(s).outline.knots[i]!;
+    s.getState().setContinuous('outline', i, false);
+    // Kink it: swing the forward handle round.
+    const h = k0.tangentToNext;
+    s.getState().moveTangent('outline', i, 'next', vec2(h.x + 1, h.y - 1));
+    const kinked = design(s).outline.knots[i]!;
+    expect(Math.abs(cross(kinked))).toBeGreaterThan(0.01);
+    expect(s.getState().setContinuous('outline', i, true)).toBe(true);
+    const k = design(s).outline.knots[i]!;
+    expect(k.continuous).toBe(true);
+    expect(Math.abs(cross(k))).toBeLessThan(1e-9);
+    const len = (p: { x: number; y: number }) => Math.hypot(p.x - k.end.x, p.y - k.end.y);
+    const lenWas = (p: { x: number; y: number }) =>
+      Math.hypot(p.x - kinked.end.x, p.y - kinked.end.y);
+    expect(len(k.tangentToNext)).toBeCloseTo(lenWas(kinked.tangentToNext), 12);
+    expect(len(k.tangentToPrev)).toBeCloseTo(lenWas(kinked.tangentToPrev), 12);
+  });
+
+  it('turns a smooth point to a corner without moving its handles', () => {
+    const s = storeWith();
+    const before = design(s).outline.knots[1]!;
+    expect(s.getState().setContinuous('outline', 1, false)).toBe(true);
+    const k = design(s).outline.knots[1]!;
+    expect(k.continuous).toBe(false);
+    expect(k.tangentToNext).toEqual(before.tangentToNext);
+  });
+});

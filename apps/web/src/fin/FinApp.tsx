@@ -32,6 +32,7 @@ import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane, FinSectionTools } from './FinSectionPane';
 import { FinTaperPane } from './FinTaperPane';
+import { PointTools } from './PointTools';
 import { downloadFin, exportFin, readFinFile } from './fin-file';
 import { finStore } from './fin-store';
 import {
@@ -207,18 +208,24 @@ function PlacementTools() {
   );
 }
 
+const OUTLINE_CURVES = ['outline'] as const;
+const TAPER_CURVES = ['taper'] as const;
+
 /** The profile view's controls. */
 function OutlineTools({ units }: { units: LengthUnit }) {
   const design = useFinState(finStore, (s) => s.design);
   const depth = useMemo(() => (design ? finReadouts(design).depth : 0), [design]);
   if (!design) return null;
   return (
-    <LenField
-      label="Depth"
-      valueCm={depth}
-      units={units}
-      onCommit={(cm) => finStore.getState().setDepth(cm)}
-    />
+    <>
+      <LenField
+        label="Depth"
+        valueCm={depth}
+        units={units}
+        onCommit={(cm) => finStore.getState().setDepth(cm)}
+      />
+      <PointTools store={finStore} curves={OUTLINE_CURVES} />
+    </>
   );
 }
 
@@ -227,12 +234,15 @@ function TaperTools({ units }: { units: LengthUnit }) {
   const root = useFinState(finStore, (s) => s.design?.taper.knots[0]!.end.y);
   if (root === undefined) return null;
   return (
-    <LenField
-      label="Root thickness"
-      valueCm={root}
-      units={units}
-      onCommit={(cm) => finStore.getState().setRootThickness(cm)}
-    />
+    <>
+      <LenField
+        label="Root thickness"
+        valueCm={root}
+        units={units}
+        onCommit={(cm) => finStore.getState().setRootThickness(cm)}
+      />
+      <PointTools store={finStore} curves={TAPER_CURVES} />
+    </>
   );
 }
 

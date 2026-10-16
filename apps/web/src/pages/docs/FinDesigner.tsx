@@ -69,8 +69,11 @@ export default function DocsFinDesigner() {
         <p>
           The profile shows the fin from the side, drawn over its tab. Drag a point or a handle to
           reshape it; double-click the curve to add a point; select a point and press Delete to
-          remove it. Drag empty space to pan and scroll to zoom. The outline starts and ends on the
-          base: its two ends slide along it.
+          remove it. The toolbar&apos;s point tools do the same for the selected point on any curve
+          — <strong>+</strong> adds a point halfway to the next, <strong>−</strong> deletes it — and
+          make it <strong>Smooth</strong> (its handles in line) or a <strong>Corner</strong> (each
+          handle free). A curve&apos;s two end points stay put. Drag empty space to pan and scroll
+          to zoom. The outline starts and ends on the base: its two ends slide along it.
         </p>
         <p>
           <strong>Depth</strong> stretches the outline to a new height over the same base. Readouts
@@ -92,9 +95,10 @@ export default function DocsFinDesigner() {
           </Term>
           <Term name="NACA presets">
             Pick a NACA 4-digit foil from the list (2412, 0010, …), or Other… to type any code, and
-            Apply to replace both faces with that foil; they stay editable afterwards. The convex
-            face goes outside. A centre fin takes only symmetric 00xx foils. The foil keeps its
-            proportions, so a 2412 stays 2 : 12 camber to thickness however thick the fin.
+            Apply to replace both faces with that foil, six points each; they stay editable
+            afterwards. The convex face goes outside. A centre fin takes only symmetric 00xx foils.
+            The foil keeps its proportions, so a 2412 stays 2 : 12 camber to thickness however thick
+            the fin.
           </Term>
         </Terms>
       </Section>
