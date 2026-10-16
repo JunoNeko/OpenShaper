@@ -147,7 +147,9 @@ export default function DocsFinDesigner() {
             rocked down — about {deg(rearClearance('side').tilt)} on a side tab,{' '}
             {deg(rearClearance('centre').tilt)} on a centre tab. Anything behind the tab swings
             toward the board, so a fin whose base runs past the tab&apos;s rear end needs a raised
-            rear. The dashed orange line behind the tab is the clearance it needs.
+            rear. The dashed orange line behind the tab is the clearance it needs. The raised rear
+            keeps the base&apos;s foil: its underside is as thick as the foil is there, thinning to
+            the minimum where it turns up into the trailing edge.
           </Term>
           <Term name="Minimum thickness">
             Nowhere thinner than {mm(FIN_MIN_THICKNESS)} — edges and tip included — so the fin is

@@ -5,13 +5,18 @@
  * rocked onto the box's rear pin without its tail hitting the board. The outline is
  * one chain that comes down the trailing edge to that low point, then runs forward
  * and down along the underside to the base. Height falls all the way from the tip,
- * so the model needs nothing new; these tests prove it end to end.
+ * so the slicing needs nothing new; these tests prove it end to end. What is new is
+ * the sections' shape below the low point: the foil runs over the full chord and is
+ * cut off at the underside, so the underside has the foil's thickness (round 1).
  */
 import { describe, expect, it } from 'vitest';
 import { value } from '../bezier-curve';
 import type { Vec2 } from '../vec2';
 import { RAISED_BASE_END, RAISED_LOW, raisedRearDesign } from '../test-support/fin-designs';
-import { bladeSection, chordAt, prepareBlade } from './blade';
+import { FIN_POSITIONS, FIN_MIN_THICKNESS } from './fin-design';
+import { defaultFinDesign } from './fin-defaults';
+import { finMesh } from './fin-mesh';
+import { bladeSection, chordAt, findRaisedRear, foilCut, prepareBlade, thicknessAt } from './blade';
 import { BLADE_CI_TOLERANCE, bladeSurfaceDeviation, fitBladeSurface } from './blade-surface';
 import { splineExtremes } from './curve-shape';
 import type { FinDesign } from './fin-design';
@@ -87,5 +92,65 @@ describe('a raised rear', () => {
     expect(bladeSurfaceDeviation(prepareBlade(d), m.surface, m.topZ, 31, 211)).toBeLessThanOrEqual(
       BLADE_CI_TOLERANCE,
     );
+  });
+});
+
+describe('the underside of a raised rear', () => {
+  const d = raisedRear();
+  const b = prepareBlade(d);
+  const thick = (h: number, j: number) => {
+    const s = bladeSection(b, h);
+    return Math.abs(s.outside[j]!.y - s.inside[j]!.y);
+  };
+  const atTe = (h: number) => thick(h, bladeSection(b, h).stations.length - 1);
+
+  it('is found where the outline turns up into the trailing edge', () => {
+    const r = b.raisedRear!;
+    expect(r.cornerX).toBeCloseTo(LOW.x, 9);
+    expect(r.cornerZ).toBeCloseTo(LOW.y, 9);
+  });
+
+  it('is not found on a fin whose trailing edge rises steeply from the base', () => {
+    for (const position of FIN_POSITIONS) {
+      expect(findRaisedRear(defaultFinDesign(position).outline)).toBeNull();
+    }
+  });
+
+  it('has the foil’s thickness, thinning to the minimum at the low point', () => {
+    let last = Infinity;
+    for (const f of [0, 0.2, 0.4, 0.6, 0.8, 0.95]) {
+      const t = atTe(LOW.y * f);
+      expect(t).toBeLessThan(last);
+      last = t;
+    }
+    expect(atTe(0)).toBeGreaterThan(5 * FIN_MIN_THICKNESS); // a real edge, not 0.5 mm
+    expect(atTe(LOW.y)).toBeCloseTo(FIN_MIN_THICKNESS, 3);
+    expect(atTe(LOW.y * 0.999)).toBeCloseTo(atTe(LOW.y), 3); // continuous at the low point
+  });
+
+  it('keeps the taper’s thickness at the thickest point, below the low point too', () => {
+    for (const h of [0, 0.1, 0.3, 0.49]) {
+      const s = bladeSection(b, h);
+      const max = Math.max(...s.outside.map((p, j) => Math.abs(p.y - s.inside[j]!.y)));
+      // Sampled at the stations, so a hair under the true maximum.
+      expect(max).toBeLessThanOrEqual(
+        thicknessAt(b, h) / Math.cos((d.cant * Math.PI) / 180) + 1e-9,
+      );
+      expect(max).toBeGreaterThan(thicknessAt(b, h) * 0.99);
+    }
+  });
+
+  it('leaves the sections above the low point as they were', () => {
+    for (const h of [0.5, 1, 4]) {
+      const { leading, trailing } = chordAt(b, h);
+      expect(foilCut(b, h, leading, trailing)).toBe(1);
+    }
+  });
+
+  it('meshes the underside with rings of its own', () => {
+    const m = finMesh(d);
+    const zs = new Set<number>();
+    for (let i = 2; i < m.blade.positions.length; i += 3) zs.add(m.blade.positions[i]!);
+    expect([...zs].filter((z) => z > 0 && z < LOW.y).length).toBeGreaterThanOrEqual(3);
   });
 });

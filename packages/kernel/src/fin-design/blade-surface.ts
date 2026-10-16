@@ -53,6 +53,7 @@ import {
 import type { Vert3 } from '../loft';
 import {
   bladeSection,
+  raisedRearHeights,
   cosineStations,
   prepareBlade,
   type BladeSection,
@@ -175,13 +176,44 @@ const rowHeights = (
   return { heights, breaks };
 };
 
+/**
+ * Row heights with a raised rear's underside rows added below its corner
+ * (raisedRearHeights), keeping the creases as breaks.
+ */
+const withRaisedRear = (
+  b: PreparedBlade,
+  rowsAt: { heights: number[]; breaks: number[] },
+  rows: number,
+  topZ: number,
+): { heights: number[]; breaks: number[] } => {
+  const rear = raisedRearHeights(b, rows, topZ);
+  if (!rear.length) return rowsAt;
+  const corner = b.raisedRear!.cornerZ;
+  const creases = rowsAt.breaks.map((i) => rowsAt.heights[i]!);
+  const heights = [
+    ...new Set([
+      0,
+      ...rear,
+      ...creases.filter((h) => h < corner),
+      corner,
+      ...rowsAt.heights.filter((h) => h > corner),
+    ]),
+  ].sort((p, q) => p - q);
+  return { heights, breaks: creases.map((z) => heights.indexOf(z)) };
+};
+
 const fitOnce = (
   b: PreparedBlade,
   topZ: number,
   rows: number,
   stations: number,
 ): { surface: BSplineSurface; corners: number[]; grid: [number, number] } => {
-  const { heights, breaks } = rowHeights(creaseHeights(b, topZ), topZ, rows);
+  const { heights, breaks } = withRaisedRear(
+    b,
+    rowHeights(creaseHeights(b, topZ), topZ, rows),
+    rows,
+    topZ,
+  );
   const st = cosineStations(stations);
   // grid[r][c]: r around the section (u), c up the blade (v).
   const loops = heights.map((h) => sectionLoop(bladeSection(b, h, st)));
@@ -241,6 +273,18 @@ export const bladeSurfaceDeviation = (
 ): number => {
   const fine = cosineStations(800);
   let worst = 0;
+  // A raised rear's underside rises little but runs far: slice it on its own.
+  const corner = b.raisedRear?.cornerZ ?? 0;
+  const under = Math.ceil(slices / 2);
+  for (let i = 0; i < under && corner > 0; i++) {
+    const z = (corner * (i + 0.5)) / under;
+    const truth = sectionLoop(bladeSection(b, z, fine));
+    for (let j = 0; j < around; j++) {
+      const u = (j + 0.5) / around;
+      const p = evalSurface(surface, u, vAtHeight(surface, u, z));
+      worst = Math.max(worst, distToPolyline(p, truth));
+    }
+  }
   for (let i = 1; i <= slices; i++) {
     // Odd fractions, so the slices fall between grid rows rather than on them.
     const z = upTo * topZ * (1 - (1 - i / (slices + 1)) ** 2);
