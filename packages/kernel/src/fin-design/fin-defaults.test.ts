@@ -98,6 +98,14 @@ describe.each(FIN_POSITIONS)('defaultFinDesign(%s)', (position) => {
     expect(valueAt(d.taper, 0.35)).toBeCloseTo(size.thick * 100 * 0.75, 4);
   });
 
+  it('is still thinning at the tip, never below the minimum on the way', () => {
+    // Levelling off at the minimum left the top few mm a uniform sliver.
+    expect(valueAt(d.taper, 0.99) - valueAt(d.taper, 1)).toBeGreaterThan(0.005);
+    for (let f = 0; f <= 1; f += 0.005) {
+      expect(valueAt(d.taper, f)).toBeGreaterThanOrEqual(FIN_MIN_THICKNESS - 1e-12);
+    }
+  });
+
   it('takes its cant from the source', () => {
     expect(d.cant).toBe(position === 'side' ? 7 : position === 'quad-rear' ? 4 : 0);
   });
