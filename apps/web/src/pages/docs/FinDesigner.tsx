@@ -43,7 +43,8 @@ export default function DocsFinDesigner() {
         <Terms>
           <Term name="Side, left or right">
             The {mm(side.height)}-deep side tab, with cant. Left and right are mirror images: the
-            outside face points to the rail.
+            outside face points to the rail. They are named the way fin makers mark them, with the
+            board seen from below, nose up — so a left fin goes on the rider&apos;s right rail.
           </Term>
           <Term name="Quad rear, left or right">
             The shallower {mm(centre.height)} tab (quad rears sit where the tail is thinner), with

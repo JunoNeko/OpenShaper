@@ -97,7 +97,7 @@ describe('chordAt', () => {
 });
 
 describe.each(FIN_POSITIONS)('bladeSection(default %s)', (position) => {
-  const d = defaultFinDesign(position, 'right');
+  const d = defaultFinDesign(position, 'left');
   const flat = prepareBlade({ ...d, cant: 0 });
 
   it('is a valid design to start from', () => {
@@ -132,12 +132,12 @@ describe.each(FIN_POSITIONS)('bladeSection(default %s)', (position) => {
     for (const p of [...s.outside, ...s.inside]) expect(p.z).toBe(flat.depth / 3);
   });
 
-  it('makes a left fin the exact mirror of a right fin', () => {
-    const right = prepareBlade(d);
-    const left = prepareBlade({ ...d, hand: d.hand === null ? null : 'left' });
-    for (const h of heights(right)) {
-      const r = bladeSection(right, h);
-      const l = bladeSection(left, h);
+  it('makes a right fin the exact mirror of a left fin', () => {
+    const left = prepareBlade(d);
+    const right = prepareBlade({ ...d, hand: d.hand === null ? null : 'right' });
+    for (const h of heights(left)) {
+      const r = bladeSection(left, h);
+      const l = bladeSection(right, h);
       if (d.hand === null) {
         expect(l).toEqual(r); // centre: no hand, nothing to mirror
         continue;
@@ -152,7 +152,7 @@ describe.each(FIN_POSITIONS)('bladeSection(default %s)', (position) => {
 
 describe('section faces', () => {
   it('keeps a flat inside face flat, padding only the outside', () => {
-    const b = prepareBlade({ ...defaultFinDesign('side', 'right'), cant: 0 });
+    const b = prepareBlade({ ...defaultFinDesign('side', 'left'), cant: 0 });
     for (const h of heights(b)) {
       for (const p of bladeSection(b, h).inside) expect(p.y).toBe(0);
     }
@@ -189,7 +189,7 @@ describe('section faces', () => {
 });
 
 describe('cant', () => {
-  const base = defaultFinDesign('side', 'right');
+  const base = defaultFinDesign('side', 'left');
 
   it.each([0, 4, 7, 12.5, 20])('leans the blade out by %s°', (cant) => {
     const b = prepareBlade({ ...base, cant });
@@ -200,8 +200,8 @@ describe('cant', () => {
     expect(Math.atan2(hi.y - lo.y, hi.z - lo.z) * RAD_TO_DEG).toBeCloseTo(cant, 10);
   });
 
-  it('leans a left fin the other way', () => {
-    const b = prepareBlade({ ...base, hand: 'left', cant: 7 });
+  it('leans a right fin the other way', () => {
+    const b = prepareBlade({ ...base, hand: 'right', cant: 7 });
     expect(bladeSection(b, b.depth / 2).inside[5]!.y).toBeLessThan(0);
   });
 
@@ -224,7 +224,7 @@ describe('cant', () => {
 
 describe('a cambered foil (not symmetric, not flat)', () => {
   // Inside face bulging inboard: mirror of the outside at a third of its offset.
-  const d0 = defaultFinDesign('side', 'right');
+  const d0 = defaultFinDesign('side', 'left');
   const bulge = splineFromKnots(
     d0.section.outside.knots.map((k) => {
       const m = (p: Vec2) => vec2(p.x, -p.y / 3);

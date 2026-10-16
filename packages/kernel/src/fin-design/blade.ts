@@ -28,15 +28,16 @@
  * - X runs along the tab toward its front (the nose), as in the outline.
  * - Z is height above the tab top.
  * - Y completes a right-handed frame. With the board deck-down and the nose toward +X,
- *   the rider's right rail is on +Y. (Looking from the tail toward the nose, that is on
- *   your left, because the board is upside down.)
- * A right fin's outside face and cant point to +Y; a left fin is its exact mirror. A
- * centre fin's outside is +Y too; it is symmetric with no cant, so the choice is moot.
+ *   the rider's right rail is on +Y. Seen from below with the nose up (the way fin
+ *   makers name fins, {@link FinHand}), +Y is on the left.
+ * A left fin's outside face and cant point to +Y; a right fin is its exact mirror
+ * ({@link finOutward}). A centre fin's outside is +Y too; it is symmetric with no cant,
+ * so the choice is moot.
  */
 import { DEG_TO_RAD } from '../constants';
 import type { Vert3 } from '../loft';
 import { crossings, splineExtremes, yAtX } from './curve-shape';
-import { FIN_MIN_THICKNESS, type FinDesign, type FinSection } from './fin-design';
+import { FIN_MIN_THICKNESS, finOutward, type FinDesign, type FinSection } from './fin-design';
 
 /** Chord stations from leading edge (0) to trailing edge (1), clustered at both edges. */
 export const cosineStations = (n: number): number[] =>
@@ -53,7 +54,7 @@ export interface PreparedBlade {
   readonly thickestAt: number;
   /** The shape's thickness there, in chords. */
   readonly shapeThickness: number;
-  /** +1 if the outside face points to +Y, −1 for a left fin. */
+  /** +1 if the outside face points to +Y, −1 for a right fin. */
   readonly outward: 1 | -1;
   /** Lateral slide per cm of height (tan cant). */
   readonly lean: number;
@@ -135,7 +136,7 @@ export const prepareBlade = (d: FinDesign): PreparedBlade => {
     depth: splineExtremes(d.outline, 'y').max.point.y,
     thickestAt: at,
     shapeThickness: thickness,
-    outward: d.hand === 'left' ? -1 : 1,
+    outward: finOutward(d.hand),
     lean: Math.tan(cant),
     widen: 1 / Math.cos(cant),
   };

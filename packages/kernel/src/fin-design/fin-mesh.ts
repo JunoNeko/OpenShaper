@@ -96,7 +96,7 @@ const bladeMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
   const ids = rings.map((ring) => ring.map((p) => m.add(p)));
   const n = rings[0]!.length;
 
-  // Which way round the rings run (a left fin's mirror runs the other way), so each
+  // Which way round the rings run (a right fin's mirror runs the other way), so each
   // side quad can be wound with its outward normal pointing away from the ring.
   const ccw = polygonArea(rings[0]!.map((p) => vec2(p.x, p.y))) > 0;
   for (let k = 0; k < rings.length - 1; k++) {
