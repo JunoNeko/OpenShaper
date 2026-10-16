@@ -29,6 +29,7 @@ import {
 import { clear, drawGrid } from './draw';
 import {
   HIT_TOL_PX,
+  boundsToView,
   TOUCH_HIT_TOL_PX,
   dragTo,
   drawFinCurves,
@@ -40,6 +41,7 @@ import {
   toView,
   type FinCurveLayer,
   type FinCurvePick,
+  type ViewScale,
 } from './fin-curve-view';
 import { handlePoint } from './hit';
 import {
@@ -55,8 +57,11 @@ import {
 export interface FinCurveEditorProps {
   layers: readonly FinCurveLayer[];
   selection: FinCurvePick | null;
-  /** Vertical stretch of the view (data y × yScale); 1 draws true to scale. */
-  yScale?: number;
+  /**
+   * Data to view: a vertical stretch (data y × yScale; 1 draws true to scale) or a
+   * general linear map, such as swapped axes.
+   */
+  yScale?: ViewScale;
   /** Extra bounds (data space) to keep in view, e.g. the tab under the outline. */
   frameBounds?: Bounds;
   /** Change it to re-fit the view (a new fin, a switched pane). */
@@ -132,12 +137,7 @@ export function FinCurveEditor({
     const resized = size.w !== fittedSize.current.w || size.h !== fittedSize.current.h;
     const newFrame = framedFor.current !== frameKey;
     if (vp && !newFrame && (!resized || userFramed.current)) return;
-    const extra = frameBounds && {
-      minX: frameBounds.minX,
-      maxX: frameBounds.maxX,
-      minY: frameBounds.minY * yScale,
-      maxY: frameBounds.maxY * yScale,
-    };
+    const extra = frameBounds && boundsToView(frameBounds, yScale);
     const b = layersBounds(layers, yScale, extra);
     if (!b) return;
     framedFor.current = frameKey;

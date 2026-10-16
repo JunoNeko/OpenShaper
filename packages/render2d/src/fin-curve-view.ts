@@ -5,9 +5,10 @@
  * drawn. No React, no store: the editor is told what to draw and reports what the user
  * did, and the app decides what that means for the fin.
  *
- * View space is data space with y stretched by `yScale`, so a foil 10% of its chord
- * thick can be drawn taller than it is and still be dragged accurately. Everything
- * here works in view space; `fromView` turns a result back into data.
+ * View space is data space through a linear map (`ViewScale`): y stretched, so a foil
+ * 10% of its chord thick can be drawn taller than it is and still be dragged
+ * accurately, or the axes swapped, so the taper stands upright beside the profile.
+ * Everything here works in view space; `fromView` turns a result back into data.
  */
 import { splineFromKnots, knot, vec2, type Spline, type Vec2 } from '@openshaper/kernel';
 import { defaultStyle, drawControlPoints, drawSpline, type DrawStyle } from './draw';
@@ -43,12 +44,58 @@ export interface FinCurvePick {
 export const HIT_TOL_PX = 8;
 export const TOUCH_HIT_TOL_PX = 22;
 
-export const toView = (p: Vec2, yScale: number): Vec2 => vec2(p.x, p.y * yScale);
-export const fromView = (p: Vec2, yScale: number): Vec2 => vec2(p.x, p.y / yScale);
+/**
+ * A linear map from data to view: view = (a·x + b·y, c·x + d·y). It can stretch an axis
+ * (a foil drawn four times taller) or swap them (the taper drawn upright: height up,
+ * thickness across).
+ */
+export interface ViewMap {
+  readonly a: number;
+  readonly b: number;
+  readonly c: number;
+  readonly d: number;
+}
+
+/** A view map, or a number: that vertical stretch (data y × it), x as is. */
+export type ViewScale = number | ViewMap;
+
+const asMap = (v: ViewScale): ViewMap => (typeof v === 'number' ? { a: 1, b: 0, c: 0, d: v } : v);
+
+const isIdentity = (v: ViewScale): boolean => {
+  const m = asMap(v);
+  return m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1;
+};
+
+export const toView = (p: Vec2, v: ViewScale): Vec2 => {
+  const m = asMap(v);
+  return vec2(m.a * p.x + m.b * p.y, m.c * p.x + m.d * p.y);
+};
+
+export const fromView = (p: Vec2, v: ViewScale): Vec2 => {
+  const m = asMap(v);
+  const det = m.a * m.d - m.b * m.c;
+  return vec2((m.d * p.x - m.b * p.y) / det, (m.a * p.y - m.c * p.x) / det);
+};
+
+/** Data-space bounds mapped to view space: the box around its four mapped corners. */
+export const boundsToView = (b: Bounds, v: ViewScale): Bounds => {
+  const corners = [
+    toView(vec2(b.minX, b.minY), v),
+    toView(vec2(b.maxX, b.minY), v),
+    toView(vec2(b.minX, b.maxY), v),
+    toView(vec2(b.maxX, b.maxY), v),
+  ];
+  return {
+    minX: Math.min(...corners.map((c) => c.x)),
+    minY: Math.min(...corners.map((c) => c.y)),
+    maxX: Math.max(...corners.map((c) => c.x)),
+    maxY: Math.max(...corners.map((c) => c.y)),
+  };
+};
 
 /** A spline in view space. */
-export const splineToView = (s: Spline, yScale: number): Spline =>
-  yScale === 1
+export const splineToView = (s: Spline, yScale: ViewScale): Spline =>
+  isIdentity(yScale)
     ? s
     : splineFromKnots(
         s.knots.map((k) =>
@@ -71,7 +118,7 @@ export const pickHandle = (
   layers: readonly FinCurveLayer[],
   vp: Viewport,
   screen: ScreenPoint,
-  yScale: number,
+  yScale: ViewScale,
   tolPx: number,
   preferred?: FinCurvePick | null,
 ): FinCurvePick | null => {
@@ -99,7 +146,7 @@ export const pickCurve = (
   layers: readonly FinCurveLayer[],
   vp: Viewport,
   screen: ScreenPoint,
-  yScale: number,
+  yScale: ViewScale,
   tolPx: number,
 ): { layer: string; point: Vec2 } | null => {
   let best: { layer: string; point: Vec2 } | null = null;
@@ -139,7 +186,7 @@ export const dragTo = (grabbed: Vec2, pointerAtGrab: Vec2, pointerNow: Vec2): Ve
 /** Bounds of all layers in view space, joined with any `extra` (e.g. the tab). */
 export const layersBounds = (
   layers: readonly FinCurveLayer[],
-  yScale: number,
+  yScale: ViewScale,
   extra?: Bounds,
 ): Bounds | null => {
   const all = layers.map((l) => boundsOf(sampleSpline(splineToView(l.spline, yScale))));
@@ -158,7 +205,7 @@ export const drawFinCurves = (
   ctx: CanvasRenderingContext2D,
   layers: readonly FinCurveLayer[],
   vp: Viewport,
-  yScale: number,
+  yScale: ViewScale,
   selection: FinCurvePick | null,
   hovered: FinCurvePick | null,
 ): void => {

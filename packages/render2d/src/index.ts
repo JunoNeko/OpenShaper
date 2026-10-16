@@ -61,6 +61,7 @@ export {
   HIT_TOL_PX,
   TOUCH_HIT_TOL_PX,
   dragTo,
+  boundsToView,
   drawFinCurves,
   fromView,
   layersBounds,
@@ -70,6 +71,8 @@ export {
   toView,
   type FinCurveLayer,
   type FinCurvePick,
+  type ViewMap,
+  type ViewScale,
 } from './fin-curve-view';
 export {
   solveSimilarity,

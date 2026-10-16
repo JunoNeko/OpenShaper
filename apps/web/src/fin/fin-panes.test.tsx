@@ -101,16 +101,29 @@ describe('dragging in the panes', () => {
     throw new Error(`could not grab ${curve} ${index}`);
   };
 
+  it('stands the taper upright: root at the bottom, tip at the top', () => {
+    render(<FinTaperPane store={finStore} units={lengthUnitByKey('mm')} />);
+    const canvas = screen.getByRole('img', { name: 'Thickness taper' });
+    const last = design().taper.knots.length - 1;
+    const root = grab(canvas, 'taper', 0);
+    fireEvent.pointerUp(canvas, { ...MOUSE, clientX: root.clientX, clientY: root.clientY });
+    const tip = grab(canvas, 'taper', last);
+    fireEvent.pointerUp(canvas, { ...MOUSE, clientX: tip.clientX, clientY: tip.clientY });
+    expect(root.clientY).toBeGreaterThan(tip.clientY);
+    expect(root.clientX).toBeGreaterThan(tip.clientX); // the root is the thicker end
+  });
+
   it('drags a taper point and stops it at the minimum thickness', () => {
     render(<FinTaperPane store={finStore} units={lengthUnitByKey('mm')} />);
     const canvas = screen.getByRole('img', { name: 'Thickness taper' });
     const i = 1; // the knot where the straight run turns into the curve
     const at = grab(canvas, 'taper', i);
-    fireEvent.pointerMove(canvas, { ...MOUSE, clientX: at.clientX, clientY: at.clientY + 2000 });
-    fireEvent.pointerUp(canvas, { ...MOUSE, clientX: at.clientX, clientY: at.clientY + 2000 });
+    // The pane stands upright: thickness runs across, so thinner is to the left.
+    fireEvent.pointerMove(canvas, { ...MOUSE, clientX: at.clientX - 2000, clientY: at.clientY });
+    fireEvent.pointerUp(canvas, { ...MOUSE, clientX: at.clientX - 2000, clientY: at.clientY });
     const k = design().taper.knots[i]!.end;
     expect(k.y).toBeGreaterThanOrEqual(FIN_MIN_THICKNESS - 1e-9);
-    expect(k.y).toBeLessThan(0.4); // it moved down, as far as the rules allow
+    expect(k.y).toBeLessThan(0.4); // it got thinner, as far as the rules allow
     expect(finStore.getState().past).toHaveLength(1); // one drag, one undo step
   });
 

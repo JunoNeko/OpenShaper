@@ -105,10 +105,11 @@ export default function DocsFinDesigner() {
 
       <Section id="taper" title="Thickness and flex">
         <p>
-          The thickness pane shows how thick the fin is at the foil&apos;s thickest point, from the
-          root (left) to the tip (right). A straight run that curves down near the tip is the usual
-          shape: that curve is what controls how the tip flexes. <strong>Root thickness</strong>{' '}
-          scales the whole curve.
+          The thickness view shows how thick the fin is at the foil&apos;s thickest point, from the
+          root (bottom) to the tip (top). It stands upright at the fin&apos;s true depth, so it
+          lines up with the profile; thickness runs across, drawn four times wider than true. A
+          straight run that curves in near the tip is the usual shape: that curve is what controls
+          how the tip flexes. <strong>Root thickness</strong> scales the whole curve.
         </p>
       </Section>
 
