@@ -61,6 +61,30 @@ describe('FinApp', () => {
     expect(finStore.getState().design!.cant).toBe(20);
   });
 
+  it('swaps a small view into the large pane, bringing its controls with it', () => {
+    localStorage.removeItem('bs.fin.views');
+    render(<FinApp />);
+    const pane = (name: string) => screen.getByRole('region', { name });
+    expect(screen.getByLabelText(/^Depth/)).toBeTruthy(); // the profile is large
+    expect(screen.queryByLabelText(/^Root thickness/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show Thickness in the large pane' }));
+    expect(screen.getByLabelText(/^Root thickness/)).toBeTruthy();
+    expect(screen.queryByLabelText(/^Depth/)).toBeNull();
+    // The profile took the thickness view's place among the small panes.
+    expect(pane('Thickness').dataset.slot).toBe('main');
+    expect(pane('Profile').dataset.slot).toBe('small-2');
+    expect(within(pane('Profile')).getByRole('button', { name: /in the large pane/ })).toBeTruthy();
+    localStorage.removeItem('bs.fin.views');
+  });
+
+  it('keeps the 3D view’s controls under it when it is small', () => {
+    localStorage.removeItem('bs.fin.views');
+    render(<FinApp />);
+    const threeD = within(screen.getByRole('region', { name: '3D' }));
+    expect(threeD.getByRole('button', { name: 'Move the fin forward' })).toBeTruthy();
+    expect(threeD.getByLabelText(/Cant/)).toBeTruthy();
+  });
+
   it('lists the rules the design breaks', () => {
     act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
     render(<FinApp />);

@@ -28,9 +28,12 @@ export const TAPER_Y_SCALE = 1;
 export const FinTaperPane = memo(function FinTaperPane({
   store,
   units,
+  frameKey = '',
 }: {
   store: StoreApi<FinState>;
   units: LengthUnit;
+  /** Change it to re-fit the view (the pane moving large or small). */
+  frameKey?: string;
 }) {
   const design = useFinState(store, (s) => s.design);
   const selection = useFinState(store, (s) => s.selection);
@@ -87,22 +90,15 @@ export const FinTaperPane = memo(function FinTaperPane({
 
   if (!design || !taper) return null;
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center border-b border-border px-2 py-1.5">
-        <h2 className="text-xs font-medium text-muted-foreground">Thickness, root to tip</h2>
-      </div>
-      <div className="min-h-0 flex-1">
-        <FinCurveEditor
-          label="Thickness taper"
-          layers={layers}
-          selection={pickFromSelection(selection, ['taper'])}
-          yScale={TAPER_Y_SCALE}
-          frameBounds={{ minX: 0, maxX: 1, minY: -0.08, maxY: root * 1.1 }}
-          frameKey={design.position}
-          drawUnder={drawUnder}
-          {...handlers}
-        />
-      </div>
-    </div>
+    <FinCurveEditor
+      label="Thickness taper"
+      layers={layers}
+      selection={pickFromSelection(selection, ['taper'])}
+      yScale={TAPER_Y_SCALE}
+      frameBounds={{ minX: 0, maxX: 1, minY: -0.08, maxY: root * 1.1 }}
+      frameKey={`${design.position}-${frameKey}`}
+      drawUnder={drawUnder}
+      {...handlers}
+    />
   );
 });

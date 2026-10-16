@@ -56,11 +56,18 @@ export default function DocsFinDesigner() {
           Both tabs are {mm(side.length)} long and {mm(side.thickness)} thick. Lengths are shown in
           millimetres.
         </p>
+        <p>
+          The fin is shown four ways: the profile, the foil section, the thickness and a 3D view.
+          One fills the large pane on the left and the other three sit in small panes on the right;
+          the swap button on a small pane brings its view into the large pane. The large pane&apos;s
+          toolbar holds that view&apos;s controls. The 3D view keeps its controls (side, cant and
+          position) under it when it is small. The measurements run along the bottom.
+        </p>
       </Section>
 
       <Section id="outline" title="The outline">
         <p>
-          The big pane shows the fin from the side, drawn over its tab. Drag a point or a handle to
+          The profile shows the fin from the side, drawn over its tab. Drag a point or a handle to
           reshape it; double-click the curve to add a point; select a point and press Delete to
           remove it. Drag empty space to pan and scroll to zoom. The outline starts and ends on the
           base: its two ends slide along it.
@@ -74,7 +81,7 @@ export default function DocsFinDesigner() {
 
       <Section id="foil" title="The foil">
         <p>
-          The section pane is a horizontal slice through the fin: the outside face above the chord
+          The foil section is a horizontal slice through the fin: the outside face above the chord
           line, the inside face below, drawn four times taller than true so a thin foil can be
           shaped by hand. Its size follows the outline and the taper; this pane sets only its shape.
         </p>

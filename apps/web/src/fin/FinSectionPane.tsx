@@ -26,6 +26,9 @@ import { useFinState } from './use-fin';
 /** Drawn this many times taller than true. */
 export const SECTION_Y_SCALE = 4;
 
+/** Keep the chord line and a strip under it (for the labels) in view; the faces add the rest. */
+const SECTION_FRAME = { minX: 0, maxX: 1, minY: -0.03, maxY: 0.01 };
+
 /** The presets in the dropdown; "Other…" takes any 4-digit code. */
 const SUGGESTED = ['0008', '0010', '0012', '2408', '2410', '2412', '4409', '4412', '6409'];
 
@@ -119,10 +122,52 @@ function NacaPicker({ store, centre }: { store: StoreApi<FinState>; centre: bool
   );
 }
 
-export const FinSectionPane = memo(function FinSectionPane({
+/**
+ * The section's controls, for the large pane's toolbar: the inside-face choice (side
+ * and quad-rear fins) and the NACA presets.
+ */
+export const FinSectionTools = memo(function FinSectionTools({
   store,
 }: {
   store: StoreApi<FinState>;
+}) {
+  const position = useFinState(store, (s) => s.design?.position);
+  const flat = useFinState(store, (s) => s.design?.section.inside !== null);
+  if (!position) return null;
+  const centre = position === 'centre';
+  return (
+    <>
+      {!centre && (
+        <div className="flex gap-1" role="group" aria-label="Inside face">
+          <Button
+            size="sm"
+            variant={flat ? 'outline' : 'default'}
+            aria-pressed={!flat}
+            onClick={() => store.getState().setInsideFace('symmetric')}
+          >
+            Symmetric
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => store.getState().setInsideFace('flat')}
+          >
+            Flat inside
+          </Button>
+        </div>
+      )}
+      <NacaPicker store={store} centre={centre} />
+    </>
+  );
+});
+
+/** The section canvas. `frameKey` re-fits the view (the pane moving large or small). */
+export const FinSectionPane = memo(function FinSectionPane({
+  store,
+  frameKey = '',
+}: {
+  store: StoreApi<FinState>;
+  frameKey?: string;
 }) {
   const design = useFinState(store, (s) => s.design);
   const selection = useFinState(store, (s) => s.selection);
@@ -174,65 +219,50 @@ export const FinSectionPane = memo(function FinSectionPane({
       ctx.lineWidth = 1;
       ctx.setLineDash([5, 4]);
       line({ x: -0.03, y: 0 }, { x: 1.03, y: 0 }); // the chord line
-      if (thickestAt !== null) line({ x: thickestAt, y: -0.09 }, { x: thickestAt, y: 0.09 });
+      // Labels and the thickest-point mark are placed in pixels from the chord line, so
+      // they read the same however small the pane is.
+      const chord = toScreen({ x: 0, y: 0 }).y;
+      const at = (x: number) => toScreen({ x, y: 0 }).x;
+      if (thickestAt !== null) {
+        ctx.beginPath();
+        ctx.moveTo(at(thickestAt), 0);
+        ctx.lineTo(at(thickestAt), chord + 20);
+        ctx.stroke();
+      }
       ctx.setLineDash([]);
       ctx.font = '11px system-ui, sans-serif';
-      const label = (text: string, p: { x: number; y: number }, align: CanvasTextAlign) => {
-        const s = toScreen(p);
+      const label = (text: string, x: number, dy: number, align: CanvasTextAlign) => {
         ctx.textAlign = align;
-        ctx.fillText(text, s.x, s.y);
+        ctx.fillText(text, at(x), chord + dy);
       };
-      label('Leading edge', { x: 0, y: -0.1 }, 'left');
-      label('Trailing edge', { x: 1, y: -0.1 }, 'right');
-      if (thickestAt !== null) label('thickest', { x: thickestAt, y: -0.1 }, 'center');
+      label('Leading edge', 0, 16, 'left');
+      label('Trailing edge', 1, 16, 'right');
+      if (thickestAt !== null) label('thickest', thickestAt, 32, 'center');
       ctx.restore();
     },
     [thickestAt],
   );
 
   if (!design || !section) return null;
-  const centre = design.position === 'centre';
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-2 py-1.5 text-sm">
-        <h2 className="text-xs font-medium text-muted-foreground">Foil section</h2>
-        <span className="mr-auto flex gap-2 text-xs" aria-hidden>
-          <span style={{ color: OUTSIDE }}>— outside</span>
-          {section.inside && <span style={{ color: INSIDE }}>— inside</span>}
-        </span>
-        {!centre && (
-          <div className="flex gap-1" role="group" aria-label="Inside face">
-            <Button
-              size="sm"
-              variant={section.inside ? 'outline' : 'default'}
-              aria-pressed={!section.inside}
-              onClick={() => store.getState().setInsideFace('symmetric')}
-            >
-              Symmetric
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => store.getState().setInsideFace('flat')}
-            >
-              Flat inside
-            </Button>
-          </div>
-        )}
-        <NacaPicker store={store} centre={centre} />
-      </div>
-      <div className="min-h-0 flex-1">
-        <FinCurveEditor
-          label="Foil section"
-          layers={layers}
-          selection={pickFromSelection(selection, ['outside', 'inside'])}
-          yScale={SECTION_Y_SCALE}
-          frameBounds={{ minX: 0, maxX: 1, minY: -0.11, maxY: 0.11 }}
-          frameKey={design.position}
-          drawUnder={drawUnder}
-          {...handlers}
-        />
-      </div>
+    <div className="relative h-full">
+      <span
+        className="pointer-events-none absolute left-2 top-1 z-10 flex gap-2 text-xs"
+        aria-hidden
+      >
+        <span style={{ color: OUTSIDE }}>— outside</span>
+        {section.inside && <span style={{ color: INSIDE }}>— inside</span>}
+      </span>
+      <FinCurveEditor
+        label="Foil section"
+        layers={layers}
+        selection={pickFromSelection(selection, ['outside', 'inside'])}
+        yScale={SECTION_Y_SCALE}
+        frameBounds={SECTION_FRAME}
+        frameKey={`${design.position}-${frameKey}`}
+        drawUnder={drawUnder}
+        {...handlers}
+      />
     </div>
   );
 });

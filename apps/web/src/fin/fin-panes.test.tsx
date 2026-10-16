@@ -9,7 +9,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { lengthUnitByKey } from '../format';
 import { MOUSE, installLayoutStubs, pane, removeLayoutStubs } from '../test/spline-editor-harness';
-import { FinSectionPane } from './FinSectionPane';
+import { FinSectionPane, FinSectionTools } from './FinSectionPane';
 import { FinTaperPane } from './FinTaperPane';
 import { finStore } from './fin-store';
 
@@ -18,11 +18,11 @@ afterEach(removeLayoutStubs);
 
 const design = () => finStore.getState().design!;
 
-describe('FinSectionPane', () => {
+describe('FinSectionTools', () => {
   beforeEach(() => act(() => finStore.getState().load(defaultFinDesign('side', 'right'))));
 
   it('applies a NACA preset to the section', () => {
-    render(<FinSectionPane store={finStore} />);
+    render(<FinSectionTools store={finStore} />);
     fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: '2412' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(design().section.inside).not.toBeNull();
@@ -30,7 +30,7 @@ describe('FinSectionPane', () => {
   });
 
   it('offers every preset again after one is applied', () => {
-    render(<FinSectionPane store={finStore} />);
+    render(<FinSectionTools store={finStore} />);
     fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: '2412' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     const options = screen.getAllByRole('option').map((o) => o.textContent);
@@ -42,7 +42,7 @@ describe('FinSectionPane', () => {
   });
 
   it('takes any other 4-digit code', () => {
-    render(<FinSectionPane store={finStore} />);
+    render(<FinSectionTools store={finStore} />);
     fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: 'other' } });
     fireEvent.change(screen.getByLabelText('NACA 4-digit code'), { target: { value: '3415' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
@@ -50,7 +50,7 @@ describe('FinSectionPane', () => {
   });
 
   it('explains a code it cannot use', () => {
-    render(<FinSectionPane store={finStore} />);
+    render(<FinSectionTools store={finStore} />);
     fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: 'other' } });
     fireEvent.change(screen.getByLabelText('NACA 4-digit code'), { target: { value: '24' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
@@ -60,7 +60,7 @@ describe('FinSectionPane', () => {
 
   it('keeps a centre fin symmetric', () => {
     act(() => finStore.getState().load(defaultFinDesign('centre')));
-    render(<FinSectionPane store={finStore} />);
+    render(<FinSectionTools store={finStore} />);
     expect(screen.queryByRole('button', { name: 'Flat inside' })).toBeNull();
     expect(screen.queryByRole('option', { name: '2412' })).toBeNull(); // only 00xx offered
     fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: 'other' } });
@@ -71,7 +71,7 @@ describe('FinSectionPane', () => {
   });
 
   it('switches a side fin between symmetric and flat inside', () => {
-    render(<FinSectionPane store={finStore} />);
+    render(<FinSectionTools store={finStore} />);
     fireEvent.click(screen.getByRole('button', { name: 'Symmetric' }));
     expect(design().section.inside).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Flat inside' }));

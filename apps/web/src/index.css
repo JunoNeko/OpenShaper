@@ -54,3 +54,31 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Fin designer panes (fin/FinApp.tsx): one large view and three small ones. Each view
+   keeps its place in the DOM and only its grid area changes, so swapping a view into
+   the large pane never remounts its canvas. Phones stack: large, readouts, small. */
+.fin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'main' 'status' 's1' 's2' 's3';
+  overflow-y: auto;
+}
+.fin-grid > [data-slot='main'] {
+  height: 65dvh;
+}
+.fin-grid > [data-slot^='small'] {
+  height: 45dvh;
+}
+@media (min-width: 1024px) {
+  .fin-grid {
+    grid-template-columns: minmax(0, 1fr) 28rem;
+    grid-template-rows: repeat(3, minmax(0, 1fr)) auto;
+    grid-template-areas: 'main s1' 'main s2' 'main s3' 'status s3';
+    overflow: hidden;
+  }
+  .fin-grid > [data-slot] {
+    height: auto;
+    min-height: 0;
+  }
+}

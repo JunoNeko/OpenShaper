@@ -35,9 +35,12 @@ const tabPolygon = (position: FinPosition) => {
 export const FinOutlinePane = memo(function FinOutlinePane({
   store,
   onViewport,
+  frameKey = '',
 }: {
   store: StoreApi<FinState>;
   onViewport?: (vp: Viewport) => void;
+  /** Change it to re-fit the view (the pane moving large or small). */
+  frameKey?: string;
 }) {
   const design = useFinState(store, (s) => s.design);
   const selection = useFinState(store, (s) => s.selection);
@@ -109,7 +112,7 @@ export const FinOutlinePane = memo(function FinOutlinePane({
       layers={layers}
       selection={pickFromSelection(selection, ['outline'])}
       frameBounds={frameBounds}
-      frameKey={position}
+      frameKey={`${position}-${frameKey}`}
       drawUnder={drawUnder}
       onViewport={onViewport}
       {...handlers}
