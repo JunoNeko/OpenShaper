@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { knot, splineFromKnots, vec2 } from '@openshaper/kernel';
 import {
+  boundsToView,
   dragTo,
   fromView,
   layersBounds,
@@ -10,6 +11,7 @@ import {
   splineToView,
   toView,
   type FinCurveLayer,
+  type ViewMap,
 } from './fin-curve-view';
 import { worldToScreen, type Viewport } from './viewport';
 
@@ -36,6 +38,40 @@ describe('view space', () => {
     expect(fromView(toView(p, 4), 4)).toEqual(p);
     expect(splineToView(line, 1)).toBe(line); // no copy when unstretched
     expect(splineToView(arch, 3).knots[0]!.tangentToNext).toEqual(vec2(2, 12));
+  });
+
+  // The taper's map: data (fraction of depth, thickness) to view (thickness × 4 across,
+  // fraction × 10 up).
+  const upright: ViewMap = { a: 0, b: 4, c: 10, d: 0 };
+
+  it('swaps the axes and back', () => {
+    const p = vec2(0.3, 0.6);
+    expect(toView(p, upright)).toEqual(vec2(2.4, 3));
+    const back = fromView(toView(p, upright), upright);
+    expect(back.x).toBeCloseTo(p.x, 15);
+    expect(back.y).toBeCloseTo(p.y, 15);
+  });
+
+  it('maps bounds through a swap', () => {
+    expect(boundsToView({ minX: 0, maxX: 1, minY: -0.1, maxY: 0.8 }, upright)).toEqual({
+      minX: -0.4,
+      maxX: 3.2,
+      minY: 0,
+      maxY: 10,
+    });
+  });
+
+  it('picks and drags a handle through a swap, in data space', () => {
+    // The arch's first forward handle (2, 4) is drawn at view (16, 20).
+    const s = worldToScreen(vp, toView(vec2(2, 4), upright));
+    expect(pickHandle(layers(), vp, s, upright, 8)).toEqual({
+      layer: 'arch',
+      index: 0,
+      kind: 'next',
+    });
+    const to = fromView(dragTo(vec2(16, 20), vec2(16, 20), vec2(18, 25)), upright);
+    expect(to.x).toBeCloseTo(2.5, 12); // 5 view units up is 0.5 of the fraction axis
+    expect(to.y).toBeCloseTo(4.5, 12); // 2 across is 0.5 of thickness
   });
 });
 

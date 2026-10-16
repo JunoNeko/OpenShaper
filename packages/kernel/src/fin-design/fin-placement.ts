@@ -22,14 +22,13 @@
  */
 import { bladeSection, prepareBlade } from './blade';
 import { clearanceShortfall, rearClearance } from './fin-clearance';
-import { FIN_MAX_FRONT_OVERHANG, finTabKind, type FinDesign } from './fin-design';
+import { FIN_MAX_FRONT_OVERHANG, finOutward, finTabKind, type FinDesign } from './fin-design';
 import { FUTURES_TABS } from './futures-tab';
 import { splineFromKnots } from '../bezier-spline';
 import { knot } from '../knot';
 import { vec2, type Vec2 } from '../vec2';
 
-/** +1 when the outside face points to +Y (right and centre fins), −1 for a left fin. */
-const outwardOf = (d: FinDesign): 1 | -1 => (d.hand === 'left' ? -1 : 1);
+const outwardOf = (d: FinDesign): 1 | -1 => finOutward(d.hand);
 
 /** The tab's centre plane (blade-frame Y, cm) before any lateral offset. */
 const defaultTabCentreY = (d: FinDesign): number =>

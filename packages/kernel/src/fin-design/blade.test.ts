@@ -5,7 +5,10 @@ import { DEG_TO_RAD, RAD_TO_DEG } from '../constants';
 import { knot } from '../knot';
 import { lerp, vec2, type Vec2 } from '../vec2';
 import {
+  FIN_EDGE_BLEND,
   bladeSection,
+  padThickness,
+  unpadThickness,
   chordAt,
   cosineStations,
   prepareBlade,
@@ -35,6 +38,51 @@ const widths = (s: BladeSection): number[] =>
 
 const heights = (b: ReturnType<typeof prepareBlade>) =>
   [0, 0.1, 0.25, 0.5, 0.7, 0.85, 0.95, 1].map((f) => f * b.depth);
+
+describe('padThickness', () => {
+  const m = FIN_MIN_THICKNESS;
+  const k = FIN_EDGE_BLEND;
+  const slope = (t: number) => (padThickness(t + 1e-7) - padThickness(t - 1e-7)) / 2e-7;
+
+  it('leaves the foil alone a blend or more above the minimum', () => {
+    expect(padThickness(m + k)).toBe(m + k);
+    expect(padThickness(0.8)).toBe(0.8);
+  });
+
+  it('pads nothing to exactly the minimum', () => {
+    expect(padThickness(0)).toBe(m);
+  });
+
+  it('never goes below the minimum, and rises steadily', () => {
+    let last = 0;
+    for (let t = 0; t < m + k + 0.01; t += 0.0005) {
+      const p = padThickness(t);
+      expect(p).toBeGreaterThanOrEqual(m);
+      expect(p).toBeGreaterThanOrEqual(last);
+      last = p;
+    }
+  });
+
+  it('has no corner: its slope is continuous everywhere, including at the minimum', () => {
+    // A plain max(t, m) jumps from slope 0 to 1 at t = m.
+    for (let t = 0.0002; t < m + k + 0.01; t += 0.0005) {
+      expect(Math.abs(slope(t + 0.0001) - slope(t))).toBeLessThan(0.02);
+    }
+  });
+});
+
+describe('unpadThickness', () => {
+  it('undoes padThickness', () => {
+    for (const t of [0.001, 0.01, 0.03, 0.05, 0.07, 0.099, 0.2]) {
+      expect(padThickness(unpadThickness(padThickness(t)))).toBeCloseTo(padThickness(t), 14);
+      expect(unpadThickness(padThickness(t))).toBeCloseTo(t, 6);
+    }
+  });
+
+  it('is 0 at the minimum, so a tip section is a uniform slab', () => {
+    expect(unpadThickness(FIN_MIN_THICKNESS)).toBe(0);
+  });
+});
 
 describe('chordAt', () => {
   // Leading-edge root (10, 0) → tip (4, 6) → trailing-edge root (0, 0).
@@ -68,7 +116,7 @@ describe('chordAt', () => {
 });
 
 describe.each(FIN_POSITIONS)('bladeSection(default %s)', (position) => {
-  const d = defaultFinDesign(position, 'right');
+  const d = defaultFinDesign(position, 'left');
   const flat = prepareBlade({ ...d, cant: 0 });
 
   it('is a valid design to start from', () => {
@@ -103,12 +151,12 @@ describe.each(FIN_POSITIONS)('bladeSection(default %s)', (position) => {
     for (const p of [...s.outside, ...s.inside]) expect(p.z).toBe(flat.depth / 3);
   });
 
-  it('makes a left fin the exact mirror of a right fin', () => {
-    const right = prepareBlade(d);
-    const left = prepareBlade({ ...d, hand: d.hand === null ? null : 'left' });
-    for (const h of heights(right)) {
-      const r = bladeSection(right, h);
-      const l = bladeSection(left, h);
+  it('makes a right fin the exact mirror of a left fin', () => {
+    const left = prepareBlade(d);
+    const right = prepareBlade({ ...d, hand: d.hand === null ? null : 'right' });
+    for (const h of heights(left)) {
+      const r = bladeSection(left, h);
+      const l = bladeSection(right, h);
       if (d.hand === null) {
         expect(l).toEqual(r); // centre: no hand, nothing to mirror
         continue;
@@ -123,7 +171,7 @@ describe.each(FIN_POSITIONS)('bladeSection(default %s)', (position) => {
 
 describe('section faces', () => {
   it('keeps a flat inside face flat, padding only the outside', () => {
-    const b = prepareBlade({ ...defaultFinDesign('side', 'right'), cant: 0 });
+    const b = prepareBlade({ ...defaultFinDesign('side', 'left'), cant: 0 });
     for (const h of heights(b)) {
       for (const p of bladeSection(b, h).inside) expect(p.y).toBe(0);
     }
@@ -160,7 +208,7 @@ describe('section faces', () => {
 });
 
 describe('cant', () => {
-  const base = defaultFinDesign('side', 'right');
+  const base = defaultFinDesign('side', 'left');
 
   it.each([0, 4, 7, 12.5, 20])('leans the blade out by %s°', (cant) => {
     const b = prepareBlade({ ...base, cant });
@@ -171,8 +219,8 @@ describe('cant', () => {
     expect(Math.atan2(hi.y - lo.y, hi.z - lo.z) * RAD_TO_DEG).toBeCloseTo(cant, 10);
   });
 
-  it('leans a left fin the other way', () => {
-    const b = prepareBlade({ ...base, hand: 'left', cant: 7 });
+  it('leans a right fin the other way', () => {
+    const b = prepareBlade({ ...base, hand: 'right', cant: 7 });
     expect(bladeSection(b, b.depth / 2).inside[5]!.y).toBeLessThan(0);
   });
 
@@ -195,7 +243,7 @@ describe('cant', () => {
 
 describe('a cambered foil (not symmetric, not flat)', () => {
   // Inside face bulging inboard: mirror of the outside at a third of its offset.
-  const d0 = defaultFinDesign('side', 'right');
+  const d0 = defaultFinDesign('side', 'left');
   const bulge = splineFromKnots(
     d0.section.outside.knots.map((k) => {
       const m = (p: Vec2) => vec2(p.x, -p.y / 3);

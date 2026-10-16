@@ -5,7 +5,7 @@
  * component so it can be tested without WebGL.
  *
  * Frame: the kernel's fin frame (blade.ts), cm. X along the tab toward the nose, Y
- * across (a right fin's outside face toward +Y), Z up the blade from the tab top. The
+ * across (a left fin's outside face toward +Y), Z up the blade from the tab top. The
  * scene keeps it, with the camera's up set to +Z, so nothing is rotated or re-centred:
  * the blade and tab stay where the kernel and the STEP/STL files put them.
  */
@@ -50,7 +50,7 @@ export const finScene = (d: FinDesign): FinScene => {
 export const FIN_PREVIEW_FOV = 35;
 
 /**
- * Where the camera sits to frame the whole fin: looking at the outside face (so a left
+ * Where the camera sits to frame the whole fin: looking at the outside face (so a right
  * fin is seen from −Y), a little from behind and above, far enough back that a sphere
  * of `radius` fills the view with some margin.
  */

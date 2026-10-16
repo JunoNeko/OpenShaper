@@ -44,6 +44,8 @@ import {
   setHand,
   setInsideFace,
   setRootThickness,
+  smoothKnot,
+  spanMidpoint,
   withFinCurve,
   type FinCurve,
 } from './fin-edits';
@@ -83,6 +85,8 @@ export interface FinState {
   /** Drag one of a knot's handles toward `p`, clamped to the rules. */
   moveTangent: (curve: FinCurve, index: number, which: 'prev' | 'next', p: Vec2) => boolean;
   addControlPoint: (curve: FinCurve, p: Vec2) => boolean;
+  /** The toolbar's add button: a point halfway along the span after knot `index`. */
+  addControlPointAfter: (curve: FinCurve, index: number) => boolean;
   deleteControlPoint: (curve: FinCurve, index: number) => boolean;
   setContinuous: (curve: FinCurve, index: number, continuous: boolean) => boolean;
 
@@ -240,6 +244,13 @@ export const createFinStore = (): StoreApi<FinState> =>
         return ok;
       },
 
+      addControlPointAfter: (curve, index) => {
+        const { design } = get();
+        const s = design && getFinCurve(design, curve);
+        const at = s && spanMidpoint(s, index);
+        return at ? get().addControlPoint(curve, at) : false;
+      },
+
       deleteControlPoint: (curve, index) => {
         const { design } = get();
         const s = design && getFinCurve(design, curve);
@@ -255,7 +266,11 @@ export const createFinStore = (): StoreApi<FinState> =>
 
       setContinuous: (curve, index, continuous) =>
         editCurve(curve, continuous ? 'Smooth control point' : 'Corner control point', (s) =>
-          withFinCurve(get().design!, curve, setKnotContinuous(s, index, continuous)),
+          withFinCurve(
+            get().design!,
+            curve,
+            continuous ? smoothKnot(s, index) : setKnotContinuous(s, index, false),
+          ),
         ),
 
       setCant: (deg) => {

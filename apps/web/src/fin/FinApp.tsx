@@ -3,8 +3,14 @@
  * The fin designer (docs/design/fin-designer.md, steps 11–12): pick a starting fin,
  * edit its outline over the Futures tab, its foil section and its thickness taper,
  * set its side, cant, thickness and depth, nudge it on the tab, and read its numbers.
- * A 3D preview (step 13) sits above the controls. The fin autosaves, and Open / Save
- * read and write `.fin.json` files (step 14); STEP and STL export (step 15).
+ * The fin autosaves, and Open / Save read and write `.fin.json` files (step 14); STEP
+ * and STL export (step 15).
+ *
+ * Four views — profile, foil, thickness, 3D — share one large pane and three small
+ * ones; a small pane's swap button brings its view into the large pane (round 1, R3).
+ * The large pane's toolbar holds that view's controls. The 3D view's controls (side,
+ * cant, nudge) go with it, under it when it is small, so the nudge sits by the view
+ * that shows what it does.
  *
  * Lengths show in mm, the owner's choice for fins. Components still take a `units`
  * prop (apps/web/CLAUDE.md), so a unit selector can be added here without touching
@@ -18,15 +24,25 @@ import {
   type FinPosition,
 } from '@openshaper/kernel';
 import { Button, Tooltip } from '@openshaper/ui';
-import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react';
+import { Maximize2 } from 'lucide-react';
+import { lazy, Suspense, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DegField, LenField } from '../components/fields';
 import { fmtArea, fmtLen, lengthUnitByKey, type LengthUnit } from '../format';
 import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
-import { FinSectionPane } from './FinSectionPane';
+import { FinSectionPane, FinSectionTools } from './FinSectionPane';
 import { FinTaperPane } from './FinTaperPane';
+import { PointTools } from './PointTools';
 import { downloadFin, exportFin, readFinFile } from './fin-file';
 import { finStore } from './fin-store';
+import {
+  FIN_VIEW_TITLE,
+  readViewOrder,
+  swapIntoMain,
+  writeViewOrder,
+  type FinView,
+  type FinViewOrder,
+} from './fin-views';
 import { useFinAutosave } from './use-fin-autosave';
 import { NUDGE_FORE_CM, NUDGE_LATERAL_CM, useFinShortcuts } from './use-fin-shortcuts';
 import { useFinState } from './use-fin';
@@ -37,14 +53,14 @@ const FinPreview3D = lazy(() =>
   import('@openshaper/render3d').then((m) => ({ default: m.FinPreview3D })),
 );
 
-function Preview() {
+function Preview({ frameKey }: { frameKey: string }) {
   const design = useSettledDesign(finStore);
   const position = useFinState(finStore, (s) => s.design?.position);
   const hand = useFinState(finStore, (s) => s.design?.hand);
   return (
-    <div className="h-64 overflow-hidden rounded-md border border-border" aria-label="3D preview">
+    <div className="h-full overflow-hidden" aria-label="3D preview">
       <Suspense fallback={null}>
-        <FinPreview3D design={design} frameKey={`${position}-${hand}`} />
+        <FinPreview3D design={design} frameKey={`${position}-${hand}-${frameKey}`} />
       </Suspense>
     </div>
   );
@@ -67,7 +83,7 @@ const POSITION_LABEL: Record<FinPosition, string> = {
 
 function Readout({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-2">
+    <div className="flex gap-1.5">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="tabular-nums">{value}</dd>
     </div>
@@ -79,7 +95,7 @@ function Readouts({ units }: { units: LengthUnit }) {
   const r = useMemo(() => (design ? finReadouts(design) : null), [design]);
   if (!r) return null;
   return (
-    <dl className="space-y-1 text-sm" aria-label="Fin measurements">
+    <dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Fin measurements">
       <Readout label="Area" value={fmtArea(r.area, units)} />
       <Readout label="Depth" value={fmtLen(r.depth, units)} />
       <Readout label="Base (root chord)" value={fmtLen(r.rootChord, units)} />
@@ -122,24 +138,57 @@ function Nudge({
   );
 }
 
-function Controls({ units }: { units: LengthUnit }) {
-  const design = useFinState(finStore, (s) => s.design);
-  if (!design) return null;
+/** Fore/aft and across nudges, in one row. */
+function NudgePad() {
   const s = finStore.getState;
-  const r = finReadouts(design);
   return (
-    <div className="space-y-4 text-sm">
-      <Preview />
-      <div className="text-xs text-muted-foreground">{POSITION_LABEL[design.position]}</div>
-      {design.hand && (
-        <div className="flex items-center gap-2" role="group" aria-label="Side">
-          <span className="flex-1 text-muted-foreground">Side</span>
+    <div className="flex items-center gap-1" role="group" aria-label="Position on the tab">
+      <span className="mr-1 text-muted-foreground">Position</span>
+      <Nudge
+        id="fin-nudge-back"
+        label="Move the fin back"
+        dir="←"
+        act={() => s().nudgeFore(-NUDGE_FORE_CM)}
+      />
+      <Nudge
+        id="fin-nudge-forward"
+        label="Move the fin forward"
+        dir="→"
+        act={() => s().nudgeFore(NUDGE_FORE_CM)}
+      />
+      <Nudge
+        id="fin-nudge-out"
+        label="Slide the blade outboard"
+        dir="↑"
+        act={() => s().nudgeLateral(NUDGE_LATERAL_CM)}
+      />
+      <Nudge
+        id="fin-nudge-in"
+        label="Slide the blade inboard"
+        dir="↓"
+        act={() => s().nudgeLateral(-NUDGE_LATERAL_CM)}
+      />
+    </div>
+  );
+}
+
+/** The 3D view's controls: side, cant and the nudges. */
+function PlacementTools() {
+  const position = useFinState(finStore, (s) => s.design?.position);
+  const hand = useFinState(finStore, (s) => s.design?.hand);
+  const cant = useFinState(finStore, (s) => s.design?.cant ?? 0);
+  if (!position) return null;
+  const s = finStore.getState;
+  return (
+    <>
+      {hand && (
+        <div className="flex items-center gap-1" role="group" aria-label="Side">
           {(['left', 'right'] as const).map((h) => (
             <Button
               key={h}
               size="sm"
-              variant={design.hand === h ? 'default' : 'outline'}
-              aria-pressed={design.hand === h}
+              variant={hand === h ? 'default' : 'outline'}
+              aria-pressed={hand === h}
               onClick={() => s().setHand(h)}
             >
               {h === 'left' ? 'Left' : 'Right'}
@@ -147,64 +196,124 @@ function Controls({ units }: { units: LengthUnit }) {
           ))}
         </div>
       )}
-      <div className="space-y-1.5">
-        {design.position !== 'centre' && (
-          <DegField
-            label={`Cant (0–${FIN_MAX_CANT}°)`}
-            value={design.cant}
-            onCommit={(v) => s().setCant(v)}
-          />
-        )}
-        <LenField
-          label="Root thickness"
-          valueCm={design.taper.knots[0]!.end.y}
-          units={units}
-          onCommit={(cm) => s().setRootThickness(cm)}
+      {position !== 'centre' && (
+        <DegField
+          label={`Cant (0–${FIN_MAX_CANT}°)`}
+          value={cant}
+          onCommit={(v) => s().setCant(v)}
         />
-        <LenField
-          label="Depth"
-          valueCm={r.depth}
-          units={units}
-          onCommit={(cm) => s().setDepth(cm)}
-        />
+      )}
+      <NudgePad />
+    </>
+  );
+}
+
+const OUTLINE_CURVES = ['outline'] as const;
+const TAPER_CURVES = ['taper'] as const;
+
+/** The profile view's controls. */
+function OutlineTools({ units }: { units: LengthUnit }) {
+  const design = useFinState(finStore, (s) => s.design);
+  const depth = useMemo(() => (design ? finReadouts(design).depth : 0), [design]);
+  if (!design) return null;
+  return (
+    <>
+      <LenField
+        label="Depth"
+        valueCm={depth}
+        units={units}
+        onCommit={(cm) => finStore.getState().setDepth(cm)}
+      />
+      <PointTools store={finStore} curves={OUTLINE_CURVES} />
+    </>
+  );
+}
+
+/** The thickness view's controls. */
+function TaperTools({ units }: { units: LengthUnit }) {
+  const root = useFinState(finStore, (s) => s.design?.taper.knots[0]!.end.y);
+  if (root === undefined) return null;
+  return (
+    <>
+      <LenField
+        label="Root thickness"
+        valueCm={root}
+        units={units}
+        onCommit={(cm) => finStore.getState().setRootThickness(cm)}
+      />
+      <PointTools store={finStore} curves={TAPER_CURVES} />
+    </>
+  );
+}
+
+/** Readouts and broken rules, always in view. */
+function Status({ units }: { units: LengthUnit }) {
+  const position = useFinState(finStore, (s) => s.design?.position);
+  if (!position) return null;
+  return (
+    <div className="space-y-2 border-t border-border px-3 py-2" style={{ gridArea: 'status' }}>
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <span className="text-xs text-muted-foreground">{POSITION_LABEL[position]}</span>
+        <Readouts units={units} />
       </div>
-      <div>
-        <div className="mb-1 text-xs font-medium text-muted-foreground">Position on the tab</div>
-        <div className="grid w-fit grid-cols-3 gap-1">
-          <span />
-          <Nudge
-            id="fin-nudge-out"
-            label="Slide the blade outboard"
-            dir="↑"
-            act={() => s().nudgeLateral(NUDGE_LATERAL_CM)}
-          />
-          <span />
-          <Nudge
-            id="fin-nudge-back"
-            label="Move the fin back"
-            dir="←"
-            act={() => s().nudgeFore(-NUDGE_FORE_CM)}
-          />
-          <span />
-          <Nudge
-            id="fin-nudge-forward"
-            label="Move the fin forward"
-            dir="→"
-            act={() => s().nudgeFore(NUDGE_FORE_CM)}
-          />
-          <span />
-          <Nudge
-            id="fin-nudge-in"
-            label="Slide the blade inboard"
-            dir="↓"
-            act={() => s().nudgeLateral(-NUDGE_LATERAL_CM)}
-          />
-          <span />
-        </div>
-      </div>
-      <Readouts units={units} />
       <Issues />
     </div>
+  );
+}
+
+/**
+ * One view's pane. Large: its title and controls across the top. Small: its title and
+ * a button that swaps it into the large pane; the 3D view keeps its controls, under it.
+ */
+function ViewPane({
+  view,
+  slot,
+  onSwap,
+  tools,
+  children,
+}: {
+  view: FinView;
+  /** 0 for the large pane, 1–3 for the small ones. */
+  slot: number;
+  onSwap: (slot: number) => void;
+  tools: ReactNode;
+  children: ReactNode;
+}) {
+  const large = slot === 0;
+  const title = FIN_VIEW_TITLE[view];
+  const keepTools = view === '3d';
+  return (
+    <section
+      aria-label={title}
+      data-slot={large ? 'main' : `small-${slot}`}
+      style={{ gridArea: large ? 'main' : `s${slot}` }}
+      className={`flex min-h-0 flex-col border-border ${large ? '' : 'border-t lg:border-l'}`}
+    >
+      <div className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-2 py-1 text-sm">
+        <h2 className="text-xs font-medium text-muted-foreground">{title}</h2>
+        {large ? (
+          tools
+        ) : (
+          <Tooltip label={`Show ${title} in the large pane`}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="ml-auto h-7 w-7"
+              aria-label={`Show ${title} in the large pane`}
+              onClick={() => onSwap(slot)}
+            >
+              <Maximize2 className="h-4 w-4" />
+            </Button>
+          </Tooltip>
+        )}
+      </div>
+      <div className="min-h-0 flex-1">{children}</div>
+      {!large && keepTools && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border px-2 py-1.5 text-sm">
+          {tools}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -330,6 +439,17 @@ export function FinApp() {
   }, []);
   useFinShortcuts(finStore, { onSave: save });
   const ready = useFinAutosave(finStore);
+  const [order, setOrder] = useState<FinViewOrder>(readViewOrder);
+  const swap = useCallback((slot: number) => {
+    setOrder((o) => {
+      const next = swapIntoMain(o, slot);
+      writeViewOrder(next);
+      return next;
+    });
+  }, []);
+  const slotOf = (view: FinView) => order.indexOf(view);
+  // Re-fit a view's canvas when it moves between the large pane and a small one.
+  const sizeKey = (view: FinView) => (order[0] === view ? 'large' : 'small');
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -368,28 +488,35 @@ export function FinApp() {
           </a>
         </div>
       </header>
-      <main
-        aria-busy={!ready}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden"
-      >
-        <section className="min-h-[50vh] flex-1 lg:min-h-0" aria-label="Outline">
-          <FinOutlinePane store={finStore} />
-        </section>
-        {/* Section over taper beside the outline on wide screens; stacked below it on narrow. */}
-        <div className="flex shrink-0 flex-col border-border lg:w-[26rem] lg:border-l">
-          <section
-            className="h-[40vh] border-t border-border lg:h-1/2 lg:border-t-0"
-            aria-label="Foil"
-          >
-            <FinSectionPane store={finStore} />
-          </section>
-          <section className="h-[40vh] border-t border-border lg:h-1/2" aria-label="Taper">
-            <FinTaperPane store={finStore} units={units} />
-          </section>
-        </div>
-        <aside className="w-full shrink-0 overflow-y-auto border-t border-border p-3 lg:w-80 lg:border-l lg:border-t-0">
-          <Controls units={units} />
-        </aside>
+      <main aria-busy={!ready} className="fin-grid min-h-0 flex-1">
+        <ViewPane
+          view="outline"
+          slot={slotOf('outline')}
+          onSwap={swap}
+          tools={<OutlineTools units={units} />}
+        >
+          <FinOutlinePane store={finStore} frameKey={sizeKey('outline')} />
+        </ViewPane>
+        <ViewPane
+          view="foil"
+          slot={slotOf('foil')}
+          onSwap={swap}
+          tools={<FinSectionTools store={finStore} />}
+        >
+          <FinSectionPane store={finStore} frameKey={sizeKey('foil')} />
+        </ViewPane>
+        <ViewPane
+          view="taper"
+          slot={slotOf('taper')}
+          onSwap={swap}
+          tools={<TaperTools units={units} />}
+        >
+          <FinTaperPane store={finStore} units={units} frameKey={sizeKey('taper')} />
+        </ViewPane>
+        <ViewPane view="3d" slot={slotOf('3d')} onSwap={swap} tools={<PlacementTools />}>
+          <Preview frameKey={sizeKey('3d')} />
+        </ViewPane>
+        <Status units={units} />
       </main>
     </div>
   );

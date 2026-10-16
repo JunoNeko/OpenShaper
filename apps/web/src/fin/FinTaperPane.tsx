@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * The thickness taper, editable: the thickness at the foil's thickest point, from the
- * root (left) to the tip (right), as a fraction of the fin's depth
- * (docs/design/fin-designer.md, step 12). Straight then curving toward the tip is the
- * usual shape: the curve is what controls flex. The dashed line is the 0.5 mm
- * minimum; the store stops a point there.
+ * root (bottom) to the tip (top), standing upright like the profile and the 3D view
+ * (docs/design/fin-designer.md, step 12; round 1, R6). The taper's data is (fraction of
+ * the depth, thickness); it is drawn with height up at the fin's true depth, so it lines
+ * up with the profile, and thickness across, stretched so it reads. Straight then
+ * curving toward the tip is the usual shape: the curve is what controls flex. The
+ * dashed line is the 0.5 mm minimum; the store stops a point there.
  */
-import { FIN_MIN_THICKNESS } from '@openshaper/kernel';
-import { FinCurveEditor } from '@openshaper/render2d';
+import { FIN_MIN_THICKNESS, finReadouts } from '@openshaper/kernel';
+import { FinCurveEditor, type ViewMap } from '@openshaper/render2d';
 import type { FinState } from '@openshaper/store';
 import { memo, useCallback, useMemo } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
@@ -19,24 +21,29 @@ const TAPER = '#F59E0B';
 const GUIDE = 'rgba(138,155,179,0.7)';
 const LIMIT = 'rgba(249,115,22,0.85)';
 
-/**
- * Drawn this many times taller than true. The x axis is a fraction (0 root, 1 tip)
- * and y is thickness in cm, so a 0.8 cm root on a unit-long axis reads well at 1.
- */
-export const TAPER_Y_SCALE = 1;
+/** Thickness is drawn this many times wider than true; height is true to scale. */
+export const TAPER_ACROSS = 4;
+
+/** Data (fraction of depth, thickness) to view (thickness across, height up). */
+export const taperView = (depth: number): ViewMap => ({ a: 0, b: TAPER_ACROSS, c: depth, d: 0 });
 
 export const FinTaperPane = memo(function FinTaperPane({
   store,
   units,
+  frameKey = '',
 }: {
   store: StoreApi<FinState>;
   units: LengthUnit;
+  /** Change it to re-fit the view (the pane moving large or small). */
+  frameKey?: string;
 }) {
   const design = useFinState(store, (s) => s.design);
   const selection = useFinState(store, (s) => s.selection);
   const handlers = useMemo(() => curveEditorHandlers(store), [store]);
   const taper = design?.taper;
   const root = taper?.knots[0]?.end.y ?? 0.8;
+  const depth = useMemo(() => (design ? finReadouts(design).depth : 10), [design]);
+  const view = useMemo(() => taperView(depth), [depth]);
 
   const layers = useMemo(
     () => (taper ? [{ id: 'taper', spline: taper, editable: true, color: TAPER }] : []),
@@ -49,6 +56,7 @@ export const FinTaperPane = memo(function FinTaperPane({
       _vp: unknown,
       toScreen: (p: { x: number; y: number }) => { x: number; y: number },
     ) => {
+      // Points are taper data: x the fraction of the depth, y the thickness.
       const line = (a: { x: number; y: number }, b: { x: number; y: number }, color: string) => {
         const sa = toScreen(a);
         const sb = toScreen(b);
@@ -60,49 +68,52 @@ export const FinTaperPane = memo(function FinTaperPane({
       };
       ctx.save();
       ctx.lineWidth = 1;
-      line({ x: 0, y: 0 }, { x: 1, y: 0 }, GUIDE);
+      line({ x: 0, y: 0 }, { x: 1, y: 0 }, GUIDE); // zero thickness, root to tip
+      line({ x: 0, y: 0 }, { x: 0, y: root * 1.1 }, GUIDE); // the root
       ctx.setLineDash([5, 4]);
       line({ x: 0, y: FIN_MIN_THICKNESS }, { x: 1.02, y: FIN_MIN_THICKNESS }, LIMIT);
       ctx.setLineDash([]);
       ctx.font = '11px system-ui, sans-serif';
-      ctx.fillStyle = GUIDE;
-      const label = (text: string, p: { x: number; y: number }, align: CanvasTextAlign) => {
+      // Labels are offset in pixels, so they read the same in a small pane.
+      const label = (
+        text: string,
+        p: { x: number; y: number },
+        dx: number,
+        dy: number,
+        align: CanvasTextAlign,
+      ) => {
         const s = toScreen(p);
         ctx.textAlign = align;
-        ctx.fillText(text, s.x, s.y);
+        ctx.fillText(text, s.x + dx, s.y + dy);
       };
-      label('Root', { x: 0, y: -0.06 }, 'left');
-      label('Tip', { x: 1, y: -0.06 }, 'right');
-      label('height →', { x: 0.5, y: -0.06 }, 'center');
+      ctx.fillStyle = GUIDE;
+      label('Root', { x: 0, y: 0 }, -6, 4, 'right');
+      label('Tip', { x: 1, y: 0 }, -6, 4, 'right');
+      label('thickness →', { x: 0, y: root * 0.55 }, 0, 16, 'center');
       ctx.fillStyle = LIMIT;
       label(
-        `${fmtLen(FIN_MIN_THICKNESS, units)} minimum`,
-        { x: 0.5, y: FIN_MIN_THICKNESS + 0.02 },
+        `${fmtLen(FIN_MIN_THICKNESS, units)} min`,
+        { x: 1.02, y: FIN_MIN_THICKNESS },
+        0,
+        -6,
         'center',
       );
       ctx.restore();
     },
-    [units],
+    [units, root],
   );
 
   if (!design || !taper) return null;
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center border-b border-border px-2 py-1.5">
-        <h2 className="text-xs font-medium text-muted-foreground">Thickness, root to tip</h2>
-      </div>
-      <div className="min-h-0 flex-1">
-        <FinCurveEditor
-          label="Thickness taper"
-          layers={layers}
-          selection={pickFromSelection(selection, ['taper'])}
-          yScale={TAPER_Y_SCALE}
-          frameBounds={{ minX: 0, maxX: 1, minY: -0.08, maxY: root * 1.1 }}
-          frameKey={design.position}
-          drawUnder={drawUnder}
-          {...handlers}
-        />
-      </div>
-    </div>
+    <FinCurveEditor
+      label="Thickness taper"
+      layers={layers}
+      selection={pickFromSelection(selection, ['taper'])}
+      yScale={view}
+      frameBounds={{ minX: -0.04, maxX: 1.06, minY: -0.12, maxY: root * 1.15 }}
+      frameKey={`${design.position}-${frameKey}`}
+      drawUnder={drawUnder}
+      {...handlers}
+    />
   );
 });

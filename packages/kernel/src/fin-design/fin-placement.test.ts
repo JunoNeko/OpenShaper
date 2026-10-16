@@ -18,9 +18,9 @@ const le = (d: FinDesign) => d.outline.knots[0]!.end.x;
 describe('tabCentreY', () => {
   it('puts the tab flush with a flat inside face', () => {
     // The flat face is the chord line, y = 0 at the root; the tab extends outboard.
-    expect(tabCentreY(defaultFinDesign('side', 'right')) - T / 2).toBeCloseTo(0, 15);
-    expect(tabCentreY(defaultFinDesign('side', 'left')) + T / 2).toBeCloseTo(0, 15);
-    expect(tabCentreY(defaultFinDesign('quad-rear', 'right')) - T / 2).toBeCloseTo(0, 15);
+    expect(tabCentreY(defaultFinDesign('side', 'left')) - T / 2).toBeCloseTo(0, 15);
+    expect(tabCentreY(defaultFinDesign('side', 'right')) + T / 2).toBeCloseTo(0, 15);
+    expect(tabCentreY(defaultFinDesign('quad-rear', 'left')) - T / 2).toBeCloseTo(0, 15);
   });
 
   it('centres the tab under a symmetric foil', () => {
@@ -28,15 +28,15 @@ describe('tabCentreY', () => {
   });
 
   it('moves the tab inboard as the blade moves outboard', () => {
-    const d = defaultFinDesign('side', 'right');
+    const d = defaultFinDesign('side', 'left');
     expect(tabCentreY({ ...d, lateralOffset: 0.1 })).toBeCloseTo(T / 2 - 0.1, 15);
-    const l = defaultFinDesign('side', 'left');
-    expect(tabCentreY({ ...l, lateralOffset: 0.1 })).toBeCloseTo(-T / 2 + 0.1, 15);
+    const r = defaultFinDesign('side', 'right');
+    expect(tabCentreY({ ...r, lateralOffset: 0.1 })).toBeCloseTo(-T / 2 + 0.1, 15);
   });
 });
 
 describe('nudgeFore', () => {
-  const d = defaultFinDesign('side', 'right');
+  const d = defaultFinDesign('side', 'left');
 
   it('moves the whole outline', () => {
     const moved = nudgeFore(d, 0.05);
@@ -73,7 +73,7 @@ describe('nudgeFore', () => {
 
 /** A strongly cambered foil: a thin outside face, a deep inside curve bulging inboard. */
 const cambered = (): FinDesign => {
-  const d = defaultFinDesign('side', 'right');
+  const d = defaultFinDesign('side', 'left');
   const scaled = (f: number) =>
     splineFromKnots(
       d.section.outside.knots.map((k) => {
@@ -87,8 +87,8 @@ const cambered = (): FinDesign => {
 describe('nudgeLateral', () => {
   it('keeps the default fins in range', () => {
     for (const d of [
-      defaultFinDesign('side', 'right'),
       defaultFinDesign('side', 'left'),
+      defaultFinDesign('side', 'right'),
       defaultFinDesign('centre'),
     ]) {
       const { min, max } = lateralOffsetRange(d);
@@ -98,7 +98,7 @@ describe('nudgeLateral', () => {
   });
 
   it('stops where the tab centre reaches a face of the foil', () => {
-    const d = defaultFinDesign('side', 'right');
+    const d = defaultFinDesign('side', 'left');
     const b = prepareBlade(d);
     const root = bladeSection(b, 0, [b.thickestAt]);
     const out = nudgeLateral(d, -10); // blade far inboard: tab under the outside face

@@ -43,7 +43,8 @@ export default function DocsFinDesigner() {
         <Terms>
           <Term name="Side, left or right">
             The {mm(side.height)}-deep side tab, with cant. Left and right are mirror images: the
-            outside face points to the rail.
+            outside face points to the rail. They are named the way fin makers mark them, with the
+            board seen from below, nose up — so a left fin goes on the rider&apos;s right rail.
           </Term>
           <Term name="Quad rear, left or right">
             The shallower {mm(centre.height)} tab (quad rears sit where the tail is thinner), with
@@ -55,14 +56,24 @@ export default function DocsFinDesigner() {
           Both tabs are {mm(side.length)} long and {mm(side.thickness)} thick. Lengths are shown in
           millimetres.
         </p>
+        <p>
+          The fin is shown four ways: the profile, the foil section, the thickness and a 3D view.
+          One fills the large pane on the left and the other three sit in small panes on the right;
+          the swap button on a small pane brings its view into the large pane. The large pane&apos;s
+          toolbar holds that view&apos;s controls. The 3D view keeps its controls (side, cant and
+          position) under it when it is small. The measurements run along the bottom.
+        </p>
       </Section>
 
       <Section id="outline" title="The outline">
         <p>
-          The big pane shows the fin from the side, drawn over its tab. Drag a point or a handle to
+          The profile shows the fin from the side, drawn over its tab. Drag a point or a handle to
           reshape it; double-click the curve to add a point; select a point and press Delete to
-          remove it. Drag empty space to pan and scroll to zoom. The outline starts and ends on the
-          base: its two ends slide along it.
+          remove it. The toolbar&apos;s point tools do the same for the selected point on any curve
+          — <strong>+</strong> adds a point halfway to the next, <strong>−</strong> deletes it — and
+          make it <strong>Smooth</strong> (its handles in line) or a <strong>Corner</strong> (each
+          handle free). A curve&apos;s two end points stay put. Drag empty space to pan and scroll
+          to zoom. The outline starts and ends on the base: its two ends slide along it.
         </p>
         <p>
           <strong>Depth</strong> stretches the outline to a new height over the same base. Readouts
@@ -73,7 +84,7 @@ export default function DocsFinDesigner() {
 
       <Section id="foil" title="The foil">
         <p>
-          The section pane is a horizontal slice through the fin: the outside face above the chord
+          The foil section is a horizontal slice through the fin: the outside face above the chord
           line, the inside face below, drawn four times taller than true so a thin foil can be
           shaped by hand. Its size follows the outline and the taper; this pane sets only its shape.
         </p>
@@ -83,20 +94,22 @@ export default function DocsFinDesigner() {
             The same curve on both faces — always the case on a centre fin.
           </Term>
           <Term name="NACA presets">
-            Type a NACA 4-digit code (2412, 0010, …) and Apply to replace both faces with that foil;
-            they stay editable afterwards. The convex face goes outside. A centre fin takes only
-            symmetric 00xx foils. The foil keeps its proportions, so a 2412 stays 2 : 12 camber to
-            thickness however thick the fin.
+            Pick a NACA 4-digit foil from the list (2412, 0010, …), or Other… to type any code, and
+            Apply to replace both faces with that foil, six points each; they stay editable
+            afterwards. The convex face goes outside. A centre fin takes only symmetric 00xx foils.
+            The foil keeps its proportions, so a 2412 stays 2 : 12 camber to thickness however thick
+            the fin.
           </Term>
         </Terms>
       </Section>
 
       <Section id="taper" title="Thickness and flex">
         <p>
-          The thickness pane shows how thick the fin is at the foil&apos;s thickest point, from the
-          root (left) to the tip (right). A straight run that curves down near the tip is the usual
-          shape: that curve is what controls how the tip flexes. <strong>Root thickness</strong>{' '}
-          scales the whole curve.
+          The thickness view shows how thick the fin is at the foil&apos;s thickest point, from the
+          root (bottom) to the tip (top). It stands upright at the fin&apos;s true depth, so it
+          lines up with the profile; thickness runs across, drawn four times wider than true. A
+          straight run that curves in near the tip is the usual shape: that curve is what controls
+          how the tip flexes. <strong>Root thickness</strong> scales the whole curve.
         </p>
       </Section>
 
@@ -135,7 +148,9 @@ export default function DocsFinDesigner() {
             rocked down — about {deg(rearClearance('side').tilt)} on a side tab,{' '}
             {deg(rearClearance('centre').tilt)} on a centre tab. Anything behind the tab swings
             toward the board, so a fin whose base runs past the tab&apos;s rear end needs a raised
-            rear. The dashed orange line behind the tab is the clearance it needs.
+            rear. The dashed orange line behind the tab is the clearance it needs. The raised rear
+            keeps the base&apos;s foil: its underside is as thick as the foil is there, thinning to
+            the minimum where it turns up into the trailing edge.
           </Term>
           <Term name="Minimum thickness">
             Nowhere thinner than {mm(FIN_MIN_THICKNESS)} — edges and tip included — so the fin is

@@ -105,8 +105,12 @@ const faceSpline = (n: Naca4, stations: readonly number[], face: 1 | -1): Spline
   return splineFromKnots(knots);
 };
 
-/** Default number of Bézier segments per face; see naca.test.ts for the accuracy. */
-export const NACA_SEGMENTS = 16;
+/**
+ * Default number of Bézier segments per face: 5, so 6 points, few enough to edit by hand
+ * (17 was too many, round 1 testing). Worst error 0.011% of chord over the presets
+ * (0.012 mm on a 110 mm chord); naca.test.ts pins it.
+ */
+export const NACA_SEGMENTS = 5;
 
 /**
  * A section from a NACA 4-digit designation or parameters. Knots are evenly spaced in

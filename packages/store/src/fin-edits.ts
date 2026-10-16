@@ -14,8 +14,11 @@ import {
   nacaSection,
   parseNaca4,
   splineFromKnots,
+  sub,
   validateFinDesign,
+  value,
   vec2,
+  withHandles,
   type FinDesign,
   type FinHand,
   type FinIssueCode,
@@ -23,6 +26,7 @@ import {
   type Spline,
   type Vec2,
 } from '@openshaper/kernel';
+import { setKnotContinuous } from './edits';
 
 /** The editable curves of a fin. */
 export type FinCurve = 'outline' | 'outside' | 'inside' | 'taper';
@@ -179,3 +183,46 @@ export const setHand = (d: FinDesign, hand: FinHand): FinDesign =>
 /** A fresh default fin for a position (the designer's starting points). */
 export const newFin = (position: FinPosition, hand: FinHand = 'left'): FinDesign =>
   defaultFinDesign(position, hand);
+
+/**
+ * Where the toolbar's add-point button puts a new point: halfway along the span after
+ * knot `index` (the span before it, for the last knot). Null for an index off the curve.
+ */
+export const spanMidpoint = (s: Spline, index: number): Vec2 | null => {
+  const spans = s.knots.length - 1;
+  if (spans < 1 || index < 0 || index > spans) return null;
+  return value(s.coeffs[Math.min(index, spans - 1)]!, 0.5);
+};
+
+/**
+ * Knot `index` made smooth with its handles lined up, each keeping its length: they
+ * turn to the average of their two directions. Flagging a corner smooth without this
+ * would leave its kink in place until the next drag.
+ */
+export const smoothKnot = (s: Spline, index: number): Spline => {
+  const k = s.knots[index];
+  if (!k) return s;
+  // A locked handle's direction is fixed; setKnotContinuous mirrors the lock instead.
+  if (k.lock) return setKnotContinuous(s, index, true);
+  const prev = sub(k.tangentToPrev, k.end);
+  const next = sub(k.tangentToNext, k.end);
+  const lp = Math.hypot(prev.x, prev.y);
+  const ln = Math.hypot(next.x, next.y);
+  let dir: Vec2;
+  if (lp > 0 && ln > 0) dir = vec2(next.x / ln - prev.x / lp, next.y / ln - prev.y / lp);
+  else if (ln > 0) dir = next;
+  else if (lp > 0) dir = vec2(-prev.x, -prev.y);
+  else return setKnotContinuous(s, index, true);
+  const ld = Math.hypot(dir.x, dir.y);
+  // Handles pointing the same way: nothing sensible to average.
+  if (ld < 1e-12) return setKnotContinuous(s, index, true);
+  const u = vec2(dir.x / ld, dir.y / ld);
+  const aligned = withHandles(
+    k,
+    vec2(k.end.x - u.x * lp, k.end.y - u.y * lp),
+    vec2(k.end.x + u.x * ln, k.end.y + u.y * ln),
+  );
+  const knots = s.knots.slice();
+  knots[index] = aligned;
+  return setKnotContinuous(splineFromKnots(knots), index, true);
+};

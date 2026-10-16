@@ -95,9 +95,10 @@ describe.each(['0012', '0008', '2412', '4412', '6409', '2408'])('nacaSection(%s)
     }
   });
 
-  it('follows the exact foil to within 0.002% of chord', () => {
-    expect(fitError(s.outside, (x) => naca4Ordinate(n, x, 1))).toBeLessThan(2e-5);
-    if (s.inside) expect(fitError(s.inside, (x) => naca4Ordinate(n, x, -1))).toBeLessThan(2e-5);
+  it('follows the exact foil to within 0.015% of chord, with 6 points per face', () => {
+    expect(s.outside.knots).toHaveLength(6);
+    expect(fitError(s.outside, (x) => naca4Ordinate(n, x, 1))).toBeLessThan(1.5e-4);
+    if (s.inside) expect(fitError(s.inside, (x) => naca4Ordinate(n, x, -1))).toBeLessThan(1.5e-4);
   });
 
   it('is symmetric exactly when it has no camber', () => {

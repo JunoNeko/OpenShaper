@@ -139,6 +139,9 @@ const TAPER_STRAIGHT_TO = 0.7;
 /**
  * Thickness `root` (cm) falling in a straight line to half of it at
  * {@link TAPER_STRAIGHT_TO}, then curving down to {@link FIN_MIN_THICKNESS} at the tip.
+ * It reaches the tip still falling: a curve that levels off at the minimum leaves the
+ * top few millimetres a uniform 0.5 mm sliver, which reads as a spike (round 1 testing).
+ * The control points fall steadily, so the curve never dips below the minimum.
  */
 export const defaultTaper = (root: number): Spline => {
   const f = TAPER_STRAIGHT_TO;
@@ -154,7 +157,7 @@ export const defaultTaper = (root: number): Spline => {
     ),
     knot(
       vec2(1, FIN_MIN_THICKNESS),
-      vec2(0.92, FIN_MIN_THICKNESS),
+      vec2(0.9, FIN_MIN_THICKNESS + (mid - FIN_MIN_THICKNESS) / 4),
       vec2(1, FIN_MIN_THICKNESS),
       false,
     ),

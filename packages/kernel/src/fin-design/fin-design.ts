@@ -19,8 +19,20 @@ export type FinPosition = 'side' | 'quad-rear' | 'centre';
 
 export const FIN_POSITIONS: readonly FinPosition[] = ['side', 'quad-rear', 'centre'];
 
-/** Which side of the board a side or quad-rear fin is for. */
+/**
+ * Which side a side or quad-rear fin is for, named the way fin makers mark them: with
+ * the board seen from below, nose up. That is the opposite of the rider's view from the
+ * deck, so a "left" fin sits on the rider's right rail.
+ */
 export type FinHand = 'left' | 'right';
+
+/**
+ * +1 when the fin's outside face (and its cant) points to +Y in the blade frame, −1
+ * when it points to −Y (blade.ts describes the frame). Seen from below with the nose
+ * up, +Y is on the left, so a left fin faces +Y. A centre fin (no hand) uses +Y too; it
+ * is symmetric with no cant, so the choice is moot.
+ */
+export const finOutward = (hand: FinHand | null): 1 | -1 => (hand === 'right' ? -1 : 1);
 
 /** The Futures tab each position uses. */
 export const finTabKind = (position: FinPosition): FuturesTabKind =>

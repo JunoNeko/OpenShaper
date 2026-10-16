@@ -9,7 +9,7 @@
  * whenever `frameKey` changes (a new fin), never on an edit, so a view the user has
  * orbited to stays put while they work, like the 2D panes.
  */
-import type { FinDesign } from '@openshaper/kernel';
+import { finOutward, type FinDesign } from '@openshaper/kernel';
 import { OrbitControls } from '@react-three/drei';
 import { Canvas, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, type ComponentRef } from 'react';
@@ -73,7 +73,7 @@ export function FinPreview3D({
     },
     [scene],
   );
-  const outward: 1 | -1 = design?.hand === 'left' ? -1 : 1;
+  const outward = finOutward(design?.hand ?? null);
 
   return (
     <Canvas
@@ -84,7 +84,7 @@ export function FinPreview3D({
     >
       <color attach="background" args={[background]} />
       <ambientLight intensity={0.45} />
-      {/* Key lights on both sides, so a left fin's outside face (−Y) shades like a right one's. */}
+      {/* Key lights on both sides, so a right fin's outside face (−Y) shades like a left one's. */}
       <directionalLight position={[60, 80, 120]} intensity={1} />
       <directionalLight position={[60, -80, 120]} intensity={1} />
       <directionalLight position={[-80, 0, -40]} intensity={0.35} />

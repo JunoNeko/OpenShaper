@@ -61,6 +61,69 @@ describe('FinApp', () => {
     expect(finStore.getState().design!.cant).toBe(20);
   });
 
+  it('swaps a small view into the large pane, bringing its controls with it', () => {
+    localStorage.removeItem('bs.fin.views');
+    render(<FinApp />);
+    const pane = (name: string) => screen.getByRole('region', { name });
+    expect(screen.getByLabelText(/^Depth/)).toBeTruthy(); // the profile is large
+    expect(screen.queryByLabelText(/^Root thickness/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show Thickness in the large pane' }));
+    expect(screen.getByLabelText(/^Root thickness/)).toBeTruthy();
+    expect(screen.queryByLabelText(/^Depth/)).toBeNull();
+    // The profile took the thickness view's place among the small panes.
+    expect(pane('Thickness').dataset.slot).toBe('main');
+    expect(pane('Profile').dataset.slot).toBe('small-2');
+    expect(within(pane('Profile')).getByRole('button', { name: /in the large pane/ })).toBeTruthy();
+    localStorage.removeItem('bs.fin.views');
+  });
+
+  it('keeps the 3D view’s controls under it when it is small', () => {
+    localStorage.removeItem('bs.fin.views');
+    render(<FinApp />);
+    const threeD = within(screen.getByRole('region', { name: '3D' }));
+    expect(threeD.getByRole('button', { name: 'Move the fin forward' })).toBeTruthy();
+    expect(threeD.getByLabelText(/Cant/)).toBeTruthy();
+  });
+
+  it('adds, deletes and smooths points from the toolbar', () => {
+    localStorage.removeItem('bs.fin.views');
+    render(<FinApp />);
+    const tools = within(screen.getByRole('region', { name: 'Profile' })).getByRole('group', {
+      name: 'Point tools',
+    });
+    const button = (name: string) => within(tools).getByRole('button', { name });
+    // Nothing selected: greyed out.
+    expect((button('Add a point') as HTMLButtonElement).disabled).toBe(true);
+    const n = finStore.getState().design!.outline.knots.length;
+    act(() => finStore.getState().select({ curve: 'outline', index: 1, kind: 'end' }));
+    fireEvent.click(button('Add a point'));
+    expect(finStore.getState().design!.outline.knots).toHaveLength(n + 1);
+    expect(finStore.getState().selection!.index).toBe(2); // the new point
+    fireEvent.click(button('Corner'));
+    expect(finStore.getState().design!.outline.knots[2]!.continuous).toBe(false);
+    expect(button('Corner').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(button('Smooth'));
+    expect(finStore.getState().design!.outline.knots[2]!.continuous).toBe(true);
+    fireEvent.click(button('Delete the point'));
+    expect(finStore.getState().design!.outline.knots).toHaveLength(n);
+  });
+
+  it('won’t delete or smooth a curve’s end point', () => {
+    localStorage.removeItem('bs.fin.views');
+    render(<FinApp />);
+    act(() => finStore.getState().select({ curve: 'outline', index: 0, kind: 'end' }));
+    const tools = within(screen.getByRole('region', { name: 'Profile' }));
+    expect(
+      (tools.getByRole('button', { name: 'Delete the point' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect((tools.getByRole('button', { name: 'Smooth' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect((tools.getByRole('button', { name: 'Add a point' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
   it('lists the rules the design breaks', () => {
     act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
     render(<FinApp />);
