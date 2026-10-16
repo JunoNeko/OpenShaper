@@ -304,6 +304,12 @@ Feedback from the owner's first session on the deployed `/fin`, and the agreed f
 | R6  | **Thickness pane upright:** root at the bottom, tip at the top, to the fin's real height so it lines up with the profile. Needs a view transform in `FinCurveEditor` beyond `yScale`.                                                                                                                                                                                                                                                                                                                                | M    | Sonnet, Opus checks  |
 | R7  | Docs page, e2e, full CI gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | S    | Sonnet               |
 
+Also found in testing (fixed alongside R1): the 0.5 mm minimum was a plain max(t, 0.5 mm),
+which left a visible crease where the foil ran down to it along the trailing edge. The
+padding now blends in over a 1 mm thickness band (`padThickness` in `blade.ts`, a C2
+polynomial smooth max), so the faces stay smooth; the foil is untouched where it is 1 mm or
+more above the minimum, and the thickest point keeps exactly the taper's thickness.
+
 Not ours: the console's `THREE.Clock` deprecation comes from `@react-three/fiber` (harmless,
 goes with a fiber update); `share-modal.js` is not in the repository, most likely a browser
 extension.

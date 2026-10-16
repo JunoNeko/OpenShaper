@@ -5,7 +5,9 @@ import { DEG_TO_RAD, RAD_TO_DEG } from '../constants';
 import { knot } from '../knot';
 import { lerp, vec2, type Vec2 } from '../vec2';
 import {
+  FIN_EDGE_BLEND,
   bladeSection,
+  padThickness,
   chordAt,
   cosineStations,
   prepareBlade,
@@ -35,6 +37,33 @@ const widths = (s: BladeSection): number[] =>
 
 const heights = (b: ReturnType<typeof prepareBlade>) =>
   [0, 0.1, 0.25, 0.5, 0.7, 0.85, 0.95, 1].map((f) => f * b.depth);
+
+describe('padThickness', () => {
+  const m = FIN_MIN_THICKNESS;
+  const k = FIN_EDGE_BLEND;
+  const slope = (t: number) => (padThickness(t + 1e-7, k) - padThickness(t - 1e-7, k)) / 2e-7;
+
+  it('leaves the foil alone a blend or more above the minimum', () => {
+    expect(padThickness(m + k, k)).toBe(m + k);
+    expect(padThickness(0.8, k)).toBe(0.8);
+  });
+
+  it('never goes below the minimum', () => {
+    for (let t = -0.01; t < m + k; t += 0.001) expect(padThickness(t, k)).toBeGreaterThanOrEqual(m);
+  });
+
+  it('has no corner: its slope is continuous everywhere, including at the minimum', () => {
+    // A plain max(t, m) jumps from slope 0 to 1 at t = m.
+    for (let t = 0; t < m + k + 0.01; t += 0.0005) {
+      expect(Math.abs(slope(t + 0.0001) - slope(t))).toBeLessThan(0.02);
+    }
+  });
+
+  it('falls back to a plain max with no room to blend', () => {
+    expect(padThickness(0.02, 0)).toBe(m);
+    expect(padThickness(0.07, 0)).toBe(0.07);
+  });
+});
 
 describe('chordAt', () => {
   // Leading-edge root (10, 0) → tip (4, 6) → trailing-edge root (0, 0).
