@@ -188,7 +188,13 @@ const fitOnce = (
   const grid = loops[0]!.map((_, r) => loops.map((loop) => loop[r]!));
   const corners = loopCorners(stations);
   const opts: SurfaceFitOptions = { uBreaks: corners, vBreaks: breaks };
-  return { surface: interpolateSurface(grid, opts), corners, grid: [grid.length, heights.length] };
+  const fitted = interpolateSurface(grid, opts);
+  // The loop starts and ends on the same point, but the solve reproduces its two ends
+  // only to rounding (~1e-15 cm). Close the seam exactly: STEP shares its edge.
+  const ctrl = fitted.ctrl.slice();
+  ctrl[ctrl.length - 1] = ctrl[0]!;
+  const surface = { ...fitted, ctrl };
+  return { surface, corners, grid: [grid.length, heights.length] };
 };
 
 const distToPolyline = (p: Vert3, poly: readonly Vert3[]): number => {

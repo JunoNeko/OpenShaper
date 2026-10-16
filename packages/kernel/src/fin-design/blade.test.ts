@@ -8,6 +8,7 @@ import {
   FIN_EDGE_BLEND,
   bladeSection,
   padThickness,
+  unpadThickness,
   chordAt,
   cosineStations,
   prepareBlade,
@@ -41,27 +42,45 @@ const heights = (b: ReturnType<typeof prepareBlade>) =>
 describe('padThickness', () => {
   const m = FIN_MIN_THICKNESS;
   const k = FIN_EDGE_BLEND;
-  const slope = (t: number) => (padThickness(t + 1e-7, k) - padThickness(t - 1e-7, k)) / 2e-7;
+  const slope = (t: number) => (padThickness(t + 1e-7) - padThickness(t - 1e-7)) / 2e-7;
 
   it('leaves the foil alone a blend or more above the minimum', () => {
-    expect(padThickness(m + k, k)).toBe(m + k);
-    expect(padThickness(0.8, k)).toBe(0.8);
+    expect(padThickness(m + k)).toBe(m + k);
+    expect(padThickness(0.8)).toBe(0.8);
   });
 
-  it('never goes below the minimum', () => {
-    for (let t = -0.01; t < m + k; t += 0.001) expect(padThickness(t, k)).toBeGreaterThanOrEqual(m);
+  it('pads nothing to exactly the minimum', () => {
+    expect(padThickness(0)).toBe(m);
+  });
+
+  it('never goes below the minimum, and rises steadily', () => {
+    let last = 0;
+    for (let t = 0; t < m + k + 0.01; t += 0.0005) {
+      const p = padThickness(t);
+      expect(p).toBeGreaterThanOrEqual(m);
+      expect(p).toBeGreaterThanOrEqual(last);
+      last = p;
+    }
   });
 
   it('has no corner: its slope is continuous everywhere, including at the minimum', () => {
     // A plain max(t, m) jumps from slope 0 to 1 at t = m.
-    for (let t = 0; t < m + k + 0.01; t += 0.0005) {
+    for (let t = 0.0002; t < m + k + 0.01; t += 0.0005) {
       expect(Math.abs(slope(t + 0.0001) - slope(t))).toBeLessThan(0.02);
     }
   });
+});
 
-  it('falls back to a plain max with no room to blend', () => {
-    expect(padThickness(0.02, 0)).toBe(m);
-    expect(padThickness(0.07, 0)).toBe(0.07);
+describe('unpadThickness', () => {
+  it('undoes padThickness', () => {
+    for (const t of [0.001, 0.01, 0.03, 0.05, 0.07, 0.099, 0.2]) {
+      expect(padThickness(unpadThickness(padThickness(t)))).toBeCloseTo(padThickness(t), 14);
+      expect(unpadThickness(padThickness(t))).toBeCloseTo(t, 6);
+    }
+  });
+
+  it('is 0 at the minimum, so a tip section is a uniform slab', () => {
+    expect(unpadThickness(FIN_MIN_THICKNESS)).toBe(0);
   });
 });
 

@@ -17,7 +17,8 @@
  *   - any other foil grows on the outside only, so a flat inside face stays flat.
  *   The padding blends in (see {@link padThickness}) rather than switching on, so the
  *   faces stay smooth where the foil runs down to the minimum: a plain max(t, min)
- *   left a visible crease along the trailing edge.
+ *   left a visible crease along the trailing edge and at the tip. The section is
+ *   scaled so that, padded, its thickest point is the taper's thickness.
  * - **Cant:** the blade leans out by sliding each section sideways, h·tan(cant). The
  *   sections stay horizontal, so the root sits exactly on the flat tab top (see "Cant
  *   as a lean of horizontal sections" in the design doc). A horizontal slice of a
@@ -144,24 +145,45 @@ export const prepareBlade = (d: FinDesign): PreparedBlade => {
 
 /**
  * Thickness band (cm) over which the minimum-thickness padding blends in: the foil is
- * untouched where it is at least this much thicker than the minimum.
+ * untouched where it is at least this much thicker than the minimum. Equal to the
+ * minimum, so a foil scaled to nothing pads to exactly the minimum (see
+ * {@link unpadThickness}).
  */
-export const FIN_EDGE_BLEND = 2 * FIN_MIN_THICKNESS;
+export const FIN_EDGE_BLEND = FIN_MIN_THICKNESS;
 
 /**
- * A foil thickness `t` (cm) padded to the minimum, smoothly: a polynomial smooth
- * maximum of `t` and {@link FIN_MIN_THICKNESS}, with curvature continuous where it
- * starts. It equals `t` wherever `t` is `blend` or more above the minimum, and is
- * never below the minimum. `blend` is narrowed to the section's thickest value less
- * the minimum, so the thickest point keeps exactly the taper's thickness; near the tip,
- * where the whole section is at the minimum, it falls to a plain max.
+ * A foil thickness `t` (cm, ≥ 0) padded to the minimum, smoothly: a polynomial smooth
+ * maximum of `t` and {@link FIN_MIN_THICKNESS} over {@link FIN_EDGE_BLEND}, curvature
+ * continuous where it starts. It equals `t` from the minimum plus the blend up, is never
+ * below the minimum, rises steadily with `t`, and is exactly the minimum at `t` = 0.
  */
-export const padThickness = (t: number, blend: number): number => {
+export const padThickness = (t: number): number => {
   const m = FIN_MIN_THICKNESS;
-  const base = Math.max(t, m);
-  if (!(blend > 0)) return base;
-  const h = Math.max(blend - Math.abs(t - m), 0) / blend;
-  return base + (h * h * h * blend) / 6;
+  const k = FIN_EDGE_BLEND;
+  const h = Math.max(k - Math.abs(t - m), 0) / k;
+  return Math.max(t, m) + (h * h * h * k) / 6;
+};
+
+/**
+ * The foil thickness (cm, ≥ 0) that {@link padThickness} turns into `padded`: the
+ * section is scaled to this, so after padding its thickest point is exactly the taper's
+ * thickness. At the minimum it is 0 (the section is a uniform minimum-thickness slab,
+ * as at the tip), so the padding blends smoothly all the way up the blade instead of
+ * switching to a plain max, which creased the tip.
+ */
+export const unpadThickness = (padded: number): number => {
+  const m = FIN_MIN_THICKNESS;
+  if (padded <= m) return 0;
+  if (padded >= m + FIN_EDGE_BLEND) return padded;
+  // padThickness rises steadily on [0, m + blend]: bisect.
+  let lo = 0;
+  let hi = m + FIN_EDGE_BLEND;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (padThickness(mid) < padded) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
 };
 
 /** Leading- and trailing-edge x where the outline is `h` above the tab top. */
@@ -191,7 +213,7 @@ export const bladeSection = (
 ): BladeSection => {
   const { leading, trailing } = chordAt(b, h);
   const thickness = thicknessAt(b, h);
-  const scale = thickness / b.shapeThickness;
+  const scale = unpadThickness(thickness) / b.shapeThickness;
   const symmetric = b.design.section.inside === null;
   const slide = h * b.lean;
   const at = (x: number, offset: number): Vert3 => ({
@@ -200,14 +222,13 @@ export const bladeSection = (
     z: h,
   });
 
-  const blend = Math.min(FIN_EDGE_BLEND, thickness - FIN_MIN_THICKNESS);
   const outside: Vert3[] = [];
   const inside: Vert3[] = [];
   for (const u of stations) {
     const [o, i] = shapeAt(b.design, u);
     let out = o * scale;
     let ins = i * scale;
-    const short = padThickness(out - ins, blend) - (out - ins);
+    const short = padThickness(out - ins) - (out - ins);
     if (short > 0) {
       if (symmetric) {
         out += short / 2;
