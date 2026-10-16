@@ -23,14 +23,35 @@ describe('FinSectionPane', () => {
 
   it('applies a NACA preset to the section', () => {
     render(<FinSectionPane store={finStore} />);
-    fireEvent.change(screen.getByLabelText('NACA 4-digit code'), { target: { value: '2412' } });
+    fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: '2412' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(design().section.inside).not.toBeNull();
     expect(finStore.getState().past.at(-1)!.label).toBe('NACA 2412');
   });
 
+  it('offers every preset again after one is applied', () => {
+    render(<FinSectionPane store={finStore} />);
+    fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: '2412' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    const options = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(options).toContain('0010');
+    expect(options).toContain('6409');
+    fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: '0010' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(finStore.getState().past.at(-1)!.label).toBe('NACA 0010');
+  });
+
+  it('takes any other 4-digit code', () => {
+    render(<FinSectionPane store={finStore} />);
+    fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: 'other' } });
+    fireEvent.change(screen.getByLabelText('NACA 4-digit code'), { target: { value: '3415' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(finStore.getState().past.at(-1)!.label).toBe('NACA 3415');
+  });
+
   it('explains a code it cannot use', () => {
     render(<FinSectionPane store={finStore} />);
+    fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: 'other' } });
     fireEvent.change(screen.getByLabelText('NACA 4-digit code'), { target: { value: '24' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(screen.getByRole('alert').textContent).toMatch(/NACA 4-digit code/);
@@ -41,6 +62,8 @@ describe('FinSectionPane', () => {
     act(() => finStore.getState().load(defaultFinDesign('centre')));
     render(<FinSectionPane store={finStore} />);
     expect(screen.queryByRole('button', { name: 'Flat inside' })).toBeNull();
+    expect(screen.queryByRole('option', { name: '2412' })).toBeNull(); // only 00xx offered
+    fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: 'other' } });
     fireEvent.change(screen.getByLabelText('NACA 4-digit code'), { target: { value: '2412' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(screen.getByRole('alert').textContent).toMatch(/symmetric/);

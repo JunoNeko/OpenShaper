@@ -83,10 +83,10 @@ export default function DocsFinDesigner() {
             The same curve on both faces — always the case on a centre fin.
           </Term>
           <Term name="NACA presets">
-            Type a NACA 4-digit code (2412, 0010, …) and Apply to replace both faces with that foil;
-            they stay editable afterwards. The convex face goes outside. A centre fin takes only
-            symmetric 00xx foils. The foil keeps its proportions, so a 2412 stays 2 : 12 camber to
-            thickness however thick the fin.
+            Pick a NACA 4-digit foil from the list (2412, 0010, …), or Other… to type any code, and
+            Apply to replace both faces with that foil; they stay editable afterwards. The convex
+            face goes outside. A centre fin takes only symmetric 00xx foils. The foil keeps its
+            proportions, so a 2412 stays 2 : 12 camber to thickness however thick the fin.
           </Term>
         </Terms>
       </Section>

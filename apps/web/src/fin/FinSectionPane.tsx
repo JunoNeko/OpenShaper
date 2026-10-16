@@ -26,7 +26,7 @@ import { useFinState } from './use-fin';
 /** Drawn this many times taller than true. */
 export const SECTION_Y_SCALE = 4;
 
-/** The presets offered as suggestions; any 4-digit code works. */
+/** The presets in the dropdown; "Other…" takes any 4-digit code. */
 const SUGGESTED = ['0008', '0010', '0012', '2408', '2410', '2412', '4409', '4412', '6409'];
 
 const OUTSIDE = '#22D3EE';
@@ -41,12 +41,26 @@ const mirrored = (s: Spline): Spline =>
     }),
   );
 
+/** The preset dropdown's "type any code" choice. */
+const OTHER = 'other';
+
+/**
+ * A preset dropdown, plus a field for any other 4-digit code. (Not an `<input list>`:
+ * browsers filter a datalist by the field's text, so after one Apply it offered only
+ * that code.)
+ */
 function NacaPicker({ store, centre }: { store: StoreApi<FinState>; centre: boolean }) {
+  const presets = SUGGESTED.filter((c) => !centre || c.startsWith('00'));
+  const [picked, setChoice] = useState(presets[0]!);
   const [code, setCode] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
+  // A side fin's cambered preset isn't offered on a centre fin: fall back to the first.
+  const choice = picked === OTHER || presets.includes(picked) ? picked : presets[0]!;
+  const other = choice === OTHER;
   const apply = () => {
+    const chosen = other ? code.trim() : choice;
     try {
-      const n = parseNaca4(code);
+      const n = parseNaca4(chosen);
       if (centre && n.camber > 0) {
         setProblem('A centre fin needs a symmetric foil: NACA 00xx.');
         return;
@@ -56,16 +70,34 @@ function NacaPicker({ store, centre }: { store: StoreApi<FinState>; centre: bool
       return;
     }
     setProblem(null);
-    store.getState().applyNaca(code);
+    store.getState().applyNaca(chosen);
   };
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <label className="flex items-center gap-1.5">
         <span className="text-muted-foreground">NACA</span>
+        <select
+          className="h-8 rounded-md border border-input bg-background px-2 tabular-nums"
+          value={choice}
+          aria-label="NACA preset"
+          onChange={(e) => {
+            setChoice(e.target.value);
+            setProblem(null);
+          }}
+        >
+          {presets.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+          <option value={OTHER}>Other…</option>
+        </select>
+      </label>
+      {other && (
         <input
           className="h-8 w-20 rounded-md border border-input bg-background px-2 tabular-nums"
-          list="fin-naca-presets"
           inputMode="numeric"
+          maxLength={4}
           placeholder={centre ? '0010' : '2412'}
           value={code}
           aria-label="NACA 4-digit code"
@@ -74,12 +106,7 @@ function NacaPicker({ store, centre }: { store: StoreApi<FinState>; centre: bool
             if (e.key === 'Enter') apply();
           }}
         />
-      </label>
-      <datalist id="fin-naca-presets">
-        {SUGGESTED.filter((c) => !centre || c.startsWith('00')).map((c) => (
-          <option key={c} value={c} />
-        ))}
-      </datalist>
+      )}
       <Button size="sm" variant="outline" onClick={apply}>
         Apply
       </Button>

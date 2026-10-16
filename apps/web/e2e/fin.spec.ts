@@ -50,7 +50,7 @@ test.describe('Fin designer', () => {
     await setField(page, /Root thickness/, '7.5');
 
     // A cambered NACA foil.
-    await page.getByLabel('NACA 4-digit code').fill('2410');
+    await page.getByLabel('NACA preset').selectOption('2410');
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(page.getByText('— inside')).toBeVisible();
 
@@ -111,6 +111,7 @@ test.describe('Fin designer', () => {
   test('explains a foil a centre fin cannot take', async ({ page }) => {
     await openFin(page);
     await page.getByLabel('Start a new fin').selectOption({ label: 'Centre' });
+    await page.getByLabel('NACA preset').selectOption('other');
     await page.getByLabel('NACA 4-digit code').fill('2412');
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(page.getByRole('alert')).toContainText('symmetric');
