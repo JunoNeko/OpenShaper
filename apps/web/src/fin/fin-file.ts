@@ -2,7 +2,7 @@
 /** Saving a fin to a `.fin.json` file and opening one, for the fin designer's File buttons. */
 import type { FinDesign } from '@openshaper/kernel';
 import { FinJsonError, readFinJson, writeFinJson } from '@openshaper/io';
-import { download } from '../file-io';
+import { download, MULTI_DOWNLOAD_GAP_MS } from '../file-io';
 
 /** A file name stem for the design: `fin-side-left`, `fin-centre`. */
 export const finFileStem = (d: FinDesign): string =>
@@ -12,23 +12,40 @@ export const finFileStem = (d: FinDesign): string =>
 export const finFileName = (d: FinDesign): string => `${finFileStem(d)}.fin.json`;
 
 /**
+ * The fins to write: the design, and with `pair` its mirror for the other side, for
+ * fins that have one (side, quad-rear, canard). A centre fin is always one file.
+ */
+export const finsToWrite = (d: FinDesign, pair: boolean): FinDesign[] =>
+  pair && d.hand ? [d, { ...d, hand: d.hand === 'left' ? 'right' : 'left' }] : [d];
+
+/** Run `write` for each fin, spaced so the browser keeps every download. */
+const each = async (fins: FinDesign[], write: (d: FinDesign) => void | Promise<void>) => {
+  for (let i = 0; i < fins.length; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, MULTI_DOWNLOAD_GAP_MS));
+    await write(fins[i]!);
+  }
+};
+
+/**
  * Export the design for manufacture and download it: STEP (CNC) or STL (printing),
- * both in mm. The exporters are loaded on first use, so the page doesn't carry them.
+ * both in mm; with `pair`, a left and a right fin, one file each. The exporters are loaded on first use, so the page doesn't carry them.
  * STEP fits its surfaces on the main thread (about a second), as the board's does.
  */
-export async function exportFin(d: FinDesign, format: 'step' | 'stl'): Promise<void> {
+export async function exportFin(d: FinDesign, format: 'step' | 'stl', pair = false): Promise<void> {
   const { exportFinStep, exportFinStl } = await import('@openshaper/export');
-  const stem = finFileStem(d);
-  if (format === 'step') {
-    download(exportFinStep(d, { name: stem }), `${stem}.step`, 'model/step');
-  } else {
-    download(exportFinStl(d, { name: stem }) as unknown as BlobPart, `${stem}.stl`, 'model/stl');
-  }
+  await each(finsToWrite(d, pair), (f) => {
+    const stem = finFileStem(f);
+    if (format === 'step') {
+      download(exportFinStep(f, { name: stem }), `${stem}.step`, 'model/step');
+    } else {
+      download(exportFinStl(f, { name: stem }) as unknown as BlobPart, `${stem}.stl`, 'model/stl');
+    }
+  });
 }
 
-/** Download the design as a `.fin.json` file. */
-export const downloadFin = (d: FinDesign): void =>
-  download(writeFinJson(d), finFileName(d), 'application/json');
+/** Download the design as a `.fin.json` file; with `pair`, a left and a right one. */
+export const downloadFin = (d: FinDesign, pair = false): Promise<void> =>
+  each(finsToWrite(d, pair), (f) => download(writeFinJson(f), finFileName(f), 'application/json'));
 
 /**
  * Read a chosen file as a fin design. Rejects with a message fit to show the user:

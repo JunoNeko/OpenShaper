@@ -32,9 +32,19 @@ import {
 import type { FinStart } from '@openshaper/store';
 import { Button, Tooltip } from '@openshaper/ui';
 import { Maximize2 } from 'lucide-react';
-import { lazy, Suspense, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { DegField, LenField } from '../components/fields';
 import { fmtArea, fmtLen, lengthUnitByKey, type LengthUnit } from '../format';
+import { readStored, writeStored } from '../persisted';
 import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane, FinSectionTools } from './FinSectionPane';
@@ -450,7 +460,32 @@ function FileButtons({ onSave }: { onSave: () => void }) {
 }
 
 /** Export for manufacture: STEP for CNC, STL for printing. Off while a rule is broken. */
-function ExportButtons() {
+/** Remembered per device: whether Save and Export write a left and a right fin. */
+const PAIR_KEY = 'bs.fin.pair';
+
+/**
+ * The R & L option beside Save and Export: when ticked, each writes the fin and its
+ * mirror for the other side, two files. Only for fins that have a side.
+ */
+function PairOption({ pair, onChange }: { pair: boolean; onChange: (on: boolean) => void }) {
+  const hand = useFinState(finStore, (s) => s.design?.hand);
+  if (!hand) return null;
+  return (
+    <Tooltip label="Save and export a left and a right fin: two files each time">
+      <label className="flex items-center gap-1.5 px-1 text-sm">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-primary"
+          checked={pair}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span>R &amp; L</span>
+      </label>
+    </Tooltip>
+  );
+}
+
+function ExportButtons({ pair }: { pair: boolean }) {
   const design = useFinState(finStore, (s) => s.design);
   const issues = useMemo(() => (design ? validateFinDesign(design) : []), [design]);
   const [busy, setBusy] = useState<'step' | 'stl' | null>(null);
@@ -460,7 +495,7 @@ function ExportButtons() {
     setBusy(format);
     // Let "Exporting…" paint before the work starts.
     window.setTimeout(() => {
-      void exportFin(d, format).finally(() => setBusy(null));
+      void exportFin(d, format, pair).finally(() => setBusy(null));
     }, 0);
   };
   const blocked = issues.length > 0;
@@ -493,9 +528,19 @@ function ExportButtons() {
 
 export function FinApp() {
   const units = lengthUnitByKey('mm');
+  const [pair, setPair] = useState(() => readStored(PAIR_KEY, false, (v) => v === true));
+  const changePair = useCallback((on: boolean) => {
+    setPair(on);
+    writeStored(PAIR_KEY, on);
+  }, []);
+  // ⌘S saves through a stable callback, so it reads the option from a ref.
+  const pairRef = useRef(pair);
+  useEffect(() => {
+    pairRef.current = pair;
+  }, [pair]);
   const save = useCallback(() => {
     const d = finStore.getState().design;
-    if (d) downloadFin(d);
+    if (d) void downloadFin(d, pairRef.current);
   }, []);
   useFinShortcuts(finStore, { onSave: save });
   const ready = useFinAutosave(finStore);
@@ -538,7 +583,8 @@ export function FinApp() {
         </label>
         <div className="ml-auto flex flex-wrap items-center gap-1">
           <FileButtons onSave={save} />
-          <ExportButtons />
+          <PairOption pair={pair} onChange={changePair} />
+          <ExportButtons pair={pair} />
           <History />
           <a
             className="px-2 text-sm text-muted-foreground underline-offset-4 hover:underline"

@@ -159,6 +159,16 @@ test.describe('Fin designer', () => {
     ).toHaveLength(2);
   });
 
+  test('exports a left and a right fin with R & L ticked', async ({ page }) => {
+    await openFin(page);
+    await page.getByRole('checkbox', { name: 'R & L' }).check();
+    const downloads: string[] = [];
+    page.on('download', (d) => downloads.push(d.suggestedFilename()));
+    await page.getByRole('button', { name: 'Export STL' }).click();
+    await expect.poll(() => downloads.length).toBe(2);
+    expect(downloads.sort()).toEqual(['fin-side-left.stl', 'fin-side-right.stl']);
+  });
+
   test('explains a foil a centre fin cannot take', async ({ page }) => {
     await openFin(page);
     await page.getByLabel('Start a new fin').selectOption({ label: 'Centre' });

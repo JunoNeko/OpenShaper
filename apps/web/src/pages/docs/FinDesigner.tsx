@@ -224,6 +224,13 @@ export default function DocsFinDesigner() {
           <code>.fin.json</code> file to keep or share; <strong>Open…</strong> loads one back. Like
           the rest of OpenShaper, the designer works offline.
         </p>
+        <p>
+          For a side, quad-rear or canard fin, tick <strong>R &amp; L</strong> beside Save and
+          Export to write a matched pair: each Save or Export then writes two files, the fin and its
+          mirror for the other side (<code>fin-side-left</code> and <code>fin-side-right</code>
+          ). Your browser may ask once to allow more than one download. The choice is remembered on
+          this device.
+        </p>
       </Section>
 
       <Section id="export" title="Exporting for CNC and printing">
