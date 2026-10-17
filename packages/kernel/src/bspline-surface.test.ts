@@ -374,3 +374,26 @@ describe('surfaceNormal', () => {
     expect(Math.abs(Math.abs(n!.z) - 1)).toBeLessThan(1e-9);
   });
 });
+
+describe('interpolateSurface: explicit v parameters', () => {
+  const grid = Array.from({ length: 7 }, (_, r) => ring(r * 2, 9, 1 + r * 0.1));
+
+  it('is the default fit when given the parameters it would have averaged', () => {
+    const v = averageParams(grid.map((row) => pointParams(row, CENTRIPETAL)));
+    expect(interpolateSurface(grid, { vParams: v })).toEqual(interpolateSurface(grid));
+  });
+
+  it('uses the parameters it is given, still through every point', () => {
+    // One parameter per point along v (along each row here); 9 points per row.
+    const v = [0, 0.02, 0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 1];
+    const s = interpolateSurface(grid, { vParams: v });
+    expect(s.vKnots).not.toEqual(interpolateSurface(grid).vKnots);
+    // The first and last rows are the u = 0 and u = 1 edges: exact at the given v.
+    for (const [u, row] of [
+      [0, grid[0]!],
+      [1, grid[grid.length - 1]!],
+    ] as const) {
+      row.forEach((p, c) => expect(dist(evalSurface(s, u, v[c]!), p)).toBeLessThan(1e-9));
+    }
+  });
+});

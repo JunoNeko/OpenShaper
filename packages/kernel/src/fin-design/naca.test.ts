@@ -2,9 +2,10 @@
 import { describe, expect, it } from 'vitest';
 import { value } from '../bezier-curve';
 import type { Spline } from '../bezier-spline';
-import { bladeSection, prepareBlade } from './blade';
+import { bladeSection, foilRange, prepareBlade } from './blade';
 import { yAtX } from './curve-shape';
 import { defaultFinDesign } from './fin-defaults';
+import { FIN_MIN_THICKNESS } from './fin-design';
 import { validateFinDesign } from './fin-rules';
 import { naca4Ordinate, nacaSection, parseNaca4 } from './naca';
 
@@ -117,12 +118,18 @@ describe.each(['0012', '0008', '2412', '4412', '6409', '2408'])('nacaSection(%s)
   it('keeps the camber-to-thickness ratio when the blade scales it', () => {
     // Uniform scaling to the taper: camber / thickness at the root equals M / XX.
     if (n.camber === 0) return;
-    const d = { ...defaultFinDesign('side', 'right'), cant: 0, section: s };
+    // A left fin: its outside face is on +Y, so offsets read directly.
+    const d = { ...defaultFinDesign('side', 'left'), cant: 0, section: s };
     const b = prepareBlade(d);
-    const at = bladeSection(b, 0, [n.position]);
-    const camber = (at.outside[0]!.y + at.inside[0]!.y) / 2;
-    const thickest = bladeSection(b, 0, [b.thickestAt]);
-    const t = thickest.outside[0]!.y - thickest.inside[0]!.y;
+    // Stations where the foil's fractions fall (the smoothed edges can trim it).
+    const r = foilRange(b, 0);
+    const station = (f: number) => (f - r.from) / (r.to - r.from);
+    // The minimum is added to the outside face, so measure the foil above it.
+    const m = FIN_MIN_THICKNESS;
+    const at = bladeSection(b, 0, [station(n.position)]);
+    const camber = (at.outside[0]!.y - m + at.inside[0]!.y) / 2;
+    const thickest = bladeSection(b, 0, [station(b.thickestAt)]);
+    const t = thickest.outside[0]!.y - thickest.inside[0]!.y - m;
     expect(camber / t).toBeCloseTo(n.camber / n.thickness, 3);
     expect(yAtX(s.outside, n.position)).toBeGreaterThan(0);
   });

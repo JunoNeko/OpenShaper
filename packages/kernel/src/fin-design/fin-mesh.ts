@@ -18,7 +18,7 @@ import { meshWithNormals } from '../fins';
 import type { BoardMesh } from '../tessellate';
 import { vec2, type Vec2 } from '../vec2';
 import type { Vert3 } from '../loft';
-import { bladeSection, cosineStations, prepareBlade, raisedRearHeights } from './blade';
+import { bladeRowHeights, bladeSection, cosineStations, prepareBlade } from './blade';
 import { sectionLoop } from './blade-surface';
 import { finTabKind, type FinDesign } from './fin-design';
 import { tabCentreY } from './fin-placement';
@@ -89,14 +89,9 @@ const bladeMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
   const b = prepareBlade(d);
   const top = b.depth - o.tipGap;
   const st = cosineStations(o.stations);
-  // Rings gather toward the tip, where the chord closes fastest.
-  const tipward = Array.from({ length: o.rows + 1 }, (_, k) => top * (1 - (1 - k / o.rows) ** 2));
-  // A raised rear's underside needs rings of its own (raisedRearHeights).
-  const rear = raisedRearHeights(b, o.rows, top);
-  const corner = b.raisedRear?.cornerZ ?? 0;
-  const heights = rear.length
-    ? [0, ...rear, corner, ...tipward.filter((h) => h > corner)]
-    : tipward;
+  // Rings spaced along the edges' travel: they gather at the tip, and wherever an edge
+  // runs nearly level (a raised rear's underside, a hooked tip).
+  const heights = bladeRowHeights(b, 0, top, o.rows);
   const rings = heights.map((h) => sectionLoop(bladeSection(b, h, st)).slice(0, -1));
   const m = builder();
   const ids = rings.map((ring) => ring.map((p) => m.add(p)));

@@ -97,8 +97,8 @@ export default function DocsFinDesigner() {
             Pick a NACA 4-digit foil from the list (2412, 0010, …), or Other… to type any code, and
             Apply to replace both faces with that foil, six points each; they stay editable
             afterwards. The convex face goes outside. A centre fin takes only symmetric 00xx foils.
-            The foil keeps its proportions, so a 2412 stays 2 : 12 camber to thickness however thick
-            the fin.
+            The foil keeps its proportions above the minimum thickness, so a 2412 stays 2 : 12
+            camber to thickness however thick the fin.
           </Term>
         </Terms>
       </Section>
@@ -154,7 +154,10 @@ export default function DocsFinDesigner() {
           </Term>
           <Term name="Minimum thickness">
             Nowhere thinner than {mm(FIN_MIN_THICKNESS)} — edges and tip included — so the fin is
-            safe to bump into and something a cutter can make.
+            safe to bump into and something a cutter can make. The foil is shaped to the thickness
+            curve less this, and this is added all the way along, so the faces stay curved right to
+            edges that end at {mm(FIN_MIN_THICKNESS)}. A sharp bend in the outline — a hooked tip,
+            say — reshapes the blade only near that edge, rather than creasing it right across.
           </Term>
           <Term name="One clean shape">
             The edges keep rising to a single tip, and the foil&apos;s faces never cross.
@@ -176,8 +179,9 @@ export default function DocsFinDesigner() {
           <Term name="STEP">
             For CNC. True curved surfaces, in millimetres: the blade and the tab as two solids that
             meet on the tab top. In Fusion 360 or similar, Combine / Join them into one body before
-            machining. Within 0.05 mm of the design, except the last fraction of a millimetre under
-            the tip.
+            machining. Within 0.05 mm of the design, except the last millimetre or two under the
+            tip. The surface stays smooth across corners in the outline: only the edge has the
+            corner.
           </Term>
           <Term name="STL">
             For 3D printing. A fine triangle mesh in millimetres, the unit slicers assume.

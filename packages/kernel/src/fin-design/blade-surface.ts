@@ -53,7 +53,8 @@ import {
 import type { Vert3 } from '../loft';
 import {
   bladeSection,
-  raisedRearHeights,
+  bladeRowHeights,
+  bladeTravel,
   cosineStations,
   prepareBlade,
   type BladeSection,
@@ -134,72 +135,91 @@ const loopCorners = (n: number): number[] => {
   return [teOut, teIn, leIn];
 };
 
-/** Heights where the outline or taper has a corner: the blade creases there. */
+/**
+ * Heights where the taper has a corner: the thickness kinks right across the section,
+ * so the surface creases there. Corners in the outline don't crease it: the foil is laid
+ * over smoothed edges (blade.ts), so only the edge itself has the corner, and a crease
+ * all the way round would draw a line across the blade (round 2 testing).
+ */
 const creaseHeights = (b: PreparedBlade, topZ: number): number[] => {
   const d = b.design;
-  const inner = <T>(xs: readonly T[]) => xs.slice(1, -1);
-  const hs = [
-    ...inner(d.outline.knots)
-      .filter((k) => !k.continuous)
-      .map((k) => k.end.y),
-    ...inner(d.taper.knots)
-      .filter((k) => !k.continuous)
-      .map((k) => k.end.x * b.depth),
-  ];
+  const hs = d.taper.knots
+    .slice(1, -1)
+    .filter((k) => !k.continuous)
+    .map((k) => k.end.x * b.depth);
   return [...new Set(hs)].filter((h) => h > 0 && h < topZ).sort((p, q) => p - q);
 };
 
 /**
  * Row heights from the root to `topZ`: each strip between creases gets rows in
- * proportion to its height (at least 4, enough for a cubic). The last strip clusters
- * toward the tip, where the chord closes fast.
+ * proportion to how far the edges travel along it (at least 4, enough for a cubic),
+ * spaced evenly along that travel ({@link bladeRowHeights}), so a stretch where an edge
+ * runs nearly level, and the tip, get rows to match.
  */
 const rowHeights = (
+  b: PreparedBlade,
   creases: readonly number[],
   topZ: number,
   rows: number,
 ): { heights: number[]; breaks: number[] } => {
   const bounds = [0, ...creases, topZ];
+  const travel = (lo: number, hi: number) => bladeTravel(b, hi) - bladeTravel(b, lo);
+  const total = travel(0, topZ);
   const heights: number[] = [0];
   const breaks: number[] = [];
   for (let s = 0; s < bounds.length - 1; s++) {
     const lo = bounds[s]!;
     const hi = bounds[s + 1]!;
-    const n = Math.max(3, Math.round((rows * (hi - lo)) / topZ));
-    const last = s === bounds.length - 2;
-    for (let k = 1; k <= n; k++) {
-      const f = k / n;
-      heights.push(lo + (hi - lo) * (last ? 1 - (1 - f) * (1 - f) : f));
-    }
-    if (!last) breaks.push(heights.length - 1);
+    const n = Math.max(3, Math.round((rows * travel(lo, hi)) / total));
+    heights.push(...bladeRowHeights(b, lo, hi, n).slice(1));
+    if (s < bounds.length - 2) breaks.push(heights.length - 1);
   }
   return { heights, breaks };
 };
 
 /**
- * Row heights with a raised rear's underside rows added below its corner
- * (raisedRearHeights), keeping the creases as breaks.
+ * Heights of the outline's points: where its edges turn hardest, at a corner or a
+ * smooth point with short handles (the owner's hooked tip). The blade stays smooth
+ * there; only the edge turns.
  */
-const withRaisedRear = (
-  b: PreparedBlade,
-  rowsAt: { heights: number[]; breaks: number[] },
-  rows: number,
-  topZ: number,
+const edgeCornerHeights = (b: PreparedBlade, topZ: number): number[] =>
+  [...new Set(b.design.outline.knots.slice(1, -1).map((k) => k.end.y))].filter(
+    (h) => h > 0 && h < topZ,
+  );
+
+/** Offsets (cm) of the extra rows either side of an outline point's height. */
+const CORNER_ROWS = [0.005, 0.01, 0.02, 0.035, 0.05, 0.075, 0.1, 0.15, 0.2, 0.3, 0.4];
+
+/**
+ * Rows packed tightly around each outline point's height. The surface stays smooth
+ * there, so the fit has to turn the edge's corner or tight bend between rows: packing
+ * them keeps that turn within a fraction of a millimetre of it. Creases (`breaks`) are
+ * kept.
+ */
+const withEdgeCornerRows = (
+  at: { heights: number[]; breaks: number[] },
+  corners: readonly number[],
 ): { heights: number[]; breaks: number[] } => {
-  const rear = raisedRearHeights(b, rows, topZ);
-  if (!rear.length) return rowsAt;
-  const corner = b.raisedRear!.cornerZ;
-  const creases = rowsAt.breaks.map((i) => rowsAt.heights[i]!);
-  const heights = [
-    ...new Set([
-      0,
-      ...rear,
-      ...creases.filter((h) => h < corner),
-      corner,
-      ...rowsAt.heights.filter((h) => h > corner),
-    ]),
-  ].sort((p, q) => p - q);
-  return { heights, breaks: creases.map((z) => heights.indexOf(z)) };
+  const top = at.heights[at.heights.length - 1]!;
+  const creases = at.breaks.map((i) => at.heights[i]!);
+  // The root too: where a raised rear's underside leaves the base, the trailing edge
+  // turns as sharply as at any corner.
+  const extra = [
+    ...CORNER_ROWS,
+    ...corners.flatMap((c) => [c, ...CORNER_ROWS.flatMap((o) => [c - o, c + o])]),
+  ];
+  const heights = [...new Set([...at.heights, ...extra.filter((h) => h > 0 && h < top)])].sort(
+    (p, q) => p - q,
+  );
+  // Drop rows closer than the tightest offset to a neighbour, but never a crease.
+  const kept: number[] = [];
+  for (const h of heights) {
+    const last = kept[kept.length - 1];
+    if (last === undefined || h - last >= CORNER_ROWS[0]! * 0.99 || creases.includes(h)) {
+      kept.push(h);
+    }
+  }
+  return { heights: kept, breaks: creases.map((z) => kept.indexOf(z)) };
 };
 
 const fitOnce = (
@@ -208,18 +228,24 @@ const fitOnce = (
   rows: number,
   stations: number,
 ): { surface: BSplineSurface; corners: number[]; grid: [number, number] } => {
-  const { heights, breaks } = withRaisedRear(
-    b,
-    rowHeights(creaseHeights(b, topZ), topZ, rows),
-    rows,
-    topZ,
+  const { heights, breaks } = withEdgeCornerRows(
+    rowHeights(b, creaseHeights(b, topZ), topZ, rows),
+    edgeCornerHeights(b, topZ),
   );
   const st = cosineStations(stations);
   // grid[r][c]: r around the section (u), c up the blade (v).
   const loops = heights.map((h) => sectionLoop(bladeSection(b, h, st)));
   const grid = loops[0]!.map((_, r) => loops.map((loop) => loop[r]!));
   const corners = loopCorners(stations);
-  const opts: SurfaceFitOptions = { uBreaks: corners, vBreaks: breaks };
+  // Parameters along the blade by how far the edges travel (as the rows are spaced), not
+  // averaged over every point of the section: most barely move where an edge runs nearly
+  // level, and would outvote it.
+  const t0 = bladeTravel(b, heights[0]!);
+  const span = bladeTravel(b, heights[heights.length - 1]!) - t0;
+  const vParams = heights.map((h, i) =>
+    i === 0 ? 0 : i === heights.length - 1 ? 1 : (bladeTravel(b, h) - t0) / span,
+  );
+  const opts: SurfaceFitOptions = { uBreaks: corners, vBreaks: breaks, vParams };
   const fitted = interpolateSurface(grid, opts);
   // The loop starts and ends on the same point, but the solve reproduces its two ends
   // only to rounding (~1e-15 cm). Close the seam exactly: STEP shares its edge.
@@ -273,21 +299,11 @@ export const bladeSurfaceDeviation = (
 ): number => {
   const fine = cosineStations(800);
   let worst = 0;
-  // A raised rear's underside rises little but runs far: slice it on its own.
-  const corner = b.raisedRear?.cornerZ ?? 0;
-  const under = Math.ceil(slices / 2);
-  for (let i = 0; i < under && corner > 0; i++) {
-    const z = (corner * (i + 0.5)) / under;
-    const truth = sectionLoop(bladeSection(b, z, fine));
-    for (let j = 0; j < around; j++) {
-      const u = (j + 0.5) / around;
-      const p = evalSurface(surface, u, vAtHeight(surface, u, z));
-      worst = Math.max(worst, distToPolyline(p, truth));
-    }
-  }
-  for (let i = 1; i <= slices; i++) {
-    // Odd fractions, so the slices fall between grid rows rather than on them.
-    const z = upTo * topZ * (1 - (1 - i / (slices + 1)) ** 2);
+  // Spaced like the rows (along the edges' travel), at the odd steps, so the slices
+  // fall between grid rows rather than on them.
+  const steps = bladeRowHeights(b, 0, upTo * topZ, 2 * (slices + 1));
+  for (let i = 1; i < steps.length - 1; i += 2) {
+    const z = steps[i]!;
     const truth = sectionLoop(bladeSection(b, z, fine));
     for (let j = 0; j < around; j++) {
       const u = (j + 0.5) / around;

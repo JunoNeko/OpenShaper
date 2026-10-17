@@ -53,10 +53,11 @@ describe.each(designs)('fitBladeSurface(%s)', (_, d) => {
     expect(m.corners).toHaveLength(3);
   });
 
-  it('creases up the blade at the outline corner', () => {
-    // The FinFoil outline has one sharp knot, on the trailing edge near the tip.
+  it('stays smooth up the blade past the outline corner', () => {
+    // The FinFoil outline has one sharp knot, on the trailing edge near the tip. The foil
+    // is laid over smoothed edges, so it no longer creases the blade all the way round.
     const { mults } = knotMultiplicities(s.vKnots);
-    expect(mults.slice(1, -1).filter((k) => k === s.vDegree)).toHaveLength(1);
+    expect(mults.slice(1, -1).filter((k) => k === s.vDegree)).toHaveLength(0);
   });
 });
 
