@@ -10,6 +10,7 @@ import {
   cosineStations,
   foilEdges,
   foilRange,
+  rootThickestFaces,
   prepareBlade,
   thicknessAt,
   type BladeSection,
@@ -287,5 +288,17 @@ describe('a cambered foil (not symmetric, not flat)', () => {
     near.outside.forEach((p, j) =>
       expect(p.y - near.inside[j]!.y).toBeGreaterThanOrEqual(FIN_MIN_THICKNESS - 1e-12),
     );
+  });
+});
+
+describe('rootThickestFaces', () => {
+  it.each(FIN_POSITIONS)('matches the built root section at its thickest (%s)', (position) => {
+    for (const d of [defaultFinDesign(position, 'left'), defaultFinDesign(position, 'right')]) {
+      const b = prepareBlade(d);
+      const s = bladeSection(b, 0, [stationOf(b, 0, b.thickestAt)]);
+      const f = rootThickestFaces(b);
+      expect(f.outside).toBeCloseTo(s.outside[0]!.y, 9);
+      expect(f.inside).toBeCloseTo(s.inside[0]!.y, 9);
+    }
   });
 });

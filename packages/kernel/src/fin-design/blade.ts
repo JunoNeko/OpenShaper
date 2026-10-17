@@ -427,6 +427,26 @@ const shapeThicknessAt = (d: FinDesign, u: number): number => {
 };
 
 /**
+ * The root section's outside and inside faces (blade-frame y, cm) at its thickest point:
+ * what the tab must sit between (fin-placement.ts). Worked out directly rather than by
+ * building the section: there the faces are the root foil's, scaled to the taper, and
+ * the smoothed edges (which make building a section costly, and every nudge rechecks
+ * this) don't change them.
+ */
+export const rootThickestFaces = (b: PreparedBlade): { outside: number; inside: number } => {
+  const m = FIN_MIN_THICKNESS;
+  const t = thicknessAt(b, 0);
+  const scale = b.shapeThickness > 0 ? Math.max(0, t - m) / b.shapeThickness : 0;
+  const [o, i] = shapeAt(b.design, b.thickestAt);
+  const symmetric = b.design.section.inside === null;
+  const y = (offset: number) => b.outward * offset * b.widen; // no slide at the root
+  return {
+    outside: y(o * scale + (symmetric ? m / 2 : m)),
+    inside: y(i * scale - (symmetric ? m / 2 : 0)),
+  };
+};
+
+/**
  * The fraction of the chord, from each edge, over which the foil is drawn back from the
  * smoothed edge to the real one. Inside it the smoothed edges set the foil, so a sharp
  * bend doesn't crease the blade across; at the edge itself it is the real foil edge,

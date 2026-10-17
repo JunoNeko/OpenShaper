@@ -20,7 +20,7 @@
  *
  * The frame is blade.ts's: the blade is fixed and the tab is placed under it.
  */
-import { bladeSection, prepareBlade } from './blade';
+import { prepareBlade, rootThickestFaces } from './blade';
 import { clearanceShortfall, rearClearance } from './fin-clearance';
 import { FIN_MAX_FRONT_OVERHANG, finOutward, finTabKind, type FinDesign } from './fin-design';
 import { FUTURES_TABS } from './futures-tab';
@@ -45,13 +45,12 @@ export const tabCentreY = (d: FinDesign): number =>
  * the root section's inside and outside faces where the foil is thickest.
  */
 export const lateralOffsetRange = (d: FinDesign): { min: number; max: number } => {
-  const b = prepareBlade(d);
-  const s = bladeSection(b, 0, [b.thickestAt]);
+  const faces = rootThickestFaces(prepareBlade(d));
   const c0 = defaultTabCentreY(d);
   const w = outwardOf(d);
   // Centre c = c0 − w·offset, so offset = w·(c0 − c) for each face's y.
-  const a = w * (c0 - s.inside[0]!.y);
-  const o = w * (c0 - s.outside[0]!.y);
+  const a = w * (c0 - faces.inside);
+  const o = w * (c0 - faces.outside);
   return { min: Math.min(a, o), max: Math.max(a, o) };
 };
 
