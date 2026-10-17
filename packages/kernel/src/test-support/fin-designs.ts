@@ -45,3 +45,26 @@ export const shiftFin = (d: FinDesign, dx: number): FinDesign => ({
   ...d,
   outline: mapSpline(d.outline, (p) => vec2(p.x + dx, p.y)),
 });
+
+/**
+ * The owner's round 2 test fin: a hooked tip whose trailing edge runs back to 54 mm
+ * behind the tab, then turns sharply forward and down 97 mm up (cm, from their
+ * `.fin.json`). Horizontal slices stretched edge to edge creased right across the blade
+ * at that turn.
+ */
+export const hookedTipDesign = (): FinDesign => {
+  const d = defaultFinDesign('side', 'left');
+  const k = (e: [number, number], p: [number, number], n: [number, number], c: boolean) =>
+    knot(vec2(e[0] / 10, e[1] / 10), vec2(p[0] / 10, p[1] / 10), vec2(n[0] / 10, n[1] / 10), c);
+  return {
+    ...d,
+    outline: splineFromKnots([
+      k([115.5, 0], [115.5, 0], [87.73, 55.95], false),
+      k([-25.05, 119.11], [31.16, 119.5], [-51.9, 118.92], true),
+      k([-54.18, 97.41], [-55.35, 97.6], [-21.38, 92.12], true),
+      k([-11.93, 58.06], [-13.88, 69.38], [-8.26, 36.9], true),
+      k([-34.17, 9.61], [-22.02, 21.86], [-21.47, 5.19], false),
+      k([0, 0], [-8.9, 2.41], [0, 0], false),
+    ]),
+  };
+};

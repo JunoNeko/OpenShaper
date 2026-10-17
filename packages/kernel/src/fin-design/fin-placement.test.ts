@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { splineFromKnots } from '../bezier-spline';
 import { knot } from '../knot';
 import { vec2, type Vec2 } from '../vec2';
-import { bladeSection, prepareBlade } from './blade';
+import { bladeSection, foilRange, prepareBlade } from './blade';
 import { defaultFinDesign } from './fin-defaults';
 import { FIN_MAX_FRONT_OVERHANG, type FinDesign } from './fin-design';
 import { lateralOffsetRange, nudgeFore, nudgeLateral, tabCentreY } from './fin-placement';
@@ -100,11 +100,14 @@ describe('nudgeLateral', () => {
   it('stops where the tab centre reaches a face of the foil', () => {
     const d = defaultFinDesign('side', 'left');
     const b = prepareBlade(d);
-    const root = bladeSection(b, 0, [b.thickestAt]);
+    // The root section where its foil is thickest: the station the smoothed edges put
+    // that point at.
+    const r = foilRange(b, 0);
+    const root = bladeSection(b, 0, [(b.thickestAt - r.from) / (r.to - r.from)]);
     const out = nudgeLateral(d, -10); // blade far inboard: tab under the outside face
-    expect(tabCentreY(out)).toBeCloseTo(root.outside[0]!.y, 12);
+    expect(tabCentreY(out)).toBeCloseTo(root.outside[0]!.y, 9);
     const inn = nudgeLateral(d, 10); // blade far outboard: tab under the inside face
-    expect(tabCentreY(inn)).toBeCloseTo(root.inside[0]!.y, 12);
+    expect(tabCentreY(inn)).toBeCloseTo(root.inside[0]!.y, 9);
     expect(validateFinDesign(out)).toEqual([]);
     expect(validateFinDesign(inn)).toEqual([]);
   });

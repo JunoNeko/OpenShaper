@@ -5,18 +5,23 @@
  * rocked onto the box's rear pin without its tail hitting the board. The outline is
  * one chain that comes down the trailing edge to that low point, then runs forward
  * and down along the underside to the base. Height falls all the way from the tip,
- * so the slicing needs nothing new; these tests prove it end to end. What is new is
- * the sections' shape below the low point: the foil runs over the full chord and is
- * cut off at the underside, so the underside has the foil's thickness (round 1).
+ * so the slicing needs nothing new; these tests prove it end to end. The foil is laid
+ * over smoothed edges (blade.ts), which below the low point run behind the underside:
+ * the foil is cut off at it, so the underside has the foil's thickness (rounds 1–2).
  */
 import { describe, expect, it } from 'vitest';
 import { value } from '../bezier-curve';
 import type { Vec2 } from '../vec2';
-import { RAISED_BASE_END, RAISED_LOW, raisedRearDesign } from '../test-support/fin-designs';
-import { FIN_POSITIONS, FIN_MIN_THICKNESS } from './fin-design';
+import {
+  RAISED_BASE_END,
+  RAISED_LOW,
+  hookedTipDesign,
+  raisedRearDesign,
+} from '../test-support/fin-designs';
+import { FIN_MIN_THICKNESS, FIN_POSITIONS } from './fin-design';
 import { defaultFinDesign } from './fin-defaults';
 import { finMesh } from './fin-mesh';
-import { bladeSection, chordAt, findRaisedRear, foilCut, prepareBlade, thicknessAt } from './blade';
+import { bladeSection, chordAt, findRaisedRear, prepareBlade } from './blade';
 import { BLADE_CI_TOLERANCE, bladeSurfaceDeviation, fitBladeSurface } from './blade-surface';
 import { splineExtremes } from './curve-shape';
 import type { FinDesign } from './fin-design';
@@ -87,7 +92,7 @@ describe('a raised rear', () => {
     }
   });
 
-  it('fits a blade surface within tolerance, creased at the sharp low point', () => {
+  it('fits a blade surface within tolerance, smooth past the sharp low point', () => {
     const m = fitBladeSurface(d);
     expect(bladeSurfaceDeviation(prepareBlade(d), m.surface, m.topZ, 31, 211)).toBeLessThanOrEqual(
       BLADE_CI_TOLERANCE,
@@ -98,11 +103,11 @@ describe('a raised rear', () => {
 describe('the underside of a raised rear', () => {
   const d = raisedRear();
   const b = prepareBlade(d);
-  const thick = (h: number, j: number) => {
+  const atTe = (h: number) => {
     const s = bladeSection(b, h);
+    const j = s.stations.length - 1;
     return Math.abs(s.outside[j]!.y - s.inside[j]!.y);
   };
-  const atTe = (h: number) => thick(h, bladeSection(b, h).stations.length - 1);
 
   it('is found where the outline turns up into the trailing edge', () => {
     const r = b.raisedRear!;
@@ -116,34 +121,15 @@ describe('the underside of a raised rear', () => {
     }
   });
 
-  it('has the foil’s thickness, thinning to the minimum at the low point', () => {
+  it('has the foil’s thickness, thinning toward the low point', () => {
+    // The foil runs over the smoothed trailing edge, well behind the underside, and is
+    // cut off at it: a real edge, not the 0.5 mm flap a slice ending there would give.
+    expect(atTe(0)).toBeGreaterThan(4 * FIN_MIN_THICKNESS);
     let last = Infinity;
-    for (const f of [0, 0.2, 0.4, 0.6, 0.8, 0.95]) {
+    for (const f of [0, 0.2, 0.4, 0.6, 0.8]) {
       const t = atTe(LOW.y * f);
       expect(t).toBeLessThan(last);
       last = t;
-    }
-    expect(atTe(0)).toBeGreaterThan(5 * FIN_MIN_THICKNESS); // a real edge, not 0.5 mm
-    expect(atTe(LOW.y)).toBeCloseTo(FIN_MIN_THICKNESS, 3);
-    expect(atTe(LOW.y * 0.999)).toBeCloseTo(atTe(LOW.y), 3); // continuous at the low point
-  });
-
-  it('keeps the taper’s thickness at the thickest point, below the low point too', () => {
-    for (const h of [0, 0.1, 0.3, 0.49]) {
-      const s = bladeSection(b, h);
-      const max = Math.max(...s.outside.map((p, j) => Math.abs(p.y - s.inside[j]!.y)));
-      // Sampled at the stations, so a hair under the true maximum.
-      expect(max).toBeLessThanOrEqual(
-        thicknessAt(b, h) / Math.cos((d.cant * Math.PI) / 180) + 1e-9,
-      );
-      expect(max).toBeGreaterThan(thicknessAt(b, h) * 0.99);
-    }
-  });
-
-  it('leaves the sections above the low point as they were', () => {
-    for (const h of [0.5, 1, 4]) {
-      const { leading, trailing } = chordAt(b, h);
-      expect(foilCut(b, h, leading, trailing)).toBe(1);
     }
   });
 
@@ -152,5 +138,52 @@ describe('the underside of a raised rear', () => {
     const zs = new Set<number>();
     for (let i = 2; i < m.blade.positions.length; i += 3) zs.add(m.blade.positions[i]!);
     expect([...zs].filter((z) => z > 0 && z < LOW.y).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('a hooked tip', () => {
+  const b = prepareBlade(hookedTipDesign());
+  /** The outside face's offset where it crosses x, at height h (cm). */
+  const outsideAt = (h: number, x: number): number => {
+    const s = bladeSection(b, h);
+    for (let j = 0; j < s.outside.length - 1; j++) {
+      const p = s.outside[j]!;
+      const q = s.outside[j + 1]!;
+      if ((p.x - x) * (q.x - x) <= 0 && p.x !== q.x) {
+        return p.y + ((q.y - p.y) * (x - p.x)) / (q.x - p.x);
+      }
+    }
+    return NaN;
+  };
+
+  it('is valid', () => expect(validateFinDesign(hookedTipDesign())).toEqual([]));
+
+  it('ends both edges at the minimum, hook and all', () => {
+    // Round 2 testing: cutting the foil off at the real edge bulged the trailing edge
+    // wherever it bent. Only a raised rear's underside keeps a thick edge.
+    const above = b.raisedRear!.cornerZ + 0.3;
+    for (let h = above; h < b.depth * 0.995; h += 0.1) {
+      const s = bladeSection(b, h, [0, 1]);
+      for (const j of [0, 1]) {
+        const w = Math.abs(s.outside[j]!.y - s.inside[j]!.y) * Math.cos(7 * (Math.PI / 180));
+        expect(w).toBeCloseTo(FIN_MIN_THICKNESS, 12);
+      }
+    }
+  });
+
+  it('has no crease across the blade where the trailing edge turns', () => {
+    // Before: the face bent at up to 19 /cm right at the turn (9.74 cm up), 3 cm behind
+    // the tab. Smoothing the edges the foil is laid over spreads that out. Within the
+    // last stretch before the edge (it is 5.4 cm back here) the face follows the edge's
+    // own sharp turn, so the edge can stay at the minimum.
+    const step = 0.01;
+    for (const x of [0.2, -2, -3]) {
+      const ys: number[] = [];
+      for (let h = 9.4; h <= 10.1; h += step) ys.push(outsideAt(h, x));
+      for (let i = 1; i < ys.length - 1; i++) {
+        const bend = Math.abs(ys[i - 1]! - 2 * ys[i]! + ys[i + 1]!) / (step * step);
+        expect(bend).toBeLessThan(4);
+      }
+    }
   });
 });

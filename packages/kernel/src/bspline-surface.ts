@@ -390,6 +390,12 @@ export interface SurfaceFitOptions {
   readonly uExponent?: number;
   /** Parameterization exponent along v (default centripetal). */
   readonly vExponent?: number;
+  /**
+   * Explicit parameters along v, one per column, from 0 to 1 ascending. Replaces the
+   * averaged ones: averaging lets the many points that barely move outvote the few
+   * that move far (a fin's trailing edge running along a nearly level underside).
+   */
+  readonly vParams?: readonly number[];
 }
 
 /**
@@ -474,7 +480,9 @@ export const interpolateSurface = (
   // points that are then interpolated along the length.
   // Creases along v split each row into strips exactly as along u, below. Without
   // any, this is one strip: averaged knots over the whole row, solved in one go.
-  const vParams = averageParams(grid.map((row) => pointParams(row, opts.vExponent ?? CENTRIPETAL)));
+  const vParams =
+    opts.vParams ??
+    averageParams(grid.map((row) => pointParams(row, opts.vExponent ?? CENTRIPETAL)));
   const vBreaks = (opts.vBreaks ?? []).filter((b) => b > 0 && b < cols - 1);
   const { ctrl: intermediate, knots: vKnots } = interpolateStrips(grid, vParams, vDegree, vBreaks);
 

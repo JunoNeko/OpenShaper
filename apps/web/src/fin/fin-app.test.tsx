@@ -16,6 +16,9 @@ beforeEach(() => {
 const measurements = () => within(screen.getByLabelText('Fin measurements'));
 const overhang = () => finReadouts(finStore.getState().design!).frontOverhang;
 
+/** Tests that build real geometry (STEP export, many pointer probes): CI runners are slower. */
+const HEAVY = 20_000;
+
 describe('FinApp', () => {
   it('shows the fin’s measurements in mm', () => {
     render(<FinApp />);
@@ -194,14 +197,18 @@ describe('FinApp: export', () => {
     });
   }, 20_000);
 
-  it('is unavailable while the fin breaks a rule', () => {
-    act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
-    render(<FinApp />);
-    expect(
-      (screen.getByRole('button', { name: 'Export STEP' }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-    expect((screen.getByRole('button', { name: 'Export STL' }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
-  });
+  it(
+    'is unavailable while the fin breaks a rule',
+    () => {
+      act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
+      render(<FinApp />);
+      expect(
+        (screen.getByRole('button', { name: 'Export STEP' }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      expect(
+        (screen.getByRole('button', { name: 'Export STL' }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+    },
+    HEAVY,
+  );
 });

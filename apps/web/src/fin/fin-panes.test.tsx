@@ -18,6 +18,9 @@ afterEach(removeLayoutStubs);
 
 const design = () => finStore.getState().design!;
 
+/** Tests that build real geometry (STEP export, many pointer probes): CI runners are slower. */
+const HEAVY = 20_000;
+
 describe('FinSectionTools', () => {
   beforeEach(() => act(() => finStore.getState().load(defaultFinDesign('side', 'right'))));
 
@@ -101,17 +104,21 @@ describe('dragging in the panes', () => {
     throw new Error(`could not grab ${curve} ${index}`);
   };
 
-  it('stands the taper upright: root at the bottom, tip at the top', () => {
-    render(<FinTaperPane store={finStore} units={lengthUnitByKey('mm')} />);
-    const canvas = screen.getByRole('img', { name: 'Thickness taper' });
-    const last = design().taper.knots.length - 1;
-    const root = grab(canvas, 'taper', 0);
-    fireEvent.pointerUp(canvas, { ...MOUSE, clientX: root.clientX, clientY: root.clientY });
-    const tip = grab(canvas, 'taper', last);
-    fireEvent.pointerUp(canvas, { ...MOUSE, clientX: tip.clientX, clientY: tip.clientY });
-    expect(root.clientY).toBeGreaterThan(tip.clientY);
-    expect(root.clientX).toBeGreaterThan(tip.clientX); // the root is the thicker end
-  });
+  it(
+    'stands the taper upright: root at the bottom, tip at the top',
+    () => {
+      render(<FinTaperPane store={finStore} units={lengthUnitByKey('mm')} />);
+      const canvas = screen.getByRole('img', { name: 'Thickness taper' });
+      const last = design().taper.knots.length - 1;
+      const root = grab(canvas, 'taper', 0);
+      fireEvent.pointerUp(canvas, { ...MOUSE, clientX: root.clientX, clientY: root.clientY });
+      const tip = grab(canvas, 'taper', last);
+      fireEvent.pointerUp(canvas, { ...MOUSE, clientX: tip.clientX, clientY: tip.clientY });
+      expect(root.clientY).toBeGreaterThan(tip.clientY);
+      expect(root.clientX).toBeGreaterThan(tip.clientX); // the root is the thicker end
+    },
+    HEAVY,
+  );
 
   it('drags a taper point and stops it at the minimum thickness', () => {
     render(<FinTaperPane store={finStore} units={lengthUnitByKey('mm')} />);

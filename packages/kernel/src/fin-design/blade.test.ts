@@ -5,15 +5,16 @@ import { DEG_TO_RAD, RAD_TO_DEG } from '../constants';
 import { knot } from '../knot';
 import { lerp, vec2, type Vec2 } from '../vec2';
 import {
-  FIN_EDGE_BLEND,
   bladeSection,
-  padThickness,
-  unpadThickness,
   chordAt,
   cosineStations,
+  foilEdges,
+  foilRange,
+  rootThickestFaces,
   prepareBlade,
   thicknessAt,
   type BladeSection,
+  type PreparedBlade,
 } from './blade';
 import { defaultFinDesign, defaultTaper } from './fin-defaults';
 import { FIN_MIN_THICKNESS, FIN_POSITIONS, type FinDesign } from './fin-design';
@@ -39,48 +40,70 @@ const widths = (s: BladeSection): number[] =>
 const heights = (b: ReturnType<typeof prepareBlade>) =>
   [0, 0.1, 0.25, 0.5, 0.7, 0.85, 0.95, 1].map((f) => f * b.depth);
 
-describe('padThickness', () => {
-  const m = FIN_MIN_THICKNESS;
-  const k = FIN_EDGE_BLEND;
-  const slope = (t: number) => (padThickness(t + 1e-7) - padThickness(t - 1e-7)) / 2e-7;
+/** The station (actual chord fraction) where the foil's fraction `f` falls at height `h`. */
+const stationOf = (b: PreparedBlade, h: number, f: number): number => {
+  const r = foilRange(b, h);
+  return (f - r.from) / (r.to - r.from);
+};
 
-  it('leaves the foil alone a blend or more above the minimum', () => {
-    expect(padThickness(m + k)).toBe(m + k);
-    expect(padThickness(0.8)).toBe(0.8);
+describe('minimum thickness', () => {
+  const b = prepareBlade({ ...defaultFinDesign('side', 'left'), cant: 0 });
+
+  it('ends both edges at exactly the minimum', () => {
+    const s = bladeSection(b, b.depth * 0.3);
+    const w = widths(s);
+    expect(w[0]).toBeCloseTo(FIN_MIN_THICKNESS, 12);
+    expect(w[w.length - 1]).toBeCloseTo(FIN_MIN_THICKNESS, 12);
   });
 
-  it('pads nothing to exactly the minimum', () => {
-    expect(padThickness(0)).toBe(m);
-  });
-
-  it('never goes below the minimum, and rises steadily', () => {
-    let last = 0;
-    for (let t = 0; t < m + k + 0.01; t += 0.0005) {
-      const p = padThickness(t);
-      expect(p).toBeGreaterThanOrEqual(m);
-      expect(p).toBeGreaterThanOrEqual(last);
-      last = p;
-    }
-  });
-
-  it('has no corner: its slope is continuous everywhere, including at the minimum', () => {
-    // A plain max(t, m) jumps from slope 0 to 1 at t = m.
-    for (let t = 0.0002; t < m + k + 0.01; t += 0.0005) {
-      expect(Math.abs(slope(t + 0.0001) - slope(t))).toBeLessThan(0.02);
+  it('keeps the faces convex right to the edges: no parallel-sided run', () => {
+    // Round 2 testing: padding only where the foil was thin left the last few percent
+    // of the chord flat. Now the outside face keeps bending the same way to the edge.
+    const s = bladeSection(b, b.depth * 0.3, cosineStations(400));
+    const y = s.outside.map((p) => p.y);
+    const x = s.outside.map((p) => p.x);
+    for (let j = s.stations.length - 60; j < s.stations.length - 2; j++) {
+      const slopeA = (y[j + 1]! - y[j]!) / (x[j + 1]! - x[j]!);
+      const slopeB = (y[j + 2]! - y[j + 1]!) / (x[j + 2]! - x[j + 1]!);
+      expect(Math.abs(slopeA)).toBeGreaterThan(1e-4); // still thinning, not flat
+      expect(slopeB).toBeGreaterThanOrEqual(slopeA - 1e-9); // and bending one way (x falls)
     }
   });
 });
 
-describe('unpadThickness', () => {
-  it('undoes padThickness', () => {
-    for (const t of [0.001, 0.01, 0.03, 0.05, 0.07, 0.099, 0.2]) {
-      expect(padThickness(unpadThickness(padThickness(t)))).toBeCloseTo(padThickness(t), 14);
-      expect(unpadThickness(padThickness(t))).toBeCloseTo(t, 6);
+describe('smoothed edges', () => {
+  // Straight leading and trailing edges meeting at a sharp tip.
+  const straight: FinDesign = {
+    ...defaultFinDesign('side', 'left'),
+    cant: 0,
+    outline: polyline([vec2(10, 0), vec2(-2, 8), vec2(0, 0)]),
+  };
+
+  it('are the real edges wherever those are straight, whatever their slope', () => {
+    const e = foilEdges(prepareBlade(straight));
+    for (let i = 0; i < e.heights.length; i++) {
+      expect(e.foilLeading[i]).toBeCloseTo(e.leading[i]!, 9);
+      expect(e.foilTrailing[i]).toBeCloseTo(e.trailing[i]!, 9);
     }
   });
 
-  it('is 0 at the minimum, so a tip section is a uniform slab', () => {
-    expect(unpadThickness(FIN_MIN_THICKNESS)).toBe(0);
+  it.each(FIN_POSITIONS)('never lie inside the blade (default %s)', (position) => {
+    const e = foilEdges(prepareBlade(defaultFinDesign(position)));
+    for (let i = 0; i < e.heights.length; i++) {
+      expect(e.foilLeading[i]).toBeGreaterThanOrEqual(e.leading[i]!);
+      expect(e.foilTrailing[i]).toBeLessThanOrEqual(e.trailing[i]!);
+    }
+  });
+
+  it.each(FIN_POSITIONS)('hardly move the edges of the default %s', (position) => {
+    // Below the tip, where the edges curve gently; at the tip they close sharply, and
+    // the smoothing rounds them more by design.
+    const b = prepareBlade(defaultFinDesign(position));
+    const e = foilEdges(b);
+    for (let i = 0; e.heights[i]! <= 0.9 * b.depth; i++) {
+      expect(e.foilLeading[i]! - e.leading[i]!).toBeLessThan(0.05); // 0.5 mm
+      expect(e.trailing[i]! - e.foilTrailing[i]!).toBeLessThan(0.2); // 2 mm
+    }
   });
 });
 
@@ -125,10 +148,9 @@ describe.each(FIN_POSITIONS)('bladeSection(default %s)', (position) => {
 
   it('is exactly the taper thickness at the thickest point', () => {
     for (const h of heights(flat)) {
-      const s = bladeSection(flat, h, [flat.thickestAt]);
+      const s = bladeSection(flat, h, [stationOf(flat, h, flat.thickestAt)]);
       const t = thicknessAt(flat, h);
-      // Padding only applies where the taper itself is under the minimum.
-      expect(widths(s)[0]).toBeCloseTo(Math.max(t, FIN_MIN_THICKNESS), 12);
+      expect(widths(s)[0]).toBeCloseTo(Math.max(t, FIN_MIN_THICKNESS), 9);
     }
   });
 
@@ -170,14 +192,14 @@ describe.each(FIN_POSITIONS)('bladeSection(default %s)', (position) => {
 });
 
 describe('section faces', () => {
-  it('keeps a flat inside face flat, padding only the outside', () => {
+  it('keeps a flat inside face flat, adding the minimum to the outside', () => {
     const b = prepareBlade({ ...defaultFinDesign('side', 'left'), cant: 0 });
     for (const h of heights(b)) {
       for (const p of bladeSection(b, h).inside) expect(p.y).toBe(0);
     }
   });
 
-  it('keeps a symmetric foil symmetric, padding both ways', () => {
+  it('keeps a symmetric foil symmetric, adding the minimum both ways', () => {
     const b = prepareBlade(defaultFinDesign('centre'));
     for (const h of heights(b)) {
       const s = bladeSection(b, h);
@@ -188,10 +210,11 @@ describe('section faces', () => {
   it('puts the thickest point where the shape is thickest, at every height', () => {
     // Flat inside face: the section is thickest where the outside face peaks.
     const b = prepareBlade(defaultFinDesign('side'));
-    const s = bladeSection(b, b.depth / 4, cosineStations(400));
+    const h = b.depth / 4;
+    const s = bladeSection(b, h, cosineStations(400));
     const w = widths(s);
     const j = w.indexOf(Math.max(...w));
-    expect(Math.abs(s.stations[j]! - b.thickestAt)).toBeLessThan(0.01);
+    expect(Math.abs(s.stations[j]! - stationOf(b, h, b.thickestAt))).toBeLessThan(0.01);
   });
 
   it('scales a thinner taper without changing the chord', () => {
@@ -199,9 +222,13 @@ describe('section faces', () => {
     const thin = prepareBlade({ ...d, cant: 0, taper: defaultTaper(0.4) });
     const thick = prepareBlade({ ...d, cant: 0, taper: defaultTaper(0.8) });
     const h = thick.depth * 0.3;
-    const a = bladeSection(thin, h, [thin.thickestAt]);
-    const c = bladeSection(thick, h, [thick.thickestAt]);
-    expect(widths(c)[0]! / widths(a)[0]!).toBeCloseTo(2, 12);
+    const a = bladeSection(thin, h, [stationOf(thin, h, thin.thickestAt)]);
+    const c = bladeSection(thick, h, [stationOf(thick, h, thick.thickestAt)]);
+    // Twice the taper, twice the thickness there: the minimum is part of it, not extra.
+    expect(widths(c)[0]! / widths(a)[0]!).toBeCloseTo(
+      thicknessAt(thick, h) / thicknessAt(thin, h),
+      12,
+    );
     expect(a.leadingX).toBe(c.leadingX);
     expect(a.trailingX).toBe(c.trailingX);
   });
@@ -227,7 +254,7 @@ describe('cant', () => {
   it.each([7, 20])('keeps the true thickness at the taper value at %s°', (cant) => {
     const b = prepareBlade({ ...base, cant });
     const h = b.depth * 0.4;
-    const s = bladeSection(b, h, [b.thickestAt]);
+    const s = bladeSection(b, h, [stationOf(b, h, b.thickestAt)]);
     // Horizontal width × cos(cant) = thickness square to the leaning blade.
     expect(widths(s)[0]! * Math.cos(cant * DEG_TO_RAD)).toBeCloseTo(thicknessAt(b, h), 12);
   });
@@ -254,12 +281,24 @@ describe('a cambered foil (not symmetric, not flat)', () => {
 
   it('is valid', () => expect(validateFinDesign(d)).toEqual([]));
 
-  it('pads only the outside, leaving the inside face as drawn', () => {
+  it('adds the minimum to the outside only, leaving the inside face as drawn', () => {
     const b = prepareBlade(d);
-    const near = bladeSection(b, b.depth * 0.999); // all padding up here
+    const near = bladeSection(b, b.depth * 0.999); // nearly all minimum up here
     for (const p of near.inside) expect(p.y).toBeLessThanOrEqual(0);
     near.outside.forEach((p, j) =>
       expect(p.y - near.inside[j]!.y).toBeGreaterThanOrEqual(FIN_MIN_THICKNESS - 1e-12),
     );
+  });
+});
+
+describe('rootThickestFaces', () => {
+  it.each(FIN_POSITIONS)('matches the built root section at its thickest (%s)', (position) => {
+    for (const d of [defaultFinDesign(position, 'left'), defaultFinDesign(position, 'right')]) {
+      const b = prepareBlade(d);
+      const s = bladeSection(b, 0, [stationOf(b, 0, b.thickestAt)]);
+      const f = rootThickestFaces(b);
+      expect(f.outside).toBeCloseTo(s.outside[0]!.y, 9);
+      expect(f.inside).toBeCloseTo(s.inside[0]!.y, 9);
+    }
   });
 });

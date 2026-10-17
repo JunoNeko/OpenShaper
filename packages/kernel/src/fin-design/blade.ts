@@ -5,32 +5,35 @@
  *
  * At height h above the tab top, a section is built from:
  * - **chord:** where the line y = h crosses the outline (leading and trailing edge);
- * - **shape:** the section faces, stretched along that chord;
+ * - **shape:** the section faces, stretched along a chord (see "Smoothed edges");
  * - **thickness:** the taper at h / depth. The section is scaled so its thickest point
  *   is exactly that thick. The outline sets the chord, the taper the thickness;
  *   neither scales the other.
  *
  * Then two adjustments:
- * - **Minimum thickness:** nowhere thinner than {@link FIN_MIN_THICKNESS}. Where the
- *   scaled foil is thinner (the edges, and everywhere near the tip), it is padded:
- *   - a symmetric foil grows equally both ways, so it stays symmetric;
- *   - any other foil grows on the outside only, so a flat inside face stays flat.
- *   The padding blends in (see {@link padThickness}) rather than switching on, so the
- *   faces stay smooth where the foil runs down to the minimum: a plain max(t, min)
- *   left a visible crease along the trailing edge and at the tip. The section is
- *   scaled so that, padded, its thickest point is the taper's thickness.
+ * - **Minimum thickness:** nowhere thinner than {@link FIN_MIN_THICKNESS}. The foil is
+ *   scaled to the taper's thickness less the minimum, then the minimum is added all the
+ *   way along: symmetric foils half to each face, so they stay symmetric; any other foil
+ *   to the outside, so a flat inside face stays flat. The faces stay as convex as the
+ *   foil right to the edges, which end exactly at the minimum, with no parallel-sided
+ *   run (round 2 testing: padding only where the foil was thin left flat ends).
  * - **Cant:** the blade leans out by sliding each section sideways, h·tan(cant). The
  *   sections stay horizontal, so the root sits exactly on the flat tab top (see "Cant
  *   as a lean of horizontal sections" in the design doc). A horizontal slice of a
  *   leaning blade is wider than the blade is thick, so lateral offsets are divided by
  *   cos(cant); the thickness measured square to the blade is then the taper value.
  *
- * A raised rear (the base running on behind the tab, lifted clear of the board, see
- * {@link RaisedRear}) changes only the sections below its top. Their trailing edge is
- * on its underside, but the foil isn't squeezed into that short chord: it runs over the
- * full chord the base would have had and is cut off at the underside. The cut ends,
- * one per section, make the underside, so it has the foil's real thickness there rather
- * than being a 0.5 mm trailing edge (round 1 testing).
+ * **Smoothed edges.** Stretching the foil from the leading to the trailing edge of
+ * each slice ties every point of it to both edges: wherever an edge bends sharply
+ * (a hooked tip, the underside of a raised rear), the whole slice shifts at once and the
+ * blade creases right across. So the foil is laid over smoothed copies of the edges
+ * instead ({@link foilEdges}): never inside the blade, smoothed over about
+ * {@link FIN_EDGE_SMOOTHING} of the chord, and equal to the real edge wherever that is
+ * straight or bends gently. Over the last {@link FIN_EDGE_PIN} of the chord at each edge
+ * the foil is drawn back to the real edge, so edges still end at the minimum; a sharp
+ * bend only reshapes the blade near that edge. The exception is a raised rear's
+ * underside ({@link RaisedRear}): there the foil is cut off at the underside instead,
+ * so it has the foil's real thickness rather than being a 0.5 mm flap (round 1).
  *
  * Frame (cm): the fin stands on its tab, as on a board turned deck-down.
  * - X runs along the tab toward its front (the nose), as in the outline.
@@ -78,16 +81,12 @@ export interface PreparedBlade {
  * The underside of a raised rear: the end of the outline, walking back from the
  * trailing-edge root, while it runs backward and rises at under 45°. Steeper than that
  * it is the trailing edge. Where it ends (`corner`) the trailing edge proper starts.
+ * Below the corner the trailing edge keeps the foil's thickness (see
+ * {@link bladeSection}); everywhere else it is the minimum.
  */
 export interface RaisedRear {
   readonly cornerX: number;
   readonly cornerZ: number;
-  /**
-   * dx/dz of the trailing edge just above the corner. Below the corner the full chord
-   * ends on this line, the trailing edge carried on down, so the sections' shape runs
-   * smoothly through the corner height.
-   */
-  readonly slope: number;
 }
 
 /** Samples per segment when walking the underside. */
@@ -123,8 +122,7 @@ export const findRaisedRear = (outline: Spline): RaisedRear | null => {
         // The previous sample was the start of the segment after: the corner is the knot.
         const corner = value(k[seg]!, 1);
         if (corner.y <= 0) return null;
-        const up = dir(seg, 1);
-        return { cornerX: corner.x, cornerZ: corner.y, slope: up.z > 0 ? up.x / up.z : 0 };
+        return { cornerX: corner.x, cornerZ: corner.y };
       }
       for (let i = 0; i < 50; i++) {
         const mid = (lo + hi) / 2;
@@ -134,8 +132,7 @@ export const findRaisedRear = (outline: Spline): RaisedRear | null => {
       }
       const corner = value(k[seg]!, hi);
       if (corner.y <= 0) return null;
-      const up = dir(seg, hi);
-      return { cornerX: corner.x, cornerZ: corner.y, slope: up.z > 0 ? up.x / up.z : 0 };
+      return { cornerX: corner.x, cornerZ: corner.y };
     }
   }
   return null;
@@ -222,83 +219,6 @@ export const prepareBlade = (d: FinDesign): PreparedBlade => {
   };
 };
 
-/**
- * The fraction of the foil's chord a section at height `h` keeps: below a raised rear's
- * corner the foil runs on past the trailing edge to the carried-down trailing-edge
- * line, and is cut off at the trailing edge (see {@link RaisedRear}). 1 elsewhere.
- */
-export const foilCut = (b: PreparedBlade, h: number, leading: number, trailing: number): number => {
-  const r = b.raisedRear;
-  if (!r || h >= r.cornerZ) return 1;
-  const end = r.cornerX + (h - r.cornerZ) * r.slope;
-  const cut = (trailing - leading) / (end - leading);
-  return cut > 0 && cut < 1 ? cut : 1;
-};
-
-/**
- * Extra section heights for a raised rear's underside, strictly between the root and
- * the corner: there the trailing edge runs along the underside, much further than the
- * height it climbs, so rows spaced by height would leave it a facet or two. Spaced so
- * the underside gets about as many as the same length of trailing edge would.
- */
-export const raisedRearHeights = (b: PreparedBlade, rows: number, top: number): number[] => {
-  const r = b.raisedRear;
-  if (!r) return [];
-  const root = b.design.outline.knots[b.design.outline.knots.length - 1]!.end;
-  const length = Math.hypot(r.cornerX - root.x, r.cornerZ - root.y);
-  const n = Math.max(4, Math.ceil((rows * length) / top));
-  return Array.from({ length: n - 1 }, (_, k) => (r.cornerZ * (k + 1)) / n);
-};
-
-/** The shape's thickness (in chords) at chord fraction u. */
-const shapeThicknessAt = (d: FinDesign, u: number): number => {
-  const [o, i] = shapeAt(d, u);
-  return o - i;
-};
-
-/**
- * Thickness band (cm) over which the minimum-thickness padding blends in: the foil is
- * untouched where it is at least this much thicker than the minimum. Equal to the
- * minimum, so a foil scaled to nothing pads to exactly the minimum (see
- * {@link unpadThickness}).
- */
-export const FIN_EDGE_BLEND = FIN_MIN_THICKNESS;
-
-/**
- * A foil thickness `t` (cm, ≥ 0) padded to the minimum, smoothly: a polynomial smooth
- * maximum of `t` and {@link FIN_MIN_THICKNESS} over {@link FIN_EDGE_BLEND}, curvature
- * continuous where it starts. It equals `t` from the minimum plus the blend up, is never
- * below the minimum, rises steadily with `t`, and is exactly the minimum at `t` = 0.
- */
-export const padThickness = (t: number): number => {
-  const m = FIN_MIN_THICKNESS;
-  const k = FIN_EDGE_BLEND;
-  const h = Math.max(k - Math.abs(t - m), 0) / k;
-  return Math.max(t, m) + (h * h * h * k) / 6;
-};
-
-/**
- * The foil thickness (cm, ≥ 0) that {@link padThickness} turns into `padded`: the
- * section is scaled to this, so after padding its thickest point is exactly the taper's
- * thickness. At the minimum it is 0 (the section is a uniform minimum-thickness slab,
- * as at the tip), so the padding blends smoothly all the way up the blade instead of
- * switching to a plain max, which creased the tip.
- */
-export const unpadThickness = (padded: number): number => {
-  const m = FIN_MIN_THICKNESS;
-  if (padded <= m) return 0;
-  if (padded >= m + FIN_EDGE_BLEND) return padded;
-  // padThickness rises steadily on [0, m + blend]: bisect.
-  let lo = 0;
-  let hi = m + FIN_EDGE_BLEND;
-  for (let i = 0; i < 60; i++) {
-    const mid = (lo + hi) / 2;
-    if (padThickness(mid) < padded) lo = mid;
-    else hi = mid;
-  }
-  return (lo + hi) / 2;
-};
-
 /** Leading- and trailing-edge x where the outline is `h` above the tab top. */
 export const chordAt = (b: PreparedBlade, h: number): { leading: number; trailing: number } => {
   if (!(h >= 0 && h <= b.depth)) {
@@ -318,6 +238,255 @@ export const chordAt = (b: PreparedBlade, h: number): { leading: number; trailin
 export const thicknessAt = (b: PreparedBlade, h: number): number =>
   yAtX(b.design.taper, Math.min(1, Math.max(0, h / b.depth)));
 
+/**
+ * How widely each edge is smoothed, as a fraction of the chord at that height: 0.05 is
+ * 5 mm on a 100 mm chord. Scaled by the chord, so near the tip, where the chord closes,
+ * the smoothed edges hug the real ones.
+ */
+export const FIN_EDGE_SMOOTHING = 0.05;
+
+/** The narrowest smoothing (cm), so it never shrinks below a few samples. */
+const MIN_SMOOTHING = 0.02;
+
+/** Heights the edges are sampled at for smoothing and row spacing. */
+const EDGE_SAMPLES = 1200;
+
+/**
+ * Both edges sampled up the blade: the real ones (`leading`, `trailing`), the smoothed
+ * ones the foil is laid over (`foilLeading`, `foilTrailing`), and `travel`, the running
+ * total of height plus how far both edges have moved, which spaces sections evenly
+ * along the edges rather than the height ({@link bladeRowHeights}).
+ */
+export interface FoilEdges {
+  readonly heights: Float64Array;
+  readonly leading: Float64Array;
+  readonly trailing: Float64Array;
+  readonly foilLeading: Float64Array;
+  readonly foilTrailing: Float64Array;
+  readonly travel: Float64Array;
+}
+
+const edgesCache = new WeakMap<PreparedBlade, FoilEdges>();
+
+/**
+ * One edge, smoothed: a local straight-line fit, Gaussian-weighted over `sigma[i]` either
+ * side (exact for a straight edge, whatever its slope), then moved outward by however
+ * far it cut inside the real edge nearby, so the foil never ends inside the blade.
+ * `out` is +1 where outward is +x (the leading edge on a fin facing +x), −1 otherwise.
+ */
+const smoothEdge = (
+  hs: Float64Array,
+  xs: Float64Array,
+  sigma: Float64Array,
+  out: 1 | -1,
+): Float64Array => {
+  const n = hs.length;
+  const window = (i: number): [number, number] => {
+    const reach = 3 * sigma[i]!;
+    let a = i;
+    let b = i;
+    while (a > 0 && hs[i]! - hs[a - 1]! <= reach) a--;
+    while (b < n - 1 && hs[b + 1]! - hs[i]! <= reach) b++;
+    return [a, b];
+  };
+  const weight = (i: number, j: number) => {
+    const d = (hs[j]! - hs[i]!) / sigma[i]!;
+    return Math.exp(-0.5 * d * d);
+  };
+  // The local line fit at each sample.
+  const fit = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const [a, b] = window(i);
+    let sw = 0;
+    let sh = 0;
+    let sx = 0;
+    let shh = 0;
+    let shx = 0;
+    for (let j = a; j <= b; j++) {
+      const w = weight(i, j);
+      const dh = hs[j]! - hs[i]!;
+      sw += w;
+      sh += w * dh;
+      sx += w * xs[j]!;
+      shh += w * dh * dh;
+      shx += w * dh * xs[j]!;
+    }
+    const det = sw * shh - sh * sh;
+    fit[i] = det > 1e-18 ? (sx * shh - sh * shx) / det : xs[i]!;
+  }
+  // How far inside the real edge the fit is, spread over its neighbourhood (the most in
+  // reach of each sample, then a weighted average of that), so the push back out is
+  // smooth too and at least as large as the cut at every sample.
+  const inside = Float64Array.from(fit, (f, i) => Math.max(0, out * (xs[i]! - f)));
+  const reachMax = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const [a, b] = window(i);
+    let m = 0;
+    for (let j = a; j <= b; j++) m = Math.max(m, inside[j]!);
+    reachMax[i] = m;
+  }
+  const smoothed = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const [a, b] = window(i);
+    let sw = 0;
+    let sm = 0;
+    for (let j = a; j <= b; j++) {
+      const w = weight(i, j);
+      sw += w;
+      sm += w * reachMax[j]!;
+    }
+    const x = fit[i]! + out * (sw > 0 ? sm / sw : 0);
+    // Never inside the blade, even where the spread falls a hair short.
+    smoothed[i] = out > 0 ? Math.max(x, xs[i]!) : Math.min(x, xs[i]!);
+  }
+  return smoothed;
+};
+
+/** Both edges up the blade, real and smoothed (see {@link FoilEdges}). Cached per blade. */
+export const foilEdges = (b: PreparedBlade): FoilEdges => {
+  const hit = edgesCache.get(b);
+  if (hit) return hit;
+  const n = EDGE_SAMPLES;
+  const heights = new Float64Array(n + 1);
+  const leading = new Float64Array(n + 1);
+  const trailing = new Float64Array(n + 1);
+  const sigma = new Float64Array(n + 1);
+  for (let i = 0; i <= n; i++) {
+    const h = (b.depth * i) / n;
+    const c = chordAt(b, h);
+    heights[i] = h;
+    leading[i] = c.leading;
+    trailing[i] = c.trailing;
+    sigma[i] = Math.max(MIN_SMOOTHING, FIN_EDGE_SMOOTHING * Math.abs(c.leading - c.trailing));
+  }
+  // Forward is toward the leading edge: +x on every fin the designer makes, but
+  // worked out rather than assumed.
+  const fwd: 1 | -1 = leading[0]! >= trailing[0]! ? 1 : -1;
+  const foilLeading = smoothEdge(heights, leading, sigma, fwd);
+  const foilTrailing = smoothEdge(heights, trailing, sigma, fwd === 1 ? -1 : 1);
+  const travel = new Float64Array(n + 1);
+  for (let i = 1; i <= n; i++) {
+    travel[i] =
+      travel[i - 1]! +
+      (heights[i]! - heights[i - 1]!) +
+      Math.abs(leading[i]! - leading[i - 1]!) +
+      Math.abs(trailing[i]! - trailing[i - 1]!);
+  }
+  const edges = { heights, leading, trailing, foilLeading, foilTrailing, travel };
+  edgesCache.set(b, edges);
+  return edges;
+};
+
+/** Linear interpolation in a column of {@link FoilEdges} at height `h`. */
+const edgeAt = (e: FoilEdges, col: Float64Array, h: number): number => {
+  const n = e.heights.length - 1;
+  const f = Math.min(n, Math.max(0, (h / e.heights[n]!) * n));
+  const i = Math.min(n - 1, Math.floor(f));
+  return col[i]! + (col[i + 1]! - col[i]!) * (f - i);
+};
+
+/** How far the edges have travelled from the root to height `h` (see {@link FoilEdges}). */
+export const bladeTravel = (b: PreparedBlade, h: number): number => {
+  const e = foilEdges(b);
+  return edgeAt(e, e.travel, h);
+};
+
+/**
+ * Section heights from `lo` to `hi` (cm), `count` steps, spaced evenly in how far the
+ * edges travel rather than in height: where an edge runs nearly level (a raised rear's
+ * underside, a hooked tip) it moves far for little height, and gets sections to match.
+ * The tip, where both edges close in, gathers them too.
+ */
+export const bladeRowHeights = (
+  b: PreparedBlade,
+  lo: number,
+  hi: number,
+  count: number,
+): number[] => {
+  const e = foilEdges(b);
+  const t0 = edgeAt(e, e.travel, lo);
+  const t1 = edgeAt(e, e.travel, hi);
+  const out: number[] = [lo];
+  let i = 0;
+  for (let k = 1; k < count; k++) {
+    const target = t0 + ((t1 - t0) * k) / count;
+    while (i < e.travel.length - 2 && e.travel[i + 1]! < target) i++;
+    const a = e.travel[i]!;
+    const c = e.travel[i + 1]!;
+    const h = e.heights[i]! + ((e.heights[i + 1]! - e.heights[i]!) * (target - a)) / (c - a || 1);
+    out.push(Math.min(hi, Math.max(lo, h)));
+  }
+  out.push(hi);
+  return out;
+};
+
+/** The shape's thickness (in chords) at chord fraction u. */
+const shapeThicknessAt = (d: FinDesign, u: number): number => {
+  const [o, i] = shapeAt(d, u);
+  return o - i;
+};
+
+/**
+ * The root section's outside and inside faces (blade-frame y, cm) at its thickest point:
+ * what the tab must sit between (fin-placement.ts). Worked out directly rather than by
+ * building the section: there the faces are the root foil's, scaled to the taper, and
+ * the smoothed edges (which make building a section costly, and every nudge rechecks
+ * this) don't change them.
+ */
+export const rootThickestFaces = (b: PreparedBlade): { outside: number; inside: number } => {
+  const m = FIN_MIN_THICKNESS;
+  const t = thicknessAt(b, 0);
+  const scale = b.shapeThickness > 0 ? Math.max(0, t - m) / b.shapeThickness : 0;
+  const [o, i] = shapeAt(b.design, b.thickestAt);
+  const symmetric = b.design.section.inside === null;
+  const y = (offset: number) => b.outward * offset * b.widen; // no slide at the root
+  return {
+    outside: y(o * scale + (symmetric ? m / 2 : m)),
+    inside: y(i * scale - (symmetric ? m / 2 : 0)),
+  };
+};
+
+/**
+ * The fraction of the chord, from each edge, over which the foil is drawn back from the
+ * smoothed edge to the real one. Inside it the smoothed edges set the foil, so a sharp
+ * bend doesn't crease the blade across; at the edge itself it is the real foil edge,
+ * so edges end at the minimum rather than bulging (round 2 testing).
+ */
+export const FIN_EDGE_PIN = 0.3;
+
+/** Height (cm) over which a raised rear's thick trailing edge fades out above its corner. */
+const REAR_FADE = 0.3;
+
+/** 0 → 1 with flat ends: 6t⁵ − 15t⁴ + 10t³, curvature continuous where it joins. */
+const smoother = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10);
+
+/**
+ * How much of the cut trailing edge a section keeps: all of it on a raised rear's
+ * underside, so it has the foil's thickness there; none above, so the trailing edge is
+ * the minimum. Fades between, just above the corner.
+ */
+const rearCut = (b: PreparedBlade, h: number): number => {
+  const r = b.raisedRear;
+  if (!r || h >= r.cornerZ + REAR_FADE) return 0;
+  if (h <= r.cornerZ) return 1;
+  return 1 - smoother((h - r.cornerZ) / REAR_FADE);
+};
+
+/**
+ * The part of the foil a section at height `h` keeps, as fractions of the foil's chord:
+ * where the real edges sit on the foil laid over the smoothed ones. 0 and 1 where the
+ * edges are straight or bend gently; inside that at a sharp bend.
+ */
+export const foilRange = (b: PreparedBlade, h: number): { from: number; to: number } => {
+  const { leading, trailing } = chordAt(b, h);
+  const e = foilEdges(b);
+  const fl = edgeAt(e, e.foilLeading, h);
+  const span = edgeAt(e, e.foilTrailing, h) - fl;
+  if (span === 0) return { from: 0, to: 1 };
+  const clamp = (f: number) => Math.min(1, Math.max(0, f));
+  return { from: clamp((leading - fl) / span), to: clamp((trailing - fl) / span) };
+};
+
 /** The horizontal section of the blade at height `h` (cm above the tab top). */
 export const bladeSection = (
   b: PreparedBlade,
@@ -326,10 +495,24 @@ export const bladeSection = (
 ): BladeSection => {
   const { leading, trailing } = chordAt(b, h);
   const thickness = thicknessAt(b, h);
-  const cut = foilCut(b, h, leading, trailing);
-  // Cut before the thickest point, the section is thickest at the cut.
-  const thickestShape = cut >= b.thickestAt ? b.shapeThickness : shapeThicknessAt(b.design, cut);
-  const scale = unpadThickness(thickness) / thickestShape;
+  const { from: c0, to: c1 } = foilRange(b, h);
+  // Over the last stretch of chord at each edge, draw the foil back to its own edge, so
+  // both edges end at the minimum; only a raised rear's underside keeps its cut.
+  const keep = rearCut(b, h);
+  const pin = FIN_EDGE_PIN * (c1 - c0);
+  const foilAt = (u: number): number => {
+    const g = c0 + (c1 - c0) * u;
+    if (!(pin > 0)) return g;
+    let f = g;
+    if (g < c0 + pin) f -= c0 * smoother((c0 + pin - g) / pin);
+    if (g > c1 - pin) f += (1 - keep) * (1 - c1) * smoother((g - (c1 - pin)) / pin);
+    return Math.min(1, Math.max(0, f)); // exactly 0 and 1 at the edges, not a hair past
+  };
+  const end = foilAt(1);
+  // Cut short of the foil's thickest point, the section is thickest at the cut.
+  const thickestShape = b.thickestAt <= end ? b.shapeThickness : shapeThicknessAt(b.design, end);
+  const m = FIN_MIN_THICKNESS;
+  const scale = thickestShape > 0 ? Math.max(0, thickness - m) / thickestShape : 0;
   const symmetric = b.design.section.inside === null;
   const slide = h * b.lean;
   const at = (x: number, offset: number): Vert3 => ({
@@ -341,18 +524,9 @@ export const bladeSection = (
   const outside: Vert3[] = [];
   const inside: Vert3[] = [];
   for (const u of stations) {
-    const [o, i] = shapeAt(b.design, u * cut);
-    let out = o * scale;
-    let ins = i * scale;
-    const short = padThickness(out - ins) - (out - ins);
-    if (short > 0) {
-      if (symmetric) {
-        out += short / 2;
-        ins -= short / 2;
-      } else {
-        out += short;
-      }
-    }
+    const [o, i] = shapeAt(b.design, foilAt(u));
+    const out = o * scale + (symmetric ? m / 2 : m);
+    const ins = i * scale - (symmetric ? m / 2 : 0);
     const x = leading + (trailing - leading) * u;
     outside.push(at(x, out));
     inside.push(at(x, ins));
