@@ -57,4 +57,5 @@ export {
   withFoil,
   type FinCurve,
   type FinFoilIndex,
+  type FinStart,
 } from './fin-edits';

@@ -10,8 +10,8 @@ import type { Coeffs } from '../bezier-curve';
 import { RAD_TO_DEG } from '../constants';
 import type { Vec2 } from '../vec2';
 import { splineExtremes } from './curve-shape';
-import { finTabKind, type FinDesign } from './fin-design';
-import { FUTURES_TABS } from './futures-tab';
+import type { FinDesign } from './fin-design';
+import { finTabOutline } from './fin-tab';
 
 export interface FinReadouts {
   /** Area of the blade's side profile above the tab top (cm²); the tab is excluded. */
@@ -65,7 +65,7 @@ export const finReadouts = (d: FinDesign): FinReadouts => {
   const le = knots[0]!.end;
   const te = knots[knots.length - 1]!.end;
   const tip = splineExtremes(d.outline, 'y').max.point;
-  const tabFront = FUTURES_TABS[finTabKind(d.position)].length;
+  const tabFront = finTabOutline(d.base).length;
   return {
     area: finArea(d),
     depth: tip.y,

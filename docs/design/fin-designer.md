@@ -337,6 +337,16 @@ Asked for in round 2 testing, as manual control where the automatic shape needs 
 | T6  | Thickness view: the same guides, at the fraction of the depth, draggable.                                                                                                                                                                                                                                                                                                                                                                                     | ✓    |
 | T7  | Docs (Foil slices section), e2e (add, shape, export, save as v2, reopen), full gate.                                                                                                                                                                                                                                                                                                                                                                          | ✓    |
 
+## FCS single tab base
+
+Asked for by the owner for small canard fins, which plug into an FCS 1 style single plug.
+
+- `FinDesign.base`: `futures-side` (Futures 3/4"), `futures-centre` (Futures 1/2"), `fcs-single`. Each position defaults to its Futures tab (`defaultFinBase`); `.fin.json` writes `base` (version 2) only when it differs.
+- FCS single tab (`fin-tab.ts`): a plain block, 20.5 mm long × 13.5 mm deep × 6.35 mm thick, held by a grub screw in the side of the plug (no notch or slot). It drops straight in, so the Futures front-overhang limit, the rear-pin clearance rule and line, and the clearance stop on nudges don't apply. Instead the tab must sit wholly under the blade's root (`tab-cover`). The plug carries the cant (0°, 5° or 9°), so the fin has none (`cant` rule; the field is greyed out). A flat inside face sits flush with the tab, as on Futures.
+- `placeOnBase`: moving onto FCS centres the root over the tab and zeroes the cant; moving onto Futures rear-aligns the fin.
+- STEP/STL/preview take the tab from `finTabOutline(base)`; OpenCascade reads the FCS block as an exact 20.5 × 13.5 × 6.35 mm solid (1757.4 mm³).
+- Canard starting fin (`defaultCanard`, New fin → Canard, left / right): the owner's canard (69.3 mm base, 80.6 mm deep, 8 mm root, flat inside), on the FCS tab, centred, no cant. `FinStart` (a position or `canard`) is what New fin takes.
+
 Not ours: the console's `THREE.Clock` deprecation comes from `@react-three/fiber` (harmless,
 goes with a fiber update); `share-modal.js` is not in the repository, most likely a browser
 extension.

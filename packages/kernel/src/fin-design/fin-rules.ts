@@ -16,21 +16,22 @@ import {
   FIN_MAX_FRONT_OVERHANG,
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
-  finTabKind,
   type FinDesign,
   type FinSection,
 } from './fin-design';
 import { finClearanceShortfall } from './fin-clearance';
 import { lateralOffsetRange } from './fin-placement';
-import { FUTURES_TABS } from './futures-tab';
+import { FIN_BASES, finTabOutline, futuresKind } from './fin-tab';
 
 export type FinIssueCode =
   | 'hand'
+  | 'base'
   | 'cant'
   | 'outline-root'
   | 'outline-rising'
   | 'front-overhang'
   | 'tab-rear'
+  | 'tab-cover'
   | 'rear-clearance'
   | 'tab-contact'
   | 'section-ends'
@@ -84,15 +85,20 @@ const checkOutline = (d: FinDesign, issues: FinIssue[]): void => {
       message: 'The leading and trailing edges must each keep rising from root to tip.',
     });
   }
-  const front = FUTURES_TABS[finTabKind(d.position)].length;
-  if (le.x > front + FIN_MAX_FRONT_OVERHANG + EPS) {
-    issues.push({
-      code: 'front-overhang',
-      message: `The leading edge overhangs the front of the tab by more than ${FIN_MAX_FRONT_OVERHANG * 10} mm.`,
-    });
-  }
-  if (le.x < -EPS) {
-    issues.push({ code: 'tab-rear', message: 'The fin has slid off the back of the tab.' });
+  const tab = finTabOutline(d.base);
+  if (futuresKind(d.base)) {
+    if (le.x > tab.length + FIN_MAX_FRONT_OVERHANG + EPS) {
+      issues.push({
+        code: 'front-overhang',
+        message: `The leading edge overhangs the front of the tab by more than ${FIN_MAX_FRONT_OVERHANG * 10} mm.`,
+      });
+    }
+    if (le.x < -EPS) {
+      issues.push({ code: 'tab-rear', message: 'The fin has slid off the back of the tab.' });
+    }
+  } else if (le.x < tab.length - EPS || te.x > EPS) {
+    // An FCS tab drops straight into its plug: the blade's root must cover all of it.
+    issues.push({ code: 'tab-cover', message: 'The tab must sit wholly under the fin’s base.' });
   }
   // Only meaningful once the outline itself is sound.
   if (issues.every((i) => i.code !== 'outline-root' && i.code !== 'outline-rising')) {
@@ -220,11 +226,19 @@ export const validateFinDesign = (d: FinDesign): FinIssue[] => {
       message: centre ? 'A centre fin has no side.' : 'A side or quad-rear fin needs a side.',
     });
   }
-  if (centre ? d.cant !== 0 : !(d.cant >= 0 && d.cant <= FIN_MAX_CANT)) {
+  const fcs = !futuresKind(d.base);
+  if (centre || fcs ? d.cant !== 0 : !(d.cant >= 0 && d.cant <= FIN_MAX_CANT)) {
     issues.push({
       code: 'cant',
-      message: centre ? 'A centre fin has no cant.' : `Cant must be 0–${FIN_MAX_CANT}°.`,
+      message: centre
+        ? 'A centre fin has no cant.'
+        : fcs
+          ? 'On an FCS single tab the plug sets the cant: the fin has none.'
+          : `Cant must be 0–${FIN_MAX_CANT}°.`,
     });
+  }
+  if (!FIN_BASES.includes(d.base)) {
+    issues.push({ code: 'base', message: 'Unknown base.' });
   }
   checkOutline(d, issues);
   checkSection(d, issues);

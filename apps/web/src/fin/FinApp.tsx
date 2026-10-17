@@ -17,13 +17,19 @@
  * them.
  */
 import {
+  FIN_BASES,
+  FIN_BASE_LABEL,
   FIN_MAX_CANT,
+  finTabOutline,
+  futuresKind,
   finReadouts,
   validateFinDesign,
+  type FinBase,
   type FinDesign,
   type FinHand,
   type FinPosition,
 } from '@openshaper/kernel';
+import type { FinStart } from '@openshaper/store';
 import { Button, Tooltip } from '@openshaper/ui';
 import { Maximize2 } from 'lucide-react';
 import { lazy, Suspense, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -68,18 +74,20 @@ function Preview({ frameKey }: { frameKey: string }) {
 }
 
 /** The starting fins, as the owner names them. */
-const STARTS: { label: string; position: FinPosition; hand?: FinHand }[] = [
-  { label: 'Side, left', position: 'side', hand: 'left' },
-  { label: 'Side, right', position: 'side', hand: 'right' },
-  { label: 'Quad rear, left', position: 'quad-rear', hand: 'left' },
-  { label: 'Quad rear, right', position: 'quad-rear', hand: 'right' },
-  { label: 'Centre', position: 'centre' },
+const STARTS: { label: string; start: FinStart; hand?: FinHand }[] = [
+  { label: 'Side, left', start: 'side', hand: 'left' },
+  { label: 'Side, right', start: 'side', hand: 'right' },
+  { label: 'Quad rear, left', start: 'quad-rear', hand: 'left' },
+  { label: 'Quad rear, right', start: 'quad-rear', hand: 'right' },
+  { label: 'Centre', start: 'centre' },
+  { label: 'Canard, left (FCS single tab)', start: 'canard', hand: 'left' },
+  { label: 'Canard, right (FCS single tab)', start: 'canard', hand: 'right' },
 ];
 
 const POSITION_LABEL: Record<FinPosition, string> = {
-  side: 'Side fin (Futures side tab, 17.7 mm)',
-  'quad-rear': 'Quad rear (Futures centre tab, 12.7 mm)',
-  centre: 'Centre fin (Futures centre tab, 12.7 mm)',
+  side: 'Side fin',
+  'quad-rear': 'Quad rear',
+  centre: 'Centre fin',
 };
 
 function Readout({ label, value }: { label: string; value: string }) {
@@ -101,7 +109,10 @@ function Readouts({ units }: { units: LengthUnit }) {
       <Readout label="Depth" value={fmtLen(r.depth, units)} />
       <Readout label="Base (root chord)" value={fmtLen(r.rootChord, units)} />
       <Readout label="Sweep" value={`${r.sweep.toFixed(1)}°`} />
-      <Readout label="Front overhang" value={fmtLen(r.frontOverhang, units)} />
+      {/* Futures only: the limit is the grub screw at the box's front. */}
+      {futuresKind(design!.base) && (
+        <Readout label="Front overhang" value={fmtLen(r.frontOverhang, units)} />
+      )}
     </dl>
   );
 }
@@ -178,10 +189,27 @@ function PlacementTools() {
   const position = useFinState(finStore, (s) => s.design?.position);
   const hand = useFinState(finStore, (s) => s.design?.hand);
   const cant = useFinState(finStore, (s) => s.design?.cant ?? 0);
-  if (!position) return null;
+  const base = useFinState(finStore, (s) => s.design?.base);
+  if (!position || !base) return null;
   const s = finStore.getState;
+  const fcs = !futuresKind(base);
   return (
     <>
+      <label className="flex items-center gap-2">
+        <span className="text-muted-foreground">Base</span>
+        <select
+          className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+          value={base}
+          aria-label="Base"
+          onChange={(e) => s().setBase(e.target.value as FinBase)}
+        >
+          {FIN_BASES.map((b) => (
+            <option key={b} value={b}>
+              {FIN_BASE_LABEL[b]}
+            </option>
+          ))}
+        </select>
+      </label>
       {hand && (
         <div className="flex items-center gap-1" role="group" aria-label="Side">
           {(['left', 'right'] as const).map((h) => (
@@ -198,11 +226,16 @@ function PlacementTools() {
         </div>
       )}
       {position !== 'centre' && (
-        <DegField
-          label={`Cant (0–${FIN_MAX_CANT}°)`}
-          value={cant}
-          onCommit={(v) => s().setCant(v)}
-        />
+        <Tooltip label={fcs ? 'Set by the FCS plug (0°, 5° or 9°)' : 'Blade lean out from the tab'}>
+          <div>
+            <DegField
+              label={fcs ? 'Cant (plug)' : `Cant (0–${FIN_MAX_CANT}°)`}
+              value={cant}
+              disabled={fcs}
+              onCommit={(v) => s().setCant(v)}
+            />
+          </div>
+        </Tooltip>
       )}
       <NudgePad />
     </>
@@ -271,11 +304,16 @@ function TaperTools({ units }: { units: LengthUnit }) {
 /** Readouts and broken rules, always in view. */
 function Status({ units }: { units: LengthUnit }) {
   const position = useFinState(finStore, (s) => s.design?.position);
-  if (!position) return null;
+  const base = useFinState(finStore, (s) => s.design?.base);
+  if (!position || !base) return null;
+  const tab = finTabOutline(base);
   return (
     <div className="space-y-2 border-t border-border px-3 py-2" style={{ gridArea: 'status' }}>
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <span className="text-xs text-muted-foreground">{POSITION_LABEL[position]}</span>
+        <span className="text-xs text-muted-foreground">
+          {POSITION_LABEL[position]} on {FIN_BASE_LABEL[base]} ({fmtLen(tab.length, units)} ×{' '}
+          {fmtLen(tab.height, units)})
+        </span>
         <Readouts units={units} />
       </div>
       <Issues />
@@ -485,7 +523,7 @@ export function FinApp() {
             aria-label="Start a new fin"
             onChange={(e) => {
               const start = STARTS[Number(e.target.value)];
-              if (start) finStore.getState().newFin(start.position, start.hand);
+              if (start) finStore.getState().newFin(start.start, start.hand);
             }}
           >
             <option value="" disabled>

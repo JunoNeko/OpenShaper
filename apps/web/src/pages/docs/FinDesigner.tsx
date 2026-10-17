@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import {
+  FCS_SINGLE_TAB,
+  FIN_BASE_LABEL,
   FIN_MAX_CANT,
   FIN_MAX_FRONT_OVERHANG,
   FIN_MIN_THICKNESS,
@@ -28,6 +30,7 @@ export default function DocsFinDesigner() {
         { id: 'foil', label: 'The foil' },
         { id: 'slices', label: 'Foil slices' },
         { id: 'taper', label: 'Thickness and flex' },
+        { id: 'base', label: 'The base' },
         { id: 'tab', label: 'Placing the fin on its tab' },
         { id: 'rules', label: 'The rules it keeps' },
         { id: 'files', label: 'Saving your work' },
@@ -52,6 +55,10 @@ export default function DocsFinDesigner() {
             cant.
           </Term>
           <Term name="Centre">The {mm(centre.height)} tab, upright, with a symmetric foil.</Term>
+          <Term name="Canard, left or right">
+            A small fin on the FCS single tab (see <a href="#base">The base</a>), its base centred
+            over the tab, with a flat inside face and no cant: the plug carries it.
+          </Term>
         </Terms>
         <p>
           Both tabs are {mm(side.length)} long and {mm(side.thickness)} thick. Lengths are shown in
@@ -128,6 +135,30 @@ export default function DocsFinDesigner() {
           straight run that curves in near the tip is the usual shape: that curve is what controls
           how the tip flexes. <strong>Root thickness</strong> scales the whole curve.
         </p>
+      </Section>
+
+      <Section id="base" title="The base">
+        <p>
+          The base is the tab the fin sits on. Choose it with <strong>Base</strong>, beside the 3D
+          view. Each starting fin begins on its usual Futures tab; changing the base re-places the
+          fin on the new tab.
+        </p>
+        <Terms>
+          <Term name={FIN_BASE_LABEL['futures-side']}>
+            The {mm(side.height)}-deep Futures side tab, with cant built into the fin.
+          </Term>
+          <Term name={FIN_BASE_LABEL['futures-centre']}>
+            The {mm(centre.height)}-deep Futures centre tab, for centre and quad-rear fins.
+          </Term>
+          <Term name={FIN_BASE_LABEL['fcs-single']}>
+            A plain {mm(FCS_SINGLE_TAB.length)} × {mm(FCS_SINGLE_TAB.height)} ×{' '}
+            {mm(FCS_SINGLE_TAB.thickness)} block for an FCS 1 style single plug, usual for small
+            canard fins. It drops straight in and a grub screw in the side of the plug holds it, so
+            it has no slot, notch, front-overhang limit or rear clearance. The plug sets the cant
+            (0°, 5° or 9°), so the fin has none: the cant field is greyed out. A fin moved onto it
+            starts centred over the tab, and the tab must stay wholly under the fin&apos;s base.
+          </Term>
+        </Terms>
       </Section>
 
       <Section id="tab" title="Placing the fin on its tab">

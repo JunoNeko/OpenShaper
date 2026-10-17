@@ -132,6 +132,21 @@ describe.each(designs)('.fin.json round trip (%s)', (_, d) => {
 });
 
 describe('.fin.json versions', () => {
+  it('writes an FCS-tabbed fin as version 2 with its base, and reads it back', () => {
+    const d = { ...defaultFinDesign('side', 'left'), base: 'fcs-single' as const, cant: 0 };
+    const doc = JSON.parse(writeFinJson(d)) as Record<string, unknown>;
+    expect(doc.version).toBe(2);
+    expect(doc.base).toBe('fcs-single');
+    expect(readFinJson(writeFinJson(d)).design.base).toBe('fcs-single');
+  });
+
+  it('reads a file without a base as its position’s Futures tab', () => {
+    expect(readFinJson(writeFinJson(defaultFinDesign('side'))).design.base).toBe('futures-side');
+    expect(readFinJson(writeFinJson(defaultFinDesign('centre'))).design.base).toBe(
+      'futures-centre',
+    );
+  });
+
   it('writes a fin without slices as version 1, so the designer before slices opens it', () => {
     const doc = JSON.parse(writeFinJson(defaultFinDesign('centre'))) as Record<string, unknown>;
     expect(doc.version).toBe(1);
@@ -186,6 +201,7 @@ describe('.fin.json rejects damaged files', () => {
     ['a newer version', read({ ...good(), version: 99 })],
     ['an unknown position', read({ ...good(), position: 'nose' })],
     ['a bad hand', read({ ...good(), hand: 'up' })],
+    ['an unknown base', read({ ...good(), version: 2, base: 'glass-on' })],
     ['a non-numeric cant', read({ ...good(), cant: '7' })],
     ['other units', read({ ...good(), units: 'in' })],
     ['a missing outline', read({ ...good(), outline: undefined })],

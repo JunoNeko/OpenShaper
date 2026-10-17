@@ -152,6 +152,31 @@ describe('FinApp', () => {
     localStorage.removeItem('bs.fin.views');
   });
 
+  it('moves a fin onto the FCS single tab: centred, cant set by the plug', () => {
+    render(<FinApp />);
+    fireEvent.change(screen.getByLabelText('Base'), { target: { value: 'fcs-single' } });
+    const d = finStore.getState().design!;
+    expect(d.base).toBe('fcs-single');
+    expect(d.cant).toBe(0);
+    expect((screen.getByLabelText(/^Cant/) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText(/on FCS single tab \(20\.5 mm × 13\.5 mm\)/)).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull(); // no rule broken
+    fireEvent.change(screen.getByLabelText('Base'), { target: { value: 'futures-side' } });
+    expect((screen.getByLabelText(/^Cant/) as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it('starts a canard on the FCS single tab', () => {
+    render(<FinApp />);
+    const menu = screen.getByLabelText('Start a new fin') as HTMLSelectElement;
+    const i = [...menu.options].findIndex((o) => o.text === 'Canard, right (FCS single tab)');
+    fireEvent.change(menu, { target: { value: String(i - 1) } }); // after the disabled prompt
+    const d = finStore.getState().design!;
+    expect(d.base).toBe('fcs-single');
+    expect(d.hand).toBe('right');
+    expect((screen.getByLabelText(/^Cant/) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('lists the rules the design breaks', () => {
     act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
     render(<FinApp />);

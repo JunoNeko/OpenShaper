@@ -9,7 +9,9 @@ import {
   FIN_MAX_CANT,
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
+  defaultCanard,
   defaultFinDesign,
+  futuresKind,
   flatFace,
   knot,
   nacaSection,
@@ -179,7 +181,9 @@ export const clampEdit = (
 
 /** Cant clamped to what the position allows: 0 for a centre fin, else 0 to the max. */
 export const setCant = (d: FinDesign, deg: number): FinDesign => {
-  const cant = d.position === 'centre' ? 0 : Math.min(FIN_MAX_CANT, Math.max(0, deg));
+  // A centre fin has none; on an FCS single tab the plug carries it.
+  const fixed = d.position === 'centre' || !futuresKind(d.base);
+  const cant = fixed ? 0 : Math.min(FIN_MAX_CANT, Math.max(0, deg));
   return cant === d.cant ? d : { ...d, cant };
 };
 
@@ -251,9 +255,12 @@ export const setInsideFace = (
 export const setHand = (d: FinDesign, hand: FinHand): FinDesign =>
   d.position === 'centre' || d.hand === hand ? d : { ...d, hand };
 
-/** A fresh default fin for a position (the designer's starting points). */
-export const newFin = (position: FinPosition, hand: FinHand = 'left'): FinDesign =>
-  defaultFinDesign(position, hand);
+/** What a new fin can start as: a position's default fin, or the canard. */
+export type FinStart = FinPosition | 'canard';
+
+/** A fresh starting fin (the designer's New fin menu). */
+export const newFin = (start: FinStart, hand: FinHand = 'left'): FinDesign =>
+  start === 'canard' ? defaultCanard(hand) : defaultFinDesign(start, hand);
 
 /**
  * Where the toolbar's add-point button puts a new point: halfway along the span after
