@@ -171,6 +171,25 @@ describe('a hooked tip', () => {
     }
   });
 
+  it('meshes both rear tips whole: the hook and the raised rear’s corner', () => {
+    // Round 3 testing: the 3D view cut both points off between evenly spaced rings.
+    const d = hookedTipDesign();
+    const m = finMesh(d);
+    const xs: number[] = [];
+    const zs: number[] = [];
+    for (let i = 0; i < m.blade.positions.length; i += 3) {
+      xs.push(m.blade.positions[i]!);
+      zs.push(m.blade.positions[i + 2]!);
+    }
+    // The hook's rearmost point, and how far back the mesh reaches near it.
+    const hook = splineExtremes(d.outline, 'x').min.point;
+    expect(Math.min(...xs)).toBeLessThan(hook.x + 0.005); // within 0.05 mm
+    // The raised rear's corner: the mesh reaches it at its height.
+    const corner = b.raisedRear!;
+    const near = xs.filter((_, i) => Math.abs(zs[i]! - corner.cornerZ) < 0.002);
+    expect(Math.min(...near)).toBeLessThan(corner.cornerX + 0.005);
+  });
+
   it('has no crease across the blade where the trailing edge turns', () => {
     // Before: the face bent at up to 19 /cm right at the turn (9.74 cm up), 3 cm behind
     // the tab. Smoothing the edges the foil is laid over spreads that out. Within the

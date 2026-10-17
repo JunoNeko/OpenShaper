@@ -54,6 +54,7 @@ import type { Vert3 } from '../loft';
 import {
   bladeSection,
   bladeRowHeights,
+  outlineFeatureHeights,
   bladeTravel,
   cosineStations,
   prepareBlade,
@@ -177,16 +178,6 @@ const rowHeights = (
   return { heights, breaks };
 };
 
-/**
- * Heights of the outline's points: where its edges turn hardest, at a corner or a
- * smooth point with short handles (the owner's hooked tip). The blade stays smooth
- * there; only the edge turns.
- */
-const edgeCornerHeights = (b: PreparedBlade, topZ: number): number[] =>
-  [...new Set(b.design.outline.knots.slice(1, -1).map((k) => k.end.y))].filter(
-    (h) => h > 0 && h < topZ,
-  );
-
 /** Offsets (cm) of the extra rows either side of an outline point's height. */
 const CORNER_ROWS = [0.005, 0.01, 0.02, 0.035, 0.05, 0.075, 0.1, 0.15, 0.2, 0.3, 0.4];
 
@@ -230,7 +221,7 @@ const fitOnce = (
 ): { surface: BSplineSurface; corners: number[]; grid: [number, number] } => {
   const { heights, breaks } = withEdgeCornerRows(
     rowHeights(b, creaseHeights(b, topZ), topZ, rows),
-    edgeCornerHeights(b, topZ),
+    outlineFeatureHeights(b, topZ),
   );
   const st = cosineStations(stations);
   // grid[r][c]: r around the section (u), c up the blade (v).

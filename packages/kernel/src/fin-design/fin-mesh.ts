@@ -18,7 +18,13 @@ import { meshWithNormals } from '../fins';
 import type { BoardMesh } from '../tessellate';
 import { vec2, type Vec2 } from '../vec2';
 import type { Vert3 } from '../loft';
-import { bladeRowHeights, bladeSection, cosineStations, prepareBlade } from './blade';
+import {
+  bladeRowHeights,
+  bladeSection,
+  cosineStations,
+  outlineFeatureHeights,
+  prepareBlade,
+} from './blade';
 import { sectionLoop } from './blade-surface';
 import { finTabKind, type FinDesign } from './fin-design';
 import { tabCentreY } from './fin-placement';
@@ -85,13 +91,26 @@ const cap = (
   for (const [a, b, c] of triangulate(flat)) m.tri(ids[a]!, ids[b]!, ids[c]!, outward);
 };
 
+/** Offsets (cm) of the extra rings either side of an outline feature's height. */
+const FEATURE_RINGS = [0.01, 0.03, 0.1];
+
 const bladeMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
   const b = prepareBlade(d);
   const top = b.depth - o.tipGap;
   const st = cosineStations(o.stations);
   // Rings spaced along the edges' travel: they gather at the tip, and wherever an edge
   // runs nearly level (a raised rear's underside, a hooked tip).
-  const heights = bladeRowHeights(b, 0, top, o.rows);
+  // Plus rings at and either side of where the outline turns hardest, so a tip that
+  // sticks out backward isn't cut off between rings (outlineFeatureHeights).
+  const features = outlineFeatureHeights(b, top).flatMap((h) =>
+    [0, ...FEATURE_RINGS.flatMap((o) => [-o, o])].map((o) => h + o),
+  );
+  const heights = [
+    ...new Set([
+      ...bladeRowHeights(b, 0, top, o.rows),
+      ...features.filter((h) => h > 0 && h < top),
+    ]),
+  ].sort((p, q) => p - q);
   const rings = heights.map((h) => sectionLoop(bladeSection(b, h, st)).slice(0, -1));
   const m = builder();
   const ids = rings.map((ring) => ring.map((p) => m.add(p)));

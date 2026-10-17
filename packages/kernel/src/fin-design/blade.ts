@@ -439,6 +439,37 @@ const edgeAt = (e: FoilEdges, col: Float64Array, h: number): number => {
   return col[i]! + (col[i + 1]! - col[i]!) * (f - i);
 };
 
+/**
+ * Heights (cm, strictly inside the blade, below `top`) where the outline turns hardest:
+ * its points (a corner, or a smooth point with short handles, like a hooked tip's) and
+ * wherever it runs exactly level or upright between them. A tip that sticks out
+ * backward or forward peaks at one of these, so sections there catch it: sections only
+ * at evenly spaced heights cut it off between them.
+ */
+export const outlineFeatureHeights = (b: PreparedBlade, top: number): number[] => {
+  const hs: number[] = b.design.outline.knots.slice(1, -1).map((k) => k.end.y);
+  for (const k of b.design.outline.coeffs) {
+    // Roots of each derivative component (a quadratic): level (dy = 0) or upright (dx = 0).
+    for (const [a, bb, c] of [
+      [3 * k.ax, 2 * k.bx, k.cx],
+      [3 * k.ay, 2 * k.by, k.cy],
+    ] as const) {
+      const roots: number[] = [];
+      if (Math.abs(a) < 1e-12) {
+        if (Math.abs(bb) > 1e-12) roots.push(-c / bb);
+      } else {
+        const disc = bb * bb - 4 * a * c;
+        if (disc >= 0) {
+          const r = Math.sqrt(disc);
+          roots.push((-bb - r) / (2 * a), (-bb + r) / (2 * a));
+        }
+      }
+      for (const t of roots) if (t > 0 && t < 1) hs.push(value(k, t).y);
+    }
+  }
+  return [...new Set(hs)].filter((h) => h > 0 && h < top).sort((p, q) => p - q);
+};
+
 /** How far the edges have travelled from the root to height `h` (see {@link FoilEdges}). */
 export const bladeTravel = (b: PreparedBlade, h: number): number => {
   const e = foilEdges(b);
