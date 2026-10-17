@@ -8,18 +8,20 @@
  * the taper's thickness applies.
  */
 import {
+  finReadouts,
+  foilAt,
   knot,
   parseNaca4,
-  prepareBlade,
   splineFromKnots,
   vec2,
   type Spline,
 } from '@openshaper/kernel';
 import { FinCurveEditor, type FinCurveLayer } from '@openshaper/render2d';
-import type { FinState } from '@openshaper/store';
+import { getFoil, type FinState } from '@openshaper/store';
 import { Button } from '@openshaper/ui';
 import { memo, useCallback, useMemo, useState } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
+import { fmtLen, type LengthUnit } from '../format';
 import { curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { PointTools } from './PointTools';
 import { useFinState } from './use-fin';
@@ -131,15 +133,30 @@ function NacaPicker({ store, centre }: { store: StoreApi<FinState>; centre: bool
  */
 export const FinSectionTools = memo(function FinSectionTools({
   store,
+  units,
 }: {
   store: StoreApi<FinState>;
+  units: LengthUnit;
 }) {
   const position = useFinState(store, (s) => s.design?.position);
-  const flat = useFinState(store, (s) => s.design?.section.inside !== null);
+  const activeFoil = useFinState(store, (s) => s.activeFoil);
+  const flat = useFinState(store, (s) =>
+    s.design ? getFoil(s.design, s.activeFoil)?.inside !== null : false,
+  );
   if (!position) return null;
   const centre = position === 'centre';
   return (
     <>
+      <FoilTabs store={store} units={units} />
+      {activeFoil > 0 && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => store.getState().removeSlice(activeFoil)}
+        >
+          Remove slice
+        </Button>
+      )}
       {!centre && (
         <div className="flex gap-1" role="group" aria-label="Inside face">
           <Button
@@ -165,6 +182,31 @@ export const FinSectionTools = memo(function FinSectionTools({
   );
 });
 
+/** Tabs for the foils: the root's and each slice's, by height. */
+function FoilTabs({ store, units }: { store: StoreApi<FinState>; units: LengthUnit }) {
+  const design = useFinState(store, (s) => s.design);
+  const activeFoil = useFinState(store, (s) => s.activeFoil);
+  if (!design || design.slices.length === 0) return null;
+  const depth = finReadouts(design).depth;
+  const tabs = ['Root', ...design.slices.map((sl) => fmtLen(sl.height * depth, units))];
+  return (
+    <div className="flex gap-1" role="tablist" aria-label="Foil">
+      {tabs.map((label, i) => (
+        <Button
+          key={i}
+          size="sm"
+          role="tab"
+          aria-selected={activeFoil === i}
+          variant={activeFoil === i ? 'default' : 'outline'}
+          onClick={() => store.getState().setActiveFoil(i)}
+        >
+          {label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 /** The section canvas. `frameKey` re-fits the view (the pane moving large or small). */
 export const FinSectionPane = memo(function FinSectionPane({
   store,
@@ -175,8 +217,9 @@ export const FinSectionPane = memo(function FinSectionPane({
 }) {
   const design = useFinState(store, (s) => s.design);
   const selection = useFinState(store, (s) => s.selection);
+  const activeFoil = useFinState(store, (s) => s.activeFoil);
   const handlers = useMemo(() => curveEditorHandlers(store), [store]);
-  const section = design?.section;
+  const section = design ? (getFoil(design, activeFoil) ?? undefined) : undefined;
 
   const layers = useMemo((): FinCurveLayer[] => {
     if (!section) return [];
@@ -200,8 +243,12 @@ export const FinSectionPane = memo(function FinSectionPane({
         ];
   }, [section]);
 
-  // Where the taper's thickness applies: the root section's thickest point.
-  const thickestAt = useMemo(() => (design ? prepareBlade(design).thickestAt : null), [design]);
+  // Where the taper's thickness applies: this foil's thickest point.
+  const thickestAt = useMemo(() => {
+    if (!design) return null;
+    const height = activeFoil === 0 ? 0 : (design.slices[activeFoil - 1]?.height ?? 0);
+    return foilAt(design, height).thickest.at;
+  }, [design, activeFoil]);
 
   const drawUnder = useCallback(
     (

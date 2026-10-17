@@ -63,6 +63,19 @@ export interface FinSection {
   readonly inside: Spline | null;
 }
 
+/** A foil at one height up the blade (docs/design/fin-designer.md, foil slices). */
+export interface FinSlice {
+  /** Height as a fraction of the blade's depth, like the taper's x: 0 root, 1 tip. */
+  readonly height: number;
+  readonly section: FinSection;
+}
+
+/**
+ * How close slices may sit to each other, the root or the tip (fraction of the depth):
+ * 2 mm on a 100 mm fin. Closer and the blend between them would turn too sharply.
+ */
+export const FIN_SLICE_MIN_GAP = 0.02;
+
 export interface FinDesign {
   readonly position: FinPosition;
   /** `left` or `right` for side and quad-rear fins; `null` for a centre fin. */
@@ -87,7 +100,14 @@ export interface FinDesign {
    * this lets the user slide the blade back over it.
    */
   readonly lateralOffset: number;
+  /** The foil at the root (and all the way up, unless {@link slices} say otherwise). */
   readonly section: FinSection;
+  /**
+   * Foils at other heights, lowest first. Between two slices, and between the root and
+   * the first, the shape blends smoothly with height; above the last it stays as the
+   * last. Empty for a fin with one foil throughout.
+   */
+  readonly slices: readonly FinSlice[];
   /**
    * Thickness at the section's thickest point, up the blade. Frame: x = height as a
    * fraction of the blade's depth (0 root → 1 tip), y = thickness (cm). Normalising

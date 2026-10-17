@@ -17,6 +17,7 @@
  *
  * Version history:
  *   1 — position, hand, cant, lateral offset, outline, section, taper, metadata.
+ *   2 — adds `slices`: foils at other heights. Written only when there are any.
  */
 import {
   FIN_POSITIONS,
@@ -26,14 +27,34 @@ import {
   type FinDesign,
   type FinHand,
   type FinPosition,
+  type FinSection,
   type Knot,
   type Spline,
   type Vec2,
 } from '@openshaper/kernel';
 import { assertKnots, isObject, splineFromJson, splineToJson, type KnotJson } from './knot-json';
 
-export const FIN_JSON_VERSION = 1;
+/**
+ * Newest version this reads and writes. Version 2 adds foil `slices`; a fin without any
+ * is still written as version 1, so it opens in the designer before slices too.
+ */
+export const FIN_JSON_VERSION = 2;
 export const FIN_JSON_FORMAT = 'openshaper-fin';
+
+interface SectionJson {
+  outside: KnotJson[];
+  inside: KnotJson[] | null;
+}
+
+const sectionToJson = (s: FinSection): SectionJson => ({
+  outside: splineToJson(s.outside),
+  inside: s.inside ? splineToJson(s.inside) : null,
+});
+
+const sectionFromJson = (s: SectionJson): FinSection => ({
+  outside: splineFromJson(s.outside),
+  inside: s.inside ? splineFromJson(s.inside) : null,
+});
 
 export interface FinJson {
   format: typeof FIN_JSON_FORMAT;
@@ -46,7 +67,9 @@ export interface FinJson {
   /** Blade's sideways offset on the tab, mm, + outboard. */
   lateralOffset: number;
   outline: KnotJson[];
-  section: { outside: KnotJson[]; inside: KnotJson[] | null };
+  section: SectionJson;
+  /** Version 2: foils at other heights, lowest first; height is a fraction of the depth. */
+  slices?: { height: number; section: SectionJson }[];
   taper: KnotJson[];
   metadata?: Record<string, unknown>;
 }
@@ -81,17 +104,22 @@ const same = (n: number) => n;
 export const writeFinJson = (d: FinDesign, metadata?: Record<string, unknown>): string => {
   const doc: FinJson = {
     format: FIN_JSON_FORMAT,
-    version: FIN_JSON_VERSION,
+    version: d.slices.length ? 2 : 1,
     units: 'mm',
     position: d.position,
     hand: d.hand,
     cant: d.cant,
     lateralOffset: toMm(d.lateralOffset),
     outline: splineToJson(scaleSpline(d.outline, toMm, toMm)),
-    section: {
-      outside: splineToJson(d.section.outside),
-      inside: d.section.inside ? splineToJson(d.section.inside) : null,
-    },
+    section: sectionToJson(d.section),
+    ...(d.slices.length
+      ? {
+          slices: d.slices.map((sl) => ({
+            height: sl.height,
+            section: sectionToJson(sl.section),
+          })),
+        }
+      : {}),
     taper: splineToJson(scaleSpline(d.taper, same, toMm)),
     ...(metadata ? { metadata } : {}),
   };
@@ -122,10 +150,21 @@ const assertStructure = (doc: Record<string, unknown>): void => {
   if (doc.units !== 'mm') fail('Malformed fin: units must be mm');
   assertCurve(doc.outline, 'outline');
   assertCurve(doc.taper, 'taper');
-  const section = doc.section;
-  if (!isObject(section)) return fail('Malformed fin: section is missing');
-  assertCurve(section.outside, 'section outside face');
-  if (section.inside !== null) assertCurve(section.inside, 'section inside face');
+  assertSection(doc.section, 'section');
+  if (doc.slices !== undefined) {
+    if (!Array.isArray(doc.slices)) fail('Malformed fin: slices is not a list');
+    (doc.slices as unknown[]).forEach((sl, i) => {
+      if (!isObject(sl) || !isNumber(sl.height))
+        fail(`Malformed fin: slice ${i + 1} has no height`);
+      assertSection((sl as Record<string, unknown>).section, `slice ${i + 1}`);
+    });
+  }
+};
+
+const assertSection = (section: unknown, where: string): void => {
+  if (!isObject(section)) return fail(`Malformed fin: ${where} is missing`);
+  assertCurve(section.outside, `${where} outside face`);
+  if (section.inside !== null) assertCurve(section.inside, `${where} inside face`);
 };
 
 /** Parse a `.fin.json` string back into a fin design (+ any metadata). */
@@ -154,10 +193,11 @@ export const readFinJson = (
     cant: doc.cant,
     lateralOffset: toCm(doc.lateralOffset),
     outline: scaleSpline(splineFromJson(doc.outline), toCm, toCm),
-    section: {
-      outside: splineFromJson(doc.section.outside),
-      inside: doc.section.inside ? splineFromJson(doc.section.inside) : null,
-    },
+    section: sectionFromJson(doc.section),
+    slices: (doc.slices ?? []).map((sl) => ({
+      height: sl.height,
+      section: sectionFromJson(sl.section),
+    })),
     taper: scaleSpline(splineFromJson(doc.taper), same, toCm),
   };
   return doc.metadata ? { design, metadata: doc.metadata } : { design };

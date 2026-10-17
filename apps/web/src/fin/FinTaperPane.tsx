@@ -15,6 +15,7 @@ import { memo, useCallback, useMemo } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
 import { fmtLen, type LengthUnit } from '../format';
 import { curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
+import { sliceGuideHandlers, sliceGuides } from './slice-guides';
 import { useFinState } from './use-fin';
 
 const TAPER = '#F59E0B';
@@ -39,6 +40,12 @@ export const FinTaperPane = memo(function FinTaperPane({
 }) {
   const design = useFinState(store, (s) => s.design);
   const selection = useFinState(store, (s) => s.selection);
+  const activeFoil = useFinState(store, (s) => s.activeFoil);
+  const guides = useMemo(
+    () => (design ? sliceGuides(design, activeFoil, units, 'x') : []),
+    [design, activeFoil, units],
+  );
+  const guideHandlers = useMemo(() => sliceGuideHandlers(store, 'x'), [store]);
   const handlers = useMemo(() => curveEditorHandlers(store), [store]);
   const taper = design?.taper;
   const root = taper?.knots[0]?.end.y ?? 0.8;
@@ -113,6 +120,8 @@ export const FinTaperPane = memo(function FinTaperPane({
       frameBounds={{ minX: -0.04, maxX: 1.06, minY: -0.12, maxY: root * 1.15 }}
       frameKey={`${design.position}-${frameKey}`}
       drawUnder={drawUnder}
+      guides={guides}
+      {...guideHandlers}
       {...handlers}
     />
   );

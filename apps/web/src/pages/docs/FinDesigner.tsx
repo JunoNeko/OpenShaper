@@ -26,6 +26,7 @@ export default function DocsFinDesigner() {
         { id: 'start', label: 'Starting a fin' },
         { id: 'outline', label: 'The outline' },
         { id: 'foil', label: 'The foil' },
+        { id: 'slices', label: 'Foil slices' },
         { id: 'taper', label: 'Thickness and flex' },
         { id: 'tab', label: 'Placing the fin on its tab' },
         { id: 'rules', label: 'The rules it keeps' },
@@ -101,6 +102,22 @@ export default function DocsFinDesigner() {
             camber to thickness however thick the fin.
           </Term>
         </Terms>
+      </Section>
+
+      <Section id="slices" title="Foil slices">
+        <p>
+          One foil runs all the way up the blade unless you add slices. <strong>Add slice</strong>{' '}
+          (in the profile&apos;s toolbar) puts a dashed line across the profile; drag it up or down
+          to set its height — in the profile or the thickness view. Each slice has its own foil:
+          pick its tab in the foil view (Root, then each slice by height) and shape it with the same
+          tools, NACA presets included. A new slice starts as a copy of the foil below it.
+        </p>
+        <p>
+          Between slices the foil blends smoothly from one to the next, easing into each so no line
+          forms at a slice; above the top slice it stays as that slice. The thickness still comes
+          from the thickness curve. <strong>Remove slice</strong> takes the selected slice away.
+          Slices keep at least 2% of the depth from each other and from the root and tip.
+        </p>
       </Section>
 
       <Section id="taper" title="Thickness and flex">

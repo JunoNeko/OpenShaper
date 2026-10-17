@@ -239,3 +239,104 @@ export const drawFinCurves = (
     );
   }
 };
+
+/**
+ * A draggable straight guide across the view: data `axis` held at `at` (y = at for a
+ * horizontal line in the profile; x = at in the taper, which stands upright). The fin
+ * designer's foil slices are these.
+ */
+export interface FinCurveGuide {
+  readonly id: string;
+  readonly axis: 'x' | 'y';
+  readonly at: number;
+  readonly color?: string;
+  readonly selected?: boolean;
+  /** Drawn beside the line, at its start. */
+  readonly label?: string;
+}
+
+/** Two screen points on the guide's line, far apart. */
+const guideLine = (
+  g: FinCurveGuide,
+  vp: Viewport,
+  yScale: ViewScale,
+): [ScreenPoint, ScreenPoint] => {
+  const far = 1e4;
+  const a = g.axis === 'y' ? vec2(-far, g.at) : vec2(g.at, -far);
+  const b = g.axis === 'y' ? vec2(far, g.at) : vec2(g.at, far);
+  return [worldToScreen(vp, toView(a, yScale)), worldToScreen(vp, toView(b, yScale))];
+};
+
+const distToLine = (p: ScreenPoint, [a, b]: [ScreenPoint, ScreenPoint]): number => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  return len > 0 ? Math.abs((p.x - a.x) * dy - (p.y - a.y) * dx) / len : Infinity;
+};
+
+/** The guide under `screen`, nearest within `tolPx`. */
+export const pickGuide = (
+  guides: readonly FinCurveGuide[],
+  vp: Viewport,
+  screen: ScreenPoint,
+  yScale: ViewScale,
+  tolPx: number,
+): FinCurveGuide | null => {
+  let best: FinCurveGuide | null = null;
+  let bestD = tolPx;
+  for (const g of guides) {
+    const d = distToLine(screen, guideLine(g, vp, yScale));
+    if (d <= bestD) {
+      bestD = d;
+      best = g;
+    }
+  }
+  return best;
+};
+
+/** The value of the guide's axis at a screen point: where a dragged guide goes. */
+export const guideValueAt = (
+  g: FinCurveGuide,
+  vp: Viewport,
+  screen: ScreenPoint,
+  yScale: ViewScale,
+): number => {
+  const p = fromView(screenToWorld(vp, screen), yScale);
+  return g.axis === 'y' ? p.y : p.x;
+};
+
+/** Draw the guides: dashed, the selected one solid and heavier, labels at the left. */
+export const drawGuides = (
+  ctx: CanvasRenderingContext2D,
+  guides: readonly FinCurveGuide[],
+  vp: Viewport,
+  yScale: ViewScale,
+): void => {
+  for (const g of guides) {
+    const [a, b] = guideLine(g, vp, yScale);
+    ctx.save();
+    ctx.strokeStyle = g.color ?? 'rgba(167,139,250,0.9)';
+    ctx.lineWidth = g.selected ? 2 : 1;
+    if (!g.selected) ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    if (g.label) {
+      // At the view's left edge for a line that runs across the screen, at its top for
+      // one that runs up it, whichever way the view maps the data.
+      ctx.fillStyle = ctx.strokeStyle as string;
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      const level = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y);
+      if (level) {
+        const y = a.y + ((b.y - a.y) * (0 - a.x)) / (b.x - a.x);
+        ctx.fillText(g.label, 6, y - 4);
+      } else {
+        const x = a.x + ((b.x - a.x) * (0 - a.y)) / (b.y - a.y);
+        ctx.fillText(g.label, x + 4, 14);
+      }
+    }
+    ctx.restore();
+  }
+};

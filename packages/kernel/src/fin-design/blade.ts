@@ -154,38 +154,24 @@ export interface BladeSection {
   readonly inside: readonly Vert3[];
 }
 
-/** Outside and inside offsets of the shape at chord fraction u, in chords. */
-const shapeAt = (d: FinDesign, u: number): [number, number] => {
-  const out = yAtX(d.section.outside, u);
-  return [out, d.section.inside ? yAtX(d.section.inside, u) : -out];
+/** Outside and inside offsets of a foil at chord fraction u, in chords. */
+const sectionShapeAt = (sec: FinSection, u: number): [number, number] => {
+  const out = yAtX(sec.outside, u);
+  return [out, sec.inside ? yAtX(sec.inside, u) : -out];
 };
 
 const SEARCH_SAMPLES = 400;
 
-/**
- * Where the shape is thickest: a coarse scan, then a golden-section refine. It depends
- * only on the section, and is the bulk of preparing a blade (a few ms), so it is cached
- * per section object: edits that leave the section alone (outline drags, nudges, cant)
- * reuse it. A WeakMap, so the cache never keeps a section alive.
- */
-const thickestCache = new WeakMap<FinSection, { at: number; thickness: number }>();
-
-const thickest = (d: FinDesign): { at: number; thickness: number } => {
-  const hit = thickestCache.get(d.section);
-  if (hit) return hit;
-  const found = findThickest(d);
-  thickestCache.set(d.section, found);
-  return found;
-};
-
-const findThickest = (d: FinDesign): { at: number; thickness: number } => {
-  const t = (u: number) => {
-    const [o, i] = shapeAt(d, u);
-    return o - i;
-  };
+/** The thickest point of `t` on [0, 1]: a coarse scan, then a golden-section refine. */
+const findThickest = (t: (u: number) => number): { at: number; thickness: number } => {
   let best = 0;
+  let bestT = t(0);
   for (let j = 1; j < SEARCH_SAMPLES; j++) {
-    if (t(j / SEARCH_SAMPLES) > t(best / SEARCH_SAMPLES)) best = j;
+    const tj = t(j / SEARCH_SAMPLES);
+    if (tj > bestT) {
+      best = j;
+      bestT = tj;
+    }
   }
   let lo = Math.max(0, (best - 1) / SEARCH_SAMPLES);
   let hi = Math.min(1, (best + 1) / SEARCH_SAMPLES);
@@ -201,11 +187,79 @@ const findThickest = (d: FinDesign): { at: number; thickness: number } => {
 };
 
 /**
+ * Where a foil is thickest. It depends only on the foil, and is the bulk of preparing a
+ * blade (a few ms), so it is cached per section object: edits that leave the foil alone
+ * (outline drags, nudges, cant) reuse it. A WeakMap, so the cache never keeps a section
+ * alive.
+ */
+const thickestCache = new WeakMap<FinSection, { at: number; thickness: number }>();
+
+const sectionThickest = (sec: FinSection): { at: number; thickness: number } => {
+  const hit = thickestCache.get(sec);
+  if (hit) return hit;
+  const found = findThickest((u) => {
+    const [o, i] = sectionShapeAt(sec, u);
+    return o - i;
+  });
+  thickestCache.set(sec, found);
+  return found;
+};
+
+/** The foil a section is shaped by, at one height (see {@link foilAt}). */
+export interface Foil {
+  /** Outside and inside offsets at chord fraction u, in chords. */
+  readonly shapeAt: (u: number) => [number, number];
+  /** Where it is thickest, and how thick (in chords). */
+  readonly thickest: { readonly at: number; readonly thickness: number };
+  /** The share of the minimum thickness added to the outside face: ½ symmetric, 1 not. */
+  readonly outsideShare: number;
+}
+
+const share = (sec: FinSection): number => (sec.inside === null ? 0.5 : 1);
+
+const pureFoil = (sec: FinSection): Foil => ({
+  shapeAt: (u) => sectionShapeAt(sec, u),
+  thickest: sectionThickest(sec),
+  outsideShare: share(sec),
+});
+
+/**
+ * The foil at height `eta` (a fraction of the depth): the root foil, a slice's, or a
+ * blend of the two either side. The blend eases in and out with flat ends (`smoother`),
+ * so the shape changes smoothly through every slice and can't crease the blade there.
+ * Above the last slice the foil stays as the last.
+ */
+export const foilAt = (d: FinDesign, eta: number): Foil => {
+  const anchors = [{ height: 0, section: d.section }, ...d.slices];
+  let k = 0;
+  while (k < anchors.length - 1 && eta >= anchors[k + 1]!.height) k++;
+  const lo = anchors[k]!;
+  const hi = anchors[k + 1];
+  if (!hi) return pureFoil(lo.section);
+  const w = smoother(Math.min(1, Math.max(0, (eta - lo.height) / (hi.height - lo.height))));
+  if (w <= 0) return pureFoil(lo.section);
+  if (w >= 1) return pureFoil(hi.section);
+  const shapeAt = (u: number): [number, number] => {
+    const [o0, i0] = sectionShapeAt(lo.section, u);
+    const [o1, i1] = sectionShapeAt(hi.section, u);
+    return [o0 + (o1 - o0) * w, i0 + (i1 - i0) * w];
+  };
+  return {
+    shapeAt,
+    thickest: findThickest((u) => {
+      const [o, i] = shapeAt(u);
+      return o - i;
+    }),
+    outsideShare: share(lo.section) + (share(hi.section) - share(lo.section)) * w,
+  };
+};
+
+/**
  * Work out the height-independent parts of the blade. The design must pass
  * `validateFinDesign`; the result is undefined otherwise.
  */
 export const prepareBlade = (d: FinDesign): PreparedBlade => {
-  const { at, thickness } = thickest(d);
+  const { at, thickness } = sectionThickest(d.section);
   const cant = d.cant * DEG_TO_RAD;
   return {
     design: d,
@@ -420,12 +474,6 @@ export const bladeRowHeights = (
   return out;
 };
 
-/** The shape's thickness (in chords) at chord fraction u. */
-const shapeThicknessAt = (d: FinDesign, u: number): number => {
-  const [o, i] = shapeAt(d, u);
-  return o - i;
-};
-
 /**
  * The root section's outside and inside faces (blade-frame y, cm) at its thickest point:
  * what the tab must sit between (fin-placement.ts). Worked out directly rather than by
@@ -434,15 +482,15 @@ const shapeThicknessAt = (d: FinDesign, u: number): number => {
  * this) don't change them.
  */
 export const rootThickestFaces = (b: PreparedBlade): { outside: number; inside: number } => {
+  const foil = foilAt(b.design, 0);
   const m = FIN_MIN_THICKNESS;
   const t = thicknessAt(b, 0);
-  const scale = b.shapeThickness > 0 ? Math.max(0, t - m) / b.shapeThickness : 0;
-  const [o, i] = shapeAt(b.design, b.thickestAt);
-  const symmetric = b.design.section.inside === null;
+  const scale = foil.thickest.thickness > 0 ? Math.max(0, t - m) / foil.thickest.thickness : 0;
+  const [o, i] = foil.shapeAt(foil.thickest.at);
   const y = (offset: number) => b.outward * offset * b.widen; // no slide at the root
   return {
-    outside: y(o * scale + (symmetric ? m / 2 : m)),
-    inside: y(i * scale - (symmetric ? m / 2 : 0)),
+    outside: y(o * scale + m * foil.outsideShare),
+    inside: y(i * scale - m * (1 - foil.outsideShare)),
   };
 };
 
@@ -500,7 +548,7 @@ export const bladeSection = (
   // both edges end at the minimum; only a raised rear's underside keeps its cut.
   const keep = rearCut(b, h);
   const pin = FIN_EDGE_PIN * (c1 - c0);
-  const foilAt = (u: number): number => {
+  const fractionAt = (u: number): number => {
     const g = c0 + (c1 - c0) * u;
     if (!(pin > 0)) return g;
     let f = g;
@@ -508,12 +556,13 @@ export const bladeSection = (
     if (g > c1 - pin) f += (1 - keep) * (1 - c1) * smoother((g - (c1 - pin)) / pin);
     return Math.min(1, Math.max(0, f)); // exactly 0 and 1 at the edges, not a hair past
   };
-  const end = foilAt(1);
+  const end = fractionAt(1);
   // Cut short of the foil's thickest point, the section is thickest at the cut.
-  const thickestShape = b.thickestAt <= end ? b.shapeThickness : shapeThicknessAt(b.design, end);
+  const foil = foilAt(b.design, b.depth > 0 ? h / b.depth : 0);
+  const thickestShape =
+    foil.thickest.at <= end ? foil.thickest.thickness : foil.shapeAt(end)[0] - foil.shapeAt(end)[1];
   const m = FIN_MIN_THICKNESS;
   const scale = thickestShape > 0 ? Math.max(0, thickness - m) / thickestShape : 0;
-  const symmetric = b.design.section.inside === null;
   const slide = h * b.lean;
   const at = (x: number, offset: number): Vert3 => ({
     x,
@@ -524,9 +573,9 @@ export const bladeSection = (
   const outside: Vert3[] = [];
   const inside: Vert3[] = [];
   for (const u of stations) {
-    const [o, i] = shapeAt(b.design, foilAt(u));
-    const out = o * scale + (symmetric ? m / 2 : m);
-    const ins = i * scale - (symmetric ? m / 2 : 0);
+    const [o, i] = foil.shapeAt(fractionAt(u));
+    const out = o * scale + m * foil.outsideShare;
+    const ins = i * scale - m * (1 - foil.outsideShare);
     const x = leading + (trailing - leading) * u;
     outside.push(at(x, out));
     inside.push(at(x, ins));

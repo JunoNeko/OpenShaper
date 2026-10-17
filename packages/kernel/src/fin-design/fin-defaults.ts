@@ -179,6 +179,7 @@ export const defaultFinDesign = (position: FinPosition, hand: FinHand = 'left'):
     outline: defaultOutline(size.height * M_TO_CM),
     lateralOffset: 0,
     section,
+    slices: [],
     taper: defaultTaper(size.thick * M_TO_CM),
   };
 };

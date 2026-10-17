@@ -34,6 +34,16 @@ const withLock = (s: Spline): Spline =>
 
 const designs: [string, FinDesign][] = [
   ['side, right', defaultFinDesign('side', 'right')],
+  [
+    'with foil slices',
+    {
+      ...defaultFinDesign('side', 'left'),
+      slices: [
+        { height: 0.4, section: nacaSection('2410') },
+        { height: 0.8, section: nacaSection('0008') },
+      ],
+    },
+  ],
   ['side, left', defaultFinDesign('side', 'left')],
   ['quad rear', defaultFinDesign('quad-rear', 'right')],
   ['centre', defaultFinDesign('centre')],
@@ -93,6 +103,13 @@ describe.each(designs)('.fin.json round trip (%s)', (_, d) => {
     expectSameSpline(d.section.outside, design.section.outside);
     expect(design.section.inside === null).toBe(d.section.inside === null);
     if (d.section.inside) expectSameSpline(d.section.inside, design.section.inside!);
+    expect(design.slices.map((sl) => sl.height)).toEqual(d.slices.map((sl) => sl.height));
+    design.slices.forEach((sl, i) => {
+      const was = d.slices[i]!.section;
+      expectSameSpline(was.outside, sl.section.outside);
+      expect(sl.section.inside === null).toBe(was.inside === null);
+      if (was.inside) expectSameSpline(was.inside, sl.section.inside!);
+    });
     expectSameSpline(d.taper, design.taper);
     expect(metadata).toEqual({ name: 'Test fin' });
   });
@@ -111,6 +128,26 @@ describe.each(designs)('.fin.json round trip (%s)', (_, d) => {
     let t = text;
     for (let i = 0; i < 5; i++) t = writeFinJson(readFinJson(t).design, { name: 'Test fin' });
     expect(t).toBe(text);
+  });
+});
+
+describe('.fin.json versions', () => {
+  it('writes a fin without slices as version 1, so the designer before slices opens it', () => {
+    const doc = JSON.parse(writeFinJson(defaultFinDesign('centre'))) as Record<string, unknown>;
+    expect(doc.version).toBe(1);
+    expect(doc.slices).toBeUndefined();
+  });
+
+  it('writes a fin with slices as version 2', () => {
+    const d = {
+      ...defaultFinDesign('centre'),
+      slices: [{ height: 0.5, section: nacaSection('0010') }],
+    };
+    expect((JSON.parse(writeFinJson(d)) as Record<string, unknown>).version).toBe(2);
+  });
+
+  it('reads a version 1 file as a fin with no slices', () => {
+    expect(readFinJson(writeFinJson(defaultFinDesign('side', 'left'))).design.slices).toEqual([]);
   });
 });
 
@@ -154,6 +191,12 @@ describe('.fin.json rejects damaged files', () => {
     ['a missing outline', read({ ...good(), outline: undefined })],
     ['a one-point taper', read({ ...good(), taper: [(good().taper as unknown[])[0]] })],
     ['a missing section', read({ ...good(), section: undefined })],
+    ['slices that are not a list', read({ ...good(), version: 2, slices: {} })],
+    [
+      'a slice with no height',
+      read({ ...good(), version: 2, slices: [{ section: good().section }] }),
+    ],
+    ['a slice with no foil', read({ ...good(), version: 2, slices: [{ height: 0.5 }] })],
     [
       'a damaged section point',
       read({

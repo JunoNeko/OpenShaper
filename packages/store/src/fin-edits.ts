@@ -8,6 +8,7 @@
 import {
   FIN_MAX_CANT,
   FIN_MIN_THICKNESS,
+  FIN_SLICE_MIN_GAP,
   defaultFinDesign,
   flatFace,
   knot,
@@ -23,6 +24,7 @@ import {
   type FinHand,
   type FinIssueCode,
   type FinPosition,
+  type FinSection,
   type Spline,
   type Vec2,
 } from '@openshaper/kernel';
@@ -31,30 +33,94 @@ import { setKnotContinuous } from './edits';
 /** The editable curves of a fin. */
 export type FinCurve = 'outline' | 'outside' | 'inside' | 'taper';
 
-export const getFinCurve = (d: FinDesign, c: FinCurve): Spline | null => {
+/**
+ * Which foil the section curves (`outside`, `inside`) mean: 0 the root foil, k the k-th
+ * slice ({@link FinDesign.slices}, 1-based here so the root needs no special case).
+ */
+export type FinFoilIndex = number;
+
+/** The foil `foil` names, or null if there is no such slice. */
+export const getFoil = (d: FinDesign, foil: FinFoilIndex = 0): FinSection | null =>
+  foil === 0 ? d.section : (d.slices[foil - 1]?.section ?? null);
+
+/** The design with foil `foil` replaced. */
+export const withFoil = (d: FinDesign, foil: FinFoilIndex, sec: FinSection): FinDesign =>
+  foil === 0
+    ? { ...d, section: sec }
+    : { ...d, slices: d.slices.map((sl, i) => (i === foil - 1 ? { ...sl, section: sec } : sl)) };
+
+export const getFinCurve = (d: FinDesign, c: FinCurve, foil: FinFoilIndex = 0): Spline | null => {
   switch (c) {
     case 'outline':
       return d.outline;
     case 'outside':
-      return d.section.outside;
+      return getFoil(d, foil)?.outside ?? null;
     case 'inside':
-      return d.section.inside;
+      return getFoil(d, foil)?.inside ?? null;
     case 'taper':
       return d.taper;
   }
 };
 
-export const withFinCurve = (d: FinDesign, c: FinCurve, s: Spline): FinDesign => {
+export const withFinCurve = (
+  d: FinDesign,
+  c: FinCurve,
+  s: Spline,
+  foil: FinFoilIndex = 0,
+): FinDesign => {
+  const sec = getFoil(d, foil);
   switch (c) {
     case 'outline':
       return { ...d, outline: s };
     case 'outside':
-      return { ...d, section: { ...d.section, outside: s } };
+      return sec ? withFoil(d, foil, { ...sec, outside: s }) : d;
     case 'inside':
-      return { ...d, section: { ...d.section, inside: s } };
+      return sec ? withFoil(d, foil, { ...sec, inside: s }) : d;
     case 'taper':
       return { ...d, taper: s };
   }
+};
+
+/**
+ * A new foil slice at `height` (fraction of the depth), starting as a copy of the foil
+ * at or below it, so the blade doesn't change until it is edited. Its height is clamped
+ * into the room between its neighbours ({@link FIN_SLICE_MIN_GAP}); null if there is none.
+ * Returns the design and the new slice's foil index.
+ */
+export const addSlice = (
+  d: FinDesign,
+  height: number,
+): { design: FinDesign; foil: FinFoilIndex } | null => {
+  const at = d.slices.findIndex((sl) => sl.height > height); // insert before this
+  const pos = at === -1 ? d.slices.length : at;
+  const lo = (pos === 0 ? 0 : d.slices[pos - 1]!.height) + FIN_SLICE_MIN_GAP;
+  const hi = (pos === d.slices.length ? 1 : d.slices[pos]!.height) - FIN_SLICE_MIN_GAP;
+  if (hi < lo) return null;
+  const h = Math.min(hi, Math.max(lo, height));
+  const below = pos === 0 ? d.section : d.slices[pos - 1]!.section;
+  const slices = [...d.slices.slice(0, pos), { height: h, section: below }, ...d.slices.slice(pos)];
+  return { design: { ...d, slices }, foil: pos + 1 };
+};
+
+/** The design without slice `foil` (1-based); unchanged for the root or no such slice. */
+export const removeSlice = (d: FinDesign, foil: FinFoilIndex): FinDesign =>
+  foil < 1 || foil > d.slices.length
+    ? d
+    : { ...d, slices: d.slices.filter((_, i) => i !== foil - 1) };
+
+/**
+ * Slice `foil` moved to `height`, clamped between its neighbours (and the root and
+ * tip) by {@link FIN_SLICE_MIN_GAP}, so slices keep their order.
+ */
+export const moveSlice = (d: FinDesign, foil: FinFoilIndex, height: number): FinDesign => {
+  const i = foil - 1;
+  const sl = d.slices[i];
+  if (!sl) return d;
+  const lo = (i === 0 ? 0 : d.slices[i - 1]!.height) + FIN_SLICE_MIN_GAP;
+  const hi = (i === d.slices.length - 1 ? 1 : d.slices[i + 1]!.height) - FIN_SLICE_MIN_GAP;
+  const h = Math.min(hi, Math.max(lo, height));
+  if (h === sl.height) return d;
+  return { ...d, slices: d.slices.map((x, j) => (j === i ? { ...x, height: h } : x)) };
 };
 
 /**
@@ -159,7 +225,7 @@ export const setDepth = (d: FinDesign, cm: number, currentDepth: number): FinDes
  * Replace the section with a NACA 4-digit preset. A centre fin takes only symmetric
  * (00XX) foils: null for anything else, or for a code that isn't one.
  */
-export const applyNaca = (d: FinDesign, code: string): FinDesign | null => {
+export const applyNaca = (d: FinDesign, code: string, foil: FinFoilIndex = 0): FinDesign | null => {
   let n;
   try {
     n = parseNaca4(code);
@@ -167,13 +233,18 @@ export const applyNaca = (d: FinDesign, code: string): FinDesign | null => {
     return null;
   }
   if (d.position === 'centre' && n.camber > 0) return null;
-  return { ...d, section: nacaSection(n) };
+  return getFoil(d, foil) ? withFoil(d, foil, nacaSection(n)) : null;
 };
 
-/** Make the inside face flat (side fins) or mirror the outside (any fin). */
-export const setInsideFace = (d: FinDesign, kind: 'flat' | 'symmetric'): FinDesign | null => {
+/** Make a foil's inside face flat (side fins) or mirror the outside (any fin). */
+export const setInsideFace = (
+  d: FinDesign,
+  kind: 'flat' | 'symmetric',
+  foil: FinFoilIndex = 0,
+): FinDesign | null => {
   if (kind === 'flat' && d.position === 'centre') return null;
-  return { ...d, section: { ...d.section, inside: kind === 'flat' ? flatFace() : null } };
+  const sec = getFoil(d, foil);
+  return sec ? withFoil(d, foil, { ...sec, inside: kind === 'flat' ? flatFace() : null }) : null;
 };
 
 /** Which side a side or quad-rear fin is for; the design is otherwise unchanged. */
