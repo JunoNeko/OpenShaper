@@ -48,6 +48,8 @@ export interface FinTabOutline {
   readonly thickness: number;
   /** Closed, counter-clockwise (material on the left): lines and arcs. */
   readonly segments: readonly TabSegment[];
+  /** Through-holes, each closed and clockwise (material outside): the Futures weight-saving slots. */
+  readonly holes: readonly (readonly TabSegment[])[];
 }
 
 export const finTabOutline = (base: FinBase): FinTabOutline => {
@@ -60,6 +62,7 @@ export const finTabOutline = (base: FinBase): FinTabOutline => {
       height: spec.height,
       thickness: spec.thickness,
       segments: futuresTabOutline(kind).segments,
+      holes: futuresTabOutline(kind).holes,
     };
   }
   const { length: L, height: H, thickness } = FCS_SINGLE_TAB;
@@ -74,5 +77,6 @@ export const finTabOutline = (base: FinBase): FinTabOutline => {
       from,
       to: corners[(i + 1) % corners.length]!,
     })),
+    holes: [],
   };
 };

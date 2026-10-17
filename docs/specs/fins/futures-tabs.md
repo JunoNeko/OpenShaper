@@ -114,3 +114,21 @@ How each derived value is calculated:
 - **Small radii are not modelled.** The drawings appear to round the U-slot mouth
   corners and the bottom-front corner slightly. They are modelled sharp: the owner
   confirmed they don't matter for fit, and the CNC cutter radius rounds them anyway.
+
+## Weight-saving holes
+
+Futures tabs have material removed to save weight: four through-holes, each a slot with fully
+round ends (owner's measurements, mm):
+
+|                                    | 3/4" (side)                    | 1/2" (centre)                                     |
+| ---------------------------------- | ------------------------------ | ------------------------------------------------- |
+| Holes                              | 4                              | 4                                                 |
+| Size                               | 16 long × 8 tall, end radius 4 | same                                              |
+| Gap between holes                  | 6.5                            | 6.5                                               |
+| First hole's front end             | 13 behind the tab front        | same                                              |
+| Centre height above the tab bottom | 8.85 (centred on the tab)      | 6.3 (level with the rear slot, 6.4 below the top) |
+
+The four holes span 83.5 mm, ending 16.5 mm from the rear end, clear of the rear slot (5.5 mm
+deep). Defined in `FUTURES_TAB_HOLES` (`futures-tab.ts`) and cut through the tab in the STEP, the
+STL and the preview. The 13 mm front position is read from a photo; change it there if a
+measurement says otherwise.

@@ -8,7 +8,7 @@ import { defaultFinDesign } from './fin-defaults';
 import { finTabKind, type FinDesign } from './fin-design';
 import { FIN_MESH_FINE, finMesh } from './fin-mesh';
 import { tabCentreY } from './fin-placement';
-import { FUTURES_TABS, futuresTabOutline } from './futures-tab';
+import { FUTURES_TABS, FUTURES_TAB_HOLES, futuresTabOutline } from './futures-tab';
 import { nacaSection } from './naca';
 import { raisedRearDesign } from '../test-support/fin-designs';
 import { polygonArea } from './triangulate';
@@ -24,7 +24,10 @@ const tabArea = (kind: 'side' | 'centre'): number => {
   const slot = 2 * r * spec.slotArcCentreFromEnd + (Math.PI * r * r) / 2;
   const corner = R * R - (Math.PI * R * R) / 4;
   const notch = polygonArea([front.T, front.U, front.A, front.D, front.B, vec2(spec.length, 0)]);
-  return spec.length * spec.height - slot - corner - notch;
+  // Four weight-saving slots: a rectangle plus two half-discs each.
+  const { count, length, height } = FUTURES_TAB_HOLES;
+  const holes = count * ((length - height) * height + (Math.PI * height * height) / 4);
+  return spec.length * spec.height - slot - corner - notch - holes;
 };
 
 const designs: [string, FinDesign][] = [
@@ -123,8 +126,9 @@ describe.each(designs)('finMesh(%s)', (_, d) => {
 
   it('has the tab volume of its profile area times its thickness', () => {
     const v = tabArea(kind) * FUTURES_TABS[kind].thickness;
-    // Sampled arcs fall just inside the true ones.
-    expect(Math.abs(volume(fine.tab) / v - 1)).toBeLessThan(1e-4);
+    // Sampled arcs fall just inside the true ones: the holes' ends come out a hair
+    // small, ~3.5 mm³ over the four slots on a side tab.
+    expect(Math.abs(volume(fine.tab) / v - 1)).toBeLessThan(5e-4);
   });
 
   it('places the tab under the blade, touching on the tab top', () => {

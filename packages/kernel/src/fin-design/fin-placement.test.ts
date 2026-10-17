@@ -46,7 +46,7 @@ describe('nudgeFore', () => {
     });
   });
 
-  it('stops hard 2.5 mm past the tab front', () => {
+  it('stops hard 4 mm past the tab front', () => {
     let f = d;
     for (let i = 0; i < 100; i++) f = nudgeFore(f, 0.05);
     expect(le(f)).toBeCloseTo(11.3 + FIN_MAX_FRONT_OVERHANG, 12);

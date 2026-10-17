@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { RAD_TO_DEG } from '../constants';
 import type { Vec2 } from '../vec2';
 import {
+  FUTURES_TABS,
   FUTURES_TAB_KINDS,
   futuresTabOutline,
   type FuturesTabKind,
@@ -159,5 +160,58 @@ describe.each(FUTURES_TAB_KINDS)('futuresTabOutline(%s)', (kind) => {
 
   it('runs counter-clockwise', () => {
     expect(signedArea(segments)).toBeGreaterThan(0);
+  });
+});
+
+describe('weight-saving holes', () => {
+  // The owner's measurements (mm): four slots 16 long, 8 tall, round-ended, 6.5 apart,
+  // the first 13 behind the front; centred on a 3/4" tab, level with the rear slot on a
+  // 1/2" tab.
+  const span = (h: readonly TabSegment[]) => {
+    const xs = h.flatMap((s) => [s.from.x, s.to.x]);
+    const ys = h.flatMap((s) => [s.from.y, s.to.y]);
+    // Arc ends bulge past the straight edges by the radius.
+    const r = (h.find((s) => s.kind === 'arc') as { radius: number }).radius;
+    return {
+      x0: Math.min(...xs) - r,
+      x1: Math.max(...xs) + r,
+      y0: Math.min(...ys),
+      y1: Math.max(...ys),
+    };
+  };
+
+  it.each(['side', 'centre'] as const)(
+    'cuts four 16 × 8 mm slots, 6.5 mm apart, on the %s tab',
+    (kind) => {
+      const { holes, spec } = futuresTabOutline(kind);
+      expect(holes).toHaveLength(4);
+      const spans = holes.map(span).sort((a, b) => b.x1 - a.x1); // front first
+      expect(spec.length - spans[0]!.x1).toBeCloseTo(1.3, 12);
+      spans.forEach((s, i) => {
+        expect(s.x1 - s.x0).toBeCloseTo(1.6, 12);
+        expect(s.y1 - s.y0).toBeCloseTo(0.8, 12);
+        if (i > 0) expect(spans[i - 1]!.x0 - s.x1).toBeCloseTo(0.65, 12);
+      });
+      // Clear of the rear slot (5.5 mm deep from the rear end).
+      expect(spans[3]!.x0).toBeGreaterThan(spec.slotArcCentreFromEnd + spec.slotDiameter / 2);
+    },
+  );
+
+  it('centres them on a 3/4" tab, and levels them with the rear slot on a 1/2" tab', () => {
+    const mid = (kind: 'side' | 'centre') => {
+      const s = span(futuresTabOutline(kind).holes[0]!);
+      return (s.y0 + s.y1) / 2;
+    };
+    expect(mid('side')).toBeCloseTo(FUTURES_TABS.side.height / 2, 12);
+    const c = FUTURES_TABS.centre;
+    expect(mid('centre')).toBeCloseTo(c.height - c.slotCentreBelowTop, 12);
+  });
+
+  it('runs each hole clockwise: material outside it', () => {
+    for (const h of futuresTabOutline('side').holes) {
+      let a = 0;
+      for (const s of h) a += s.from.x * s.to.y - s.to.x * s.from.y;
+      expect(a).toBeLessThan(0);
+    }
   });
 });

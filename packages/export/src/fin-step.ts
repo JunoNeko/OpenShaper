@@ -117,6 +117,32 @@ const faceAbout = (
   );
 };
 
+/**
+ * A planar face with holes: the outer loop counter-clockwise about `outward`, each hole
+ * clockwise, whichever way they were given.
+ */
+const faceWithHoles = (
+  w: Writer,
+  surface: number,
+  sameSense: boolean,
+  outer: readonly LoopEdge[],
+  holes: readonly (readonly LoopEdge[])[],
+  outward: Vert3,
+): number => {
+  const walk = (loop: readonly LoopEdge[], ccw: boolean) => {
+    const turns = dot(newell(loop.map((e) => e.from)), outward) > 0;
+    const l = turns === ccw ? loop : [...loop].reverse().map((e) => ({ ...e, sense: !e.sense }));
+    return l.map((e) => oriented(w, e.edge, e.sense));
+  };
+  return face(
+    w,
+    surface,
+    walk(outer, true),
+    sameSense,
+    holes.map((h) => walk(h, false)),
+  );
+};
+
 const placement = (w: Writer, origin: Vert3, axis: Vert3, refDir: Vert3): number =>
   w.emit(
     `AXIS2_PLACEMENT_3D('',${ref(w.point(origin))},${ref(direction(w, axis.x, axis.y, axis.z))},` +
@@ -268,63 +294,77 @@ const emitTab = (w: Writer, d: FinDesign, factor: number): number => {
     return w.emit(`EDGE_CURVE('',${ref(vtx(a))},${ref(vtx(b))},${ref(circle)},.T.)`);
   };
 
-  // Profile edges on each side, and the straight edge across the tab at each vertex.
-  const profile = sides.map((y) =>
-    segs.map((s) => (s.kind === 'line' ? lineEdge(at(s.from, y), at(s.to, y)) : arcEdge(s, y))),
+  // The profile and each weight-saving hole: closed rings of segments, the profile
+  // counter-clockwise and each hole clockwise, so material is always on the left.
+  const rings = [segs, ...tab.holes];
+  // Ring edges on each side, and the straight edge across the tab at each vertex.
+  const edgesOn = rings.map((ring) =>
+    sides.map((y) =>
+      ring.map((s) => (s.kind === 'line' ? lineEdge(at(s.from, y), at(s.to, y)) : arcEdge(s, y))),
+    ),
   );
-  const across = segs.map((s) => lineEdge(at(s.from, sides[0]), at(s.from, sides[1])));
+  const acrossOf = rings.map((ring) =>
+    ring.map((s) => lineEdge(at(s.from, sides[0]), at(s.from, sides[1]))),
+  );
 
   const faces: number[] = [];
 
-  // The two side faces: the whole profile, at each side.
+  // The two side faces: the profile, less the holes.
   sides.forEach((y, k) => {
     const normal = { x: 0, y: k === 0 ? -1 : 1, z: 0 };
     const surf = plane(w, at({ x: 0, y: 0 }, y), normal, { x: 1, y: 0, z: 0 });
-    const loop = segs.map((s, i) => ({ edge: profile[k]![i]!, sense: true, from: at(s.from, y) }));
-    faces.push(faceAbout(w, surf, true, loop, normal));
+    const loops = rings.map((ring, r) =>
+      ring.map((s, i) => ({ edge: edgesOn[r]![k]![i]!, sense: true, from: at(s.from, y) })),
+    );
+    faces.push(faceWithHoles(w, surf, true, loops[0]!, loops.slice(1), normal));
   });
 
-  // One face per profile segment, across the thickness.
-  segs.forEach((s, i) => {
-    const next = (i + 1) % segs.length;
-    const a0 = at(s.from, sides[0]);
-    const b0 = at(s.to, sides[0]);
-    const b1 = at(s.to, sides[1]);
-    const a1 = at(s.from, sides[1]);
-    const loop: LoopEdge[] = [
-      { edge: profile[0]![i]!, sense: true, from: a0 },
-      { edge: across[next]!, sense: true, from: b0 },
-      { edge: profile[1]![i]!, sense: false, from: b1 },
-      { edge: across[i]!, sense: false, from: a1 },
-    ];
-    if (s.kind === 'line') {
-      // Outward is to the right of travel round a counter-clockwise profile.
-      const dx = s.to.x - s.from.x;
-      const dz = s.to.y - s.from.y;
-      const len = Math.hypot(dx, dz);
-      const normal = { x: dz / len, y: 0, z: -dx / len };
-      const surf = plane(w, a0, normal, { x: dx / len, y: 0, z: dz / len });
-      faces.push(faceAbout(w, surf, true, loop, normal));
-    } else {
-      // Material is inside a ccw arc (the fillet) and outside a cw one (the slot), so
-      // the outward normal points away from the axis for ccw and toward it for cw.
-      const c = at(s.center, sides[0]);
-      const ref0 = sub(a0, c);
-      const r = Math.hypot(ref0.x, ref0.z);
-      const surf = w.emit(
-        `CYLINDRICAL_SURFACE('',${ref(placement(w, c, { x: 0, y: 1, z: 0 }, { x: ref0.x / r, y: 0, z: ref0.z / r }))},${real(s.radius, factor)})`,
-      );
-      // Outward at the middle of the arc, found by angle: a semicircle's chord
-      // midpoint is its centre, so the chord can't say which way it bulges.
-      const a = Math.atan2(s.from.y - s.center.y, s.from.x - s.center.x);
-      let sweep = Math.atan2(s.to.y - s.center.y, s.to.x - s.center.x) - a;
-      if (s.ccw && sweep <= 0) sweep += 2 * Math.PI;
-      if (!s.ccw && sweep >= 0) sweep -= 2 * Math.PI;
-      const m = a + sweep / 2;
-      const sgn = s.ccw ? 1 : -1;
-      const normal = { x: sgn * Math.cos(m), y: 0, z: sgn * Math.sin(m) };
-      faces.push(faceAbout(w, surf, s.ccw, loop, normal));
-    }
+  // One face per segment of each ring, across the thickness.
+  rings.forEach((ring, r) => {
+    const profile = edgesOn[r]!;
+    const across = acrossOf[r]!;
+    ring.forEach((s, i) => {
+      const next = (i + 1) % ring.length;
+      const a0 = at(s.from, sides[0]);
+      const b0 = at(s.to, sides[0]);
+      const b1 = at(s.to, sides[1]);
+      const a1 = at(s.from, sides[1]);
+      const loop: LoopEdge[] = [
+        { edge: profile[0]![i]!, sense: true, from: a0 },
+        { edge: across[next]!, sense: true, from: b0 },
+        { edge: profile[1]![i]!, sense: false, from: b1 },
+        { edge: across[i]!, sense: false, from: a1 },
+      ];
+      if (s.kind === 'line') {
+        // Outward is to the right of travel, round the profile and through a hole alike.
+        const dx = s.to.x - s.from.x;
+        const dz = s.to.y - s.from.y;
+        const len = Math.hypot(dx, dz);
+        const normal = { x: dz / len, y: 0, z: -dx / len };
+        const surf = plane(w, a0, normal, { x: dx / len, y: 0, z: dz / len });
+        faces.push(faceAbout(w, surf, true, loop, normal));
+      } else {
+        // Material is inside a ccw arc (the fillet) and outside a cw one (the slot, a
+        // hole's round end), so the outward normal points away from the axis for ccw
+        // and toward it for cw.
+        const c = at(s.center, sides[0]);
+        const ref0 = sub(a0, c);
+        const rr = Math.hypot(ref0.x, ref0.z);
+        const surf = w.emit(
+          `CYLINDRICAL_SURFACE('',${ref(placement(w, c, { x: 0, y: 1, z: 0 }, { x: ref0.x / rr, y: 0, z: ref0.z / rr }))},${real(s.radius, factor)})`,
+        );
+        // Outward at the middle of the arc, found by angle: a semicircle's chord
+        // midpoint is its centre, so the chord can't say which way it bulges.
+        const a = Math.atan2(s.from.y - s.center.y, s.from.x - s.center.x);
+        let sweep = Math.atan2(s.to.y - s.center.y, s.to.x - s.center.x) - a;
+        if (s.ccw && sweep <= 0) sweep += 2 * Math.PI;
+        if (!s.ccw && sweep >= 0) sweep -= 2 * Math.PI;
+        const m = a + sweep / 2;
+        const sgn = s.ccw ? 1 : -1;
+        const normal = { x: sgn * Math.cos(m), y: 0, z: sgn * Math.sin(m) };
+        faces.push(faceAbout(w, surf, s.ccw, loop, normal));
+      }
+    });
   });
 
   const shell = w.emit(`CLOSED_SHELL('',${refs(faces)})`);

@@ -111,7 +111,49 @@ export interface TabOutline {
   readonly spec: FuturesTabSpec;
   readonly segments: readonly TabSegment[];
   readonly front: TabFrontPoints;
+  /** The weight-saving holes, each a closed loop running clockwise (material outside). */
+  readonly holes: readonly (readonly TabSegment[])[];
 }
+
+/**
+ * Weight-saving holes through Futures tabs (the owner's measurements, round 4): four
+ * slots 16 mm long and 8 mm tall with fully round ends, 6.5 mm apart, the first starting
+ * 13 mm behind the tab's front. On the 3/4" (side) tab they are centred on its height;
+ * on the 1/2" (centre) tab they are level with the rear slot. Always cut.
+ */
+export const FUTURES_TAB_HOLES = {
+  count: 4,
+  length: mm(16),
+  height: mm(8),
+  gap: mm(6.5),
+  fromFront: mm(13),
+} as const;
+
+/** Height of the holes' centres above the tab bottom. */
+const holeCentreHeight = (kind: FuturesTabKind, spec: FuturesTabSpec): number =>
+  kind === 'side' ? spec.height / 2 : spec.height - spec.slotCentreBelowTop;
+
+/** The holes as closed clockwise loops: top edge, round front end, bottom, round rear end. */
+export const futuresTabHoles = (kind: FuturesTabKind): TabSegment[][] => {
+  const spec = FUTURES_TABS[kind];
+  const { count, length, height, gap, fromFront } = FUTURES_TAB_HOLES;
+  const r = height / 2;
+  const half = length / 2 - r; // half the straight part
+  const cy = holeCentreHeight(kind, spec);
+  return Array.from({ length: count }, (_, i) => {
+    const cx = spec.length - fromFront - length / 2 - i * (length + gap);
+    const tl = vec2(cx - half, cy + r);
+    const tr = vec2(cx + half, cy + r);
+    const br = vec2(cx + half, cy - r);
+    const bl = vec2(cx - half, cy - r);
+    return [
+      line(tl, tr),
+      { kind: 'arc', from: tr, to: br, center: vec2(cx + half, cy), radius: r, ccw: false },
+      line(br, bl),
+      { kind: 'arc', from: bl, to: tl, center: vec2(cx - half, cy), radius: r, ccw: false },
+    ];
+  });
+};
 
 /** Points of the front notch, derived from the drawn dimensions (see the spec). */
 export const tabFrontPoints = (spec: FuturesTabSpec): TabFrontPoints => {
@@ -169,5 +211,5 @@ export const futuresTabOutline = (kind: FuturesTabKind): TabOutline => {
     { kind: 'arc', from: vec2(0, R), to: vec2(R, 0), center: vec2(R, R), radius: R, ccw: true },
   ];
 
-  return { kind, spec, segments, front };
+  return { kind, spec, segments, front, holes: futuresTabHoles(kind) };
 };

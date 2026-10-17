@@ -347,6 +347,23 @@ Asked for by the owner for small canard fins, which plug into an FCS 1 style sin
 - STEP/STL/preview take the tab from `finTabOutline(base)`; OpenCascade reads the FCS block as an exact 20.5 × 13.5 × 6.35 mm solid (1757.4 mm³).
 - Canard starting fin (`defaultCanard`, New fin → Canard, left / right): the owner's canard (69.3 mm base, 80.6 mm deep, 8 mm root, flat inside), on the FCS tab, centred, no cant. `FinStart` (a position or `canard`) is what New fin takes.
 
+## Front overhang 4 mm
+
+The owner measured production fins whose leading-edge root overhangs the tab's front by more
+than 2.5 mm: the base foil clears the box's grub screw. `FIN_MAX_FRONT_OVERHANG` is now 4 mm
+(it was 2.5 mm in the requirements above). Futures tabs only; the FCS tab has no front limit.
+
+## Weight-saving holes in Futures tabs
+
+Four round-ended slots through both Futures tabs (spec: `docs/specs/fins/futures-tabs.md`,
+"Weight-saving holes"; `FUTURES_TAB_HOLES`), always cut. Tab outlines gain `holes` (closed,
+clockwise loops of lines and arcs). The mesh triangulates the tab's sides with
+`triangulateWithHoles` (each hole bridged to an existing point, so faces still meet edge to
+edge) and walls the holes; STEP gives each side face inner bounds (`face(..., holes)` in the
+shared writer, unchanged output without holes: a board STEP diffs byte-identical) and each
+hole a plane or cylinder face per segment. OpenCascade: each tab loses 2900 mm³ (expected
+4 × (8·8 + π·4²) × 6.35 = 2902.5 mm³), 30 faces.
+
 Not ours: the console's `THREE.Clock` deprecation comes from `@react-three/fiber` (harmless,
 goes with a fiber update); `share-modal.js` is not in the repository, most likely a browser
 extension.

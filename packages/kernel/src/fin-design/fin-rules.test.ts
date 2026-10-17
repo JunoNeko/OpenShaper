@@ -58,7 +58,7 @@ describe('validateFinDesign', () => {
       return { ...d, outline: mapSpline(d.outline, (p) => vec2(p.x + dx, p.y)) };
     };
 
-    it('lets the leading edge overhang the tab front by up to 2.5 mm', () => {
+    it('lets the leading edge overhang the tab front by up to 4 mm', () => {
       expect(codes(placeLe(11.3 + FIN_MAX_FRONT_OVERHANG))).toEqual([]);
       expect(codes(placeLe(11.3 + FIN_MAX_FRONT_OVERHANG + 0.001))).toEqual(['front-overhang']);
     });
@@ -74,7 +74,7 @@ describe('validateFinDesign', () => {
     });
 
     it('measures the overhang from the fin position’s own tab', () => {
-      expect(codes(placeLe(11.3 + 0.3, defaultFinDesign('quad-rear')))).toEqual(['front-overhang']);
+      expect(codes(placeLe(11.3 + 0.5, defaultFinDesign('quad-rear')))).toEqual(['front-overhang']);
     });
 
     it('needs both roots on the tab top', () => {
