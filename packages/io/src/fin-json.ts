@@ -17,13 +17,19 @@
  *
  * Version history:
  *   1 — position, hand, cant, lateral offset, outline, section, taper, metadata.
- *   2 — adds `slices`: foils at other heights. Written only when there are any.
+ *   2 — adds `slices` (foils at other heights) and `base` (the tab: Futures 3/4",
+ *       Futures 1/2" or FCS single). Written only when a fin has slices or a base other
+ *       than its position's default; read as absent, version 1 means no slices and the
+ *       default base.
  */
 import {
+  FIN_BASES,
   FIN_POSITIONS,
+  defaultFinBase,
   knot,
   splineFromKnots,
   vec2,
+  type FinBase,
   type FinDesign,
   type FinHand,
   type FinPosition,
@@ -68,6 +74,8 @@ export interface FinJson {
   lateralOffset: number;
   outline: KnotJson[];
   section: SectionJson;
+  /** Version 2: the tab. Absent means the position's default Futures tab. */
+  base?: FinBase;
   /** Version 2: foils at other heights, lowest first; height is a fraction of the depth. */
   slices?: { height: number; section: SectionJson }[];
   taper: KnotJson[];
@@ -104,12 +112,13 @@ const same = (n: number) => n;
 export const writeFinJson = (d: FinDesign, metadata?: Record<string, unknown>): string => {
   const doc: FinJson = {
     format: FIN_JSON_FORMAT,
-    version: d.slices.length ? 2 : 1,
+    version: d.slices.length || d.base !== defaultFinBase(d.position) ? 2 : 1,
     units: 'mm',
     position: d.position,
     hand: d.hand,
     cant: d.cant,
     lateralOffset: toMm(d.lateralOffset),
+    ...(d.base !== defaultFinBase(d.position) ? { base: d.base } : {}),
     outline: splineToJson(scaleSpline(d.outline, toMm, toMm)),
     section: sectionToJson(d.section),
     ...(d.slices.length
@@ -146,6 +155,9 @@ const assertStructure = (doc: Record<string, unknown>): void => {
     fail('Malformed fin: hand must be left, right or null');
   }
   if (!isNumber(doc.cant)) fail('Malformed fin: cant is not a number');
+  if (doc.base !== undefined && !(FIN_BASES as readonly unknown[]).includes(doc.base)) {
+    fail('Malformed fin: unknown base');
+  }
   if (!isNumber(doc.lateralOffset)) fail('Malformed fin: lateralOffset is not a number');
   if (doc.units !== 'mm') fail('Malformed fin: units must be mm');
   assertCurve(doc.outline, 'outline');
@@ -191,6 +203,7 @@ export const readFinJson = (
     position: doc.position,
     hand: doc.hand,
     cant: doc.cant,
+    base: doc.base ?? defaultFinBase(doc.position),
     lateralOffset: toCm(doc.lateralOffset),
     outline: scaleSpline(splineFromJson(doc.outline), toCm, toCm),
     section: sectionFromJson(doc.section),

@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
- * The fin's side profile, editable, drawn over its Futures tab: the base line, the
- * tab itself, the 2.5 mm front-overhang limit and the insertion-clearance line behind
- * the tab (fin-clearance.ts). Points are dragged through the fin store, which clamps
+ * The fin's side profile, editable, drawn over its tab: the base line and the tab
+ * itself, and on a Futures tab the 2.5 mm front-overhang limit and the
+ * insertion-clearance line behind the tab (fin-clearance.ts). An FCS single tab drops
+ * straight into its plug, so it has neither. Points are dragged through the fin store, which clamps
  * every move to the fin's rules.
  */
 import {
   FIN_MAX_FRONT_OVERHANG,
-  FUTURES_TABS,
   clearanceAt,
-  finTabKind,
-  futuresTabOutline,
+  finTabOutline,
+  futuresKind,
   rearClearance,
   tabProfilePoints,
-  type FinPosition,
+  type FinBase,
 } from '@openshaper/kernel';
 import { FinCurveEditor, boundsOf, sampleSpline, type Viewport } from '@openshaper/render2d';
 import type { FinState } from '@openshaper/store';
@@ -29,9 +29,9 @@ const TAB_LINE = 'rgba(138,155,179,0.7)';
 const LIMIT = 'rgba(249,115,22,0.85)';
 
 /** The tab profile in the blade frame (tab top at y = 0), for drawing. */
-const tabPolygon = (position: FinPosition) => {
-  const tab = futuresTabOutline(finTabKind(position));
-  return tabProfilePoints(tab.segments, 0.002).map((p) => ({ x: p.x, y: p.y - tab.spec.height }));
+const tabPolygon = (base: FinBase) => {
+  const tab = finTabOutline(base);
+  return tabProfilePoints(tab.segments, 0.002).map((p) => ({ x: p.x, y: p.y - tab.height }));
 };
 
 export const FinOutlinePane = memo(function FinOutlinePane({
@@ -56,12 +56,13 @@ export const FinOutlinePane = memo(function FinOutlinePane({
   );
   const guideHandlers = useMemo(() => sliceGuideHandlers(store, 'y'), [store]);
 
-  const tab = useMemo(() => tabPolygon(position), [position]);
-  const kind = finTabKind(position);
-  const tabLen = FUTURES_TABS[kind].length;
+  const base = design?.base ?? 'futures-side';
+  const tab = useMemo(() => tabPolygon(base), [base]);
+  const kind = futuresKind(base);
+  const { length: tabLen, height: tabHeight } = finTabOutline(base);
   const frameBounds = useMemo(
-    () => ({ minX: 0, maxX: tabLen, minY: -FUTURES_TABS[kind].height, maxY: 0 }),
-    [tabLen, kind],
+    () => ({ minX: 0, maxX: tabLen, minY: -tabHeight, maxY: 0 }),
+    [tabLen, tabHeight],
   );
 
   const layers = useMemo(
@@ -104,12 +105,14 @@ export const FinOutlinePane = memo(function FinOutlinePane({
       // The base: the board's bottom surface, across the whole view.
       const rear = Math.min(-3, boundsOf(sampleSpline(design.outline)).minX - 1);
       line({ x: rear, y: 0 }, { x: tabLen + 3, y: 0 }, TAB_LINE);
-      // Front-overhang limit.
-      const front = tabLen + FIN_MAX_FRONT_OVERHANG;
-      line({ x: front, y: -0.6 }, { x: front, y: 1.2 }, LIMIT);
-      // Insertion clearance behind the tab.
-      const c = rearClearance(kind);
-      line({ x: 0, y: clearanceAt(c, 0) }, { x: rear, y: clearanceAt(c, rear) }, LIMIT);
+      if (kind) {
+        // Front-overhang limit.
+        const front = tabLen + FIN_MAX_FRONT_OVERHANG;
+        line({ x: front, y: -0.6 }, { x: front, y: 1.2 }, LIMIT);
+        // Insertion clearance behind the tab.
+        const c = rearClearance(kind);
+        line({ x: 0, y: clearanceAt(c, 0) }, { x: rear, y: clearanceAt(c, rear) }, LIMIT);
+      }
       ctx.restore();
     },
     [design, tab, tabLen, kind],
@@ -122,7 +125,7 @@ export const FinOutlinePane = memo(function FinOutlinePane({
       layers={layers}
       selection={pickFromSelection(selection, ['outline'])}
       frameBounds={frameBounds}
-      frameKey={`${position}-${frameKey}`}
+      frameKey={`${position}-${base}-${frameKey}`}
       drawUnder={drawUnder}
       onViewport={onViewport}
       guides={guides}

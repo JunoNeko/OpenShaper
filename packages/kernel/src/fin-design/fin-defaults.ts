@@ -28,8 +28,10 @@ import { RAD_TO_DEG } from '../constants';
 import { knot, type Knot } from '../knot';
 import { vec2, type Vec2 } from '../vec2';
 import { splineExtremes } from './curve-shape';
+import { FCS_SINGLE_TAB } from './fin-tab';
 import {
   FIN_MIN_THICKNESS,
+  defaultFinBase,
   type FinDesign,
   type FinHand,
   type FinPosition,
@@ -176,10 +178,68 @@ export const defaultFinDesign = (position: FinPosition, hand: FinHand = 'left'):
     position,
     hand: centre ? null : hand,
     cant: cantDeg(size.rx),
+    base: defaultFinBase(position),
     outline: defaultOutline(size.height * M_TO_CM),
     lateralOffset: 0,
     section,
     slices: [],
     taper: defaultTaper(size.thick * M_TO_CM),
+  };
+};
+
+/**
+ * The owner's canard (round 3), as they drew it: a small fin for an FCS 1 style single
+ * plug. Knots as [end, handle to previous, handle to next, smooth]; the outline and the
+ * taper's thickness in mm, the section in chords.
+ */
+type KnotRow = [[number, number], [number, number], [number, number], boolean];
+const CANARD_OUTLINE_MM: KnotRow[] = [
+  [[69.2553, 0.0], [69.2553, 0.0], [55.1969, 27.5422], false],
+  [[-8.6879, 80.5759], [24.3397, 78.7106], [-20.3052, 81.232], true],
+  [[-23.581, 67.5813], [-29.0498, 77.854], [-18.1455, 57.3712], true],
+  [[-4.81225, 34.934], [-12.4714, 50.1523], [0.393592, 24.5903], true],
+  [[0.0, 0.0], [2.62041, 5.67755], [0.0, 0.0], false],
+];
+const CANARD_OUTSIDE: KnotRow[] = [
+  [[0.0, 0.0], [0.0, 0.0], [0.000522601, 0.0512155], false],
+  [[0.365083, 0.118045], [0.155232, 0.118045], [0.680872, 0.118045], true],
+  [[1.0, 0.0], [0.979809, 0.00832144], [1.0, 0.0], false],
+];
+const CANARD_TAPER_MM: KnotRow[] = [
+  [[0.0, 8.0], [0.0, 8.0], [0.233333, 6.66667], false],
+  [[0.7, 4.0], [0.466667, 5.33333], [0.8, 3.42857], true],
+  [[1.0, 0.5], [0.952625, 2.33594], [1.0, 0.5], false],
+];
+
+const MM_TO_CM = 0.1;
+
+const rowsToSpline = (rows: KnotRow[], fx: number, fy: number, dx = 0): Spline =>
+  splineFromKnots(
+    rows.map(([e, p, n, smooth]) => {
+      const v = ([x, y]: [number, number]) => vec2(x * fx + dx, y * fy);
+      return knot(v(e), v(p), v(n), smooth);
+    }),
+  );
+
+/**
+ * The starting canard: the owner's, on an FCS single tab, its base centred over the tab
+ * and no cant (the plug carries it). Left and right share the outline; the hand only
+ * turns the outside face.
+ */
+export const defaultCanard = (hand: FinHand = 'left'): FinDesign => {
+  const le = CANARD_OUTLINE_MM[0]![0][0];
+  const te = CANARD_OUTLINE_MM[CANARD_OUTLINE_MM.length - 1]![0][0];
+  // Centre the base over the tab (cm).
+  const dx = FCS_SINGLE_TAB.length / 2 - ((le + te) / 2) * MM_TO_CM;
+  return {
+    position: 'side',
+    hand,
+    cant: 0,
+    base: 'fcs-single',
+    outline: rowsToSpline(CANARD_OUTLINE_MM, MM_TO_CM, MM_TO_CM, dx),
+    lateralOffset: 0,
+    section: { outside: rowsToSpline(CANARD_OUTSIDE, 1, 1), inside: flatFace() },
+    slices: [],
+    taper: rowsToSpline(CANARD_TAPER_MM, 1, MM_TO_CM),
   };
 };

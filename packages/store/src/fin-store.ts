@@ -17,10 +17,11 @@ import {
   finReadouts,
   nudgeFore,
   nudgeLateral,
+  placeOnBase,
   vec2,
+  type FinBase,
   type FinDesign,
   type FinHand,
-  type FinPosition,
   type Vec2,
 } from '@openshaper/kernel';
 import { createStore, type StoreApi } from 'zustand/vanilla';
@@ -51,6 +52,7 @@ import {
   spanMidpoint,
   withFinCurve,
   type FinCurve,
+  type FinStart,
 } from './fin-edits';
 
 /** A selected control point of one of the fin's curves. */
@@ -81,8 +83,8 @@ export interface FinState {
 
   /** Open a design (a file, an autosave): history starts afresh. */
   load: (d: FinDesign) => void;
-  /** Start again from a position's default fin (undoable). */
-  newFin: (position: FinPosition, hand?: FinHand) => void;
+  /** Start again from a starting fin: a position's default, or the canard (undoable). */
+  newFin: (start: FinStart, hand?: FinHand) => void;
   select: (selection: FinSelection | null) => void;
 
   beginEdit: (label?: string) => void;
@@ -102,6 +104,8 @@ export interface FinState {
   setRootThickness: (cm: number) => boolean;
   setDepth: (cm: number) => boolean;
   setHand: (hand: FinHand) => boolean;
+  /** Move the fin onto another tab, placed as that tab's fins start (placeOnBase). */
+  setBase: (base: FinBase) => boolean;
   /** Apply a NACA 4-digit preset to the section ('2412'). */
   applyNaca: (code: string) => boolean;
   setInsideFace: (kind: 'flat' | 'symmetric') => boolean;
@@ -306,6 +310,12 @@ export const createFinStore = (): StoreApi<FinState> =>
           ),
         ),
 
+      setBase: (base) => {
+        const d = get().design;
+        // Re-placing can break a rule the old placement kept (a long base on a short
+        // tab): commit it anyway, so the rule is listed and the user can fix it.
+        return d ? commit(placeOnBase(d, base), 'Change base') : false;
+      },
       setCant: (deg) => {
         const d = get().design;
         return d ? commitChecked(setCant(d, deg), 'Set cant') : false;

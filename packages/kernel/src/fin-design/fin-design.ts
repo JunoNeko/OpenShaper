@@ -12,6 +12,7 @@
  * per field).
  */
 import type { Spline } from '../bezier-spline';
+import type { FinBase } from './fin-tab';
 import type { FuturesTabKind } from './futures-tab';
 
 /** Where the fin goes. Quad rears use the shallower centre tab but take cant and a side. */
@@ -34,9 +35,13 @@ export type FinHand = 'left' | 'right';
  */
 export const finOutward = (hand: FinHand | null): 1 | -1 => (hand === 'right' ? -1 : 1);
 
-/** The Futures tab each position uses. */
+/** The Futures tab each position uses by default. */
 export const finTabKind = (position: FinPosition): FuturesTabKind =>
   position === 'side' ? 'side' : 'centre';
+
+/** The base a position starts on: its Futures tab. Canards choose the FCS single tab. */
+export const defaultFinBase = (position: FinPosition): FinBase =>
+  position === 'side' ? 'futures-side' : 'futures-centre';
 
 /** Largest cant (blade lean from the tab, deg) the designer allows. */
 export const FIN_MAX_CANT = 20;
@@ -80,8 +85,13 @@ export interface FinDesign {
   readonly position: FinPosition;
   /** `left` or `right` for side and quad-rear fins; `null` for a centre fin. */
   readonly hand: FinHand | null;
-  /** Lean of the blade out from the tab (deg), 0 to {@link FIN_MAX_CANT}; 0 for centre. */
+  /**
+   * Lean of the blade out from the tab (deg), 0 to {@link FIN_MAX_CANT}; 0 for a centre
+   * fin, and on an FCS single tab, whose plug carries the cant.
+   */
   readonly cant: number;
+  /** The tab the fin sits on (fin-tab.ts). */
+  readonly base: FinBase;
   /**
    * The blade's side profile in the tab frame (cm): x from the tab's rear end toward its
    * front (+x toward the nose), y = height above the tab top (the blade root plane).

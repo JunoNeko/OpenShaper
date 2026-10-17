@@ -53,10 +53,13 @@ export function DegField({
   label,
   value,
   onCommit,
+  disabled,
 }: {
   label: string;
   value: number;
   onCommit: (deg: number) => void;
+  /** Shown but not editable (a value something else sets). */
+  disabled?: boolean;
 }) {
   const shown = value.toFixed(1);
   const [text, setText] = useSyncedText(shown);
@@ -70,6 +73,7 @@ export function DegField({
       <span className="flex-1 text-muted-foreground">{label}</span>
       <NumericInput
         signed
+        disabled={disabled}
         value={text}
         onValueChange={setText}
         onCommit={commit}

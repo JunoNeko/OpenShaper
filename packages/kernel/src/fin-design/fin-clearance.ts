@@ -22,7 +22,8 @@ import { RAD_TO_DEG } from '../constants';
 import type { Coeffs } from '../bezier-curve';
 import type { Spline } from '../bezier-spline';
 import { crossings } from './curve-shape';
-import { finTabKind, type FinDesign } from './fin-design';
+import type { FinDesign } from './fin-design';
+import { futuresKind } from './fin-tab';
 import { futuresTabOutline, type FuturesTabKind } from './futures-tab';
 
 export interface RearClearance {
@@ -102,6 +103,11 @@ export const clearanceShortfall = (outline: Spline, c: RearClearance): number =>
   return worst;
 };
 
-/** The design's shortfall against its own tab's clearance line (cm). */
-export const finClearanceShortfall = (d: FinDesign): number =>
-  clearanceShortfall(d.outline, rearClearance(finTabKind(d.position)));
+/**
+ * The design's shortfall against its own tab's clearance line (cm). Futures tabs only:
+ * an FCS single tab drops straight into its plug, with no rocking.
+ */
+export const finClearanceShortfall = (d: FinDesign): number => {
+  const kind = futuresKind(d.base);
+  return kind ? clearanceShortfall(d.outline, rearClearance(kind)) : 0;
+};

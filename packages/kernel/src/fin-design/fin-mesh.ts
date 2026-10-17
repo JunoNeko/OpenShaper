@@ -26,9 +26,10 @@ import {
   prepareBlade,
 } from './blade';
 import { sectionLoop } from './blade-surface';
-import { finTabKind, type FinDesign } from './fin-design';
+import type { FinDesign } from './fin-design';
+import { finTabOutline } from './fin-tab';
 import { tabCentreY } from './fin-placement';
-import { futuresTabOutline, type TabSegment } from './futures-tab';
+import type { TabSegment } from './futures-tab';
 import { polygonArea, triangulate } from './triangulate';
 
 export interface FinMeshOptions {
@@ -157,8 +158,8 @@ export const tabProfilePoints = (segments: readonly TabSegment[], tolerance: num
   });
 
 const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
-  const tab = futuresTabOutline(finTabKind(d.position));
-  const { height: H, thickness: t } = tab.spec;
+  const tab = finTabOutline(d.base);
+  const { height: H, thickness: t } = tab;
   const yc = tabCentreY(d);
   const profile = tabProfilePoints(tab.segments, o.arcTolerance);
   const m = builder();

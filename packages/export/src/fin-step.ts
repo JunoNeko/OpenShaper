@@ -30,8 +30,7 @@ import {
   evalCurve,
   evalSurfaceDeriv,
   fitBladeSurface,
-  futuresTabOutline,
-  finTabKind,
+  finTabOutline,
   knotMultiplicities,
   surfaceBoundaryCurve,
   tabCentreY,
@@ -223,8 +222,8 @@ const emitBlade = (w: Writer, m: BladeSurfaceModel): number => {
 // --- tab ---
 
 const emitTab = (w: Writer, d: FinDesign, factor: number): number => {
-  const tab = futuresTabOutline(finTabKind(d.position));
-  const { height: H, thickness: t } = tab.spec;
+  const tab = finTabOutline(d.base);
+  const { height: H, thickness: t } = tab;
   const yc = tabCentreY(d);
   const sides = [yc - t / 2, yc + t / 2] as const;
   // Tab frame (x, y up from the tab bottom) to the fin frame: z = y − H.

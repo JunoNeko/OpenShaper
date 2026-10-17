@@ -141,6 +141,24 @@ test.describe('Fin designer', () => {
     await expect(tabs.getByRole('tab')).toHaveText(['Root', '50.0 mm']);
   });
 
+  test('a canard on the FCS single tab exports for CNC', async ({ page }) => {
+    await openFin(page);
+    await page
+      .getByLabel('Start a new fin')
+      .selectOption({ label: 'Canard, left (FCS single tab)' });
+    await expect(page.getByLabel('Base')).toHaveValue('fcs-single');
+    await expect(page.getByLabel(/^Cant/)).toBeDisabled();
+    await expect(page.getByRole('status')).toHaveCount(0);
+    const [step] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Export STEP' }).click(),
+    ]);
+    expect(step.suggestedFilename()).toBe('fin-side-left.step');
+    expect(
+      (await readFile((await step.path())!, 'utf8')).match(/MANIFOLD_SOLID_BREP\(/g),
+    ).toHaveLength(2);
+  });
+
   test('explains a foil a centre fin cannot take', async ({ page }) => {
     await openFin(page);
     await page.getByLabel('Start a new fin').selectOption({ label: 'Centre' });

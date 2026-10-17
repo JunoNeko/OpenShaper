@@ -22,8 +22,8 @@
  */
 import { prepareBlade, rootThickestFaces } from './blade';
 import { clearanceShortfall, rearClearance } from './fin-clearance';
-import { FIN_MAX_FRONT_OVERHANG, finOutward, finTabKind, type FinDesign } from './fin-design';
-import { FUTURES_TABS } from './futures-tab';
+import { FIN_MAX_FRONT_OVERHANG, finOutward, type FinDesign } from './fin-design';
+import { finTabOutline, futuresKind, type FinBase } from './fin-tab';
 import { splineFromKnots } from '../bezier-spline';
 import { knot } from '../knot';
 import { vec2, type Vec2 } from '../vec2';
@@ -32,9 +32,7 @@ const outwardOf = (d: FinDesign): 1 | -1 => finOutward(d.hand);
 
 /** The tab's centre plane (blade-frame Y, cm) before any lateral offset. */
 const defaultTabCentreY = (d: FinDesign): number =>
-  d.section.inside === null
-    ? 0
-    : (outwardOf(d) * FUTURES_TABS[finTabKind(d.position)].thickness) / 2;
+  d.section.inside === null ? 0 : (outwardOf(d) * finTabOutline(d.base).thickness) / 2;
 
 /** The tab's centre plane (blade-frame Y, cm): its default, less the blade's offset. */
 export const tabCentreY = (d: FinDesign): number =>
@@ -54,11 +52,19 @@ export const lateralOffsetRange = (d: FinDesign): { min: number; max: number } =
   return { min: Math.min(a, o), max: Math.max(a, o) };
 };
 
-/** Fore-aft limits on the leading-edge root's x (cm), from the design's tab. */
-export const leadingRootRange = (d: FinDesign): { min: number; max: number } => ({
-  min: 0,
-  max: FUTURES_TABS[finTabKind(d.position)].length + FIN_MAX_FRONT_OVERHANG,
-});
+/**
+ * Fore-aft limits on the leading-edge root's x (cm), from the design's tab. Futures: on
+ * the tab, overhanging its front by no more than the grub-screw allowance. FCS: the tab
+ * stays wholly under the blade's root, so the leading-edge root is at or ahead of the
+ * tab's front and the trailing-edge root at or behind its rear.
+ */
+export const leadingRootRange = (d: FinDesign): { min: number; max: number } => {
+  const tab = finTabOutline(d.base);
+  if (futuresKind(d.base)) return { min: 0, max: tab.length + FIN_MAX_FRONT_OVERHANG };
+  const knots = d.outline.knots;
+  const chord = knots[0]!.end.x - knots[knots.length - 1]!.end.x;
+  return { min: tab.length, max: Math.max(tab.length, chord) };
+};
 
 const shiftOutline = (d: FinDesign, dx: number): FinDesign => {
   const m = (p: Vec2) => vec2(p.x + dx, p.y);
@@ -82,8 +88,9 @@ export const nudgeFore = (d: FinDesign, dx: number): FinDesign => {
   const le = d.outline.knots[0]!.end.x;
   const { min, max } = leadingRootRange(d);
   let to = Math.min(max, Math.max(min, le + dx));
-  if (to < le) {
-    const c = rearClearance(finTabKind(d.position));
+  const kind = futuresKind(d.base);
+  if (to < le && kind) {
+    const c = rearClearance(kind);
     const clear = (x: number) => clearanceShortfall(shiftOutline(d, x - le).outline, c) <= 1e-9;
     if (!clear(le)) to = le;
     else if (!clear(to)) {
@@ -107,4 +114,21 @@ export const nudgeLateral = (d: FinDesign, dy: number): FinDesign => {
   const { min, max } = lateralOffsetRange(d);
   const to = Math.min(max, Math.max(min, d.lateralOffset + dy));
   return to === d.lateralOffset ? d : { ...d, lateralOffset: to };
+};
+
+/**
+ * The design moved onto another base, placed as that base's fins start: on an FCS single
+ * tab, its root centred over the tab and no cant (the plug carries it); on a Futures
+ * tab, rear-aligned (the trailing-edge root on the tab's rear end), its cant kept.
+ */
+export const placeOnBase = (d: FinDesign, base: FinBase): FinDesign => {
+  if (base === d.base) return d;
+  const knots = d.outline.knots;
+  const le = knots[0]!.end.x;
+  const te = knots[knots.length - 1]!.end.x;
+  const tab = finTabOutline(base);
+  const fcs = !futuresKind(base);
+  const dx = fcs ? tab.length / 2 - (le + te) / 2 : -te;
+  const moved = dx === 0 ? d : shiftOutline(d, dx);
+  return { ...moved, base, cant: fcs ? 0 : d.cant };
 };
