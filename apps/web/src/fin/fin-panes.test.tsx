@@ -9,6 +9,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { lengthUnitByKey } from '../format';
 import { MOUSE, installLayoutStubs, pane, removeLayoutStubs } from '../test/spline-editor-harness';
+import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane, FinSectionTools } from './FinSectionPane';
 import { FinTaperPane } from './FinTaperPane';
 import { finStore } from './fin-store';
@@ -25,7 +26,7 @@ describe('FinSectionTools', () => {
   beforeEach(() => act(() => finStore.getState().load(defaultFinDesign('side', 'right'))));
 
   it('applies a NACA preset to the section', () => {
-    render(<FinSectionTools store={finStore} />);
+    render(<FinSectionTools store={finStore} units={lengthUnitByKey('mm')} />);
     fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: '2412' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(design().section.inside).not.toBeNull();
@@ -33,7 +34,7 @@ describe('FinSectionTools', () => {
   });
 
   it('offers every preset again after one is applied', () => {
-    render(<FinSectionTools store={finStore} />);
+    render(<FinSectionTools store={finStore} units={lengthUnitByKey('mm')} />);
     fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: '2412' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     const options = screen.getAllByRole('option').map((o) => o.textContent);
@@ -45,7 +46,7 @@ describe('FinSectionTools', () => {
   });
 
   it('takes any other 4-digit code', () => {
-    render(<FinSectionTools store={finStore} />);
+    render(<FinSectionTools store={finStore} units={lengthUnitByKey('mm')} />);
     fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: 'other' } });
     fireEvent.change(screen.getByLabelText('NACA 4-digit code'), { target: { value: '3415' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
@@ -53,7 +54,7 @@ describe('FinSectionTools', () => {
   });
 
   it('explains a code it cannot use', () => {
-    render(<FinSectionTools store={finStore} />);
+    render(<FinSectionTools store={finStore} units={lengthUnitByKey('mm')} />);
     fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: 'other' } });
     fireEvent.change(screen.getByLabelText('NACA 4-digit code'), { target: { value: '24' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
@@ -63,7 +64,7 @@ describe('FinSectionTools', () => {
 
   it('keeps a centre fin symmetric', () => {
     act(() => finStore.getState().load(defaultFinDesign('centre')));
-    render(<FinSectionTools store={finStore} />);
+    render(<FinSectionTools store={finStore} units={lengthUnitByKey('mm')} />);
     expect(screen.queryByRole('button', { name: 'Flat inside' })).toBeNull();
     expect(screen.queryByRole('option', { name: '2412' })).toBeNull(); // only 00xx offered
     fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: 'other' } });
@@ -74,7 +75,7 @@ describe('FinSectionTools', () => {
   });
 
   it('switches a side fin between symmetric and flat inside', () => {
-    render(<FinSectionTools store={finStore} />);
+    render(<FinSectionTools store={finStore} units={lengthUnitByKey('mm')} />);
     fireEvent.click(screen.getByRole('button', { name: 'Symmetric' }));
     expect(design().section.inside).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Flat inside' }));
@@ -144,5 +145,32 @@ describe('dragging in the panes', () => {
     const after = design().section.outside.knots[1]!.end;
     expect(after.x).toBeGreaterThan(before.x);
     expect(after.y).toBeCloseTo(before.y, 9);
+  });
+});
+
+describe('foil slices in the panes', () => {
+  beforeEach(() =>
+    act(() => {
+      finStore.getState().load(defaultFinDesign('side', 'left'));
+      finStore.getState().addSlice(0.5);
+      finStore.getState().setActiveFoil(0);
+    }),
+  );
+
+  it('drags a slice line in the profile up the blade, picking its foil', () => {
+    render(<FinOutlinePane store={finStore} units={lengthUnitByKey('mm')} />);
+    const canvas = screen.getByRole('img', { name: 'Fin outline' });
+    // Find the line by probing down the middle of the pane.
+    let hit: { clientX: number; clientY: number } | null = null;
+    for (let y = 0; y < pane.h && !hit; y += 2) {
+      fireEvent.pointerDown(canvas, { ...MOUSE, clientX: pane.w / 2, clientY: y });
+      if (finStore.getState().activeFoil === 1) hit = { clientX: pane.w / 2, clientY: y };
+      else fireEvent.pointerUp(canvas, { ...MOUSE, clientX: pane.w / 2, clientY: y });
+    }
+    expect(hit).not.toBeNull();
+    fireEvent.pointerMove(canvas, { ...MOUSE, clientX: hit!.clientX, clientY: hit!.clientY - 40 });
+    fireEvent.pointerUp(canvas, { ...MOUSE, clientX: hit!.clientX, clientY: hit!.clientY - 40 });
+    expect(design().slices[0]!.height).toBeGreaterThan(0.5);
+    expect(finStore.getState().past.at(-1)!.label).toBe('Move foil slice');
   });
 });

@@ -19,7 +19,9 @@ import { FinCurveEditor, boundsOf, sampleSpline, type Viewport } from '@openshap
 import type { FinState } from '@openshaper/store';
 import { memo, useCallback, useMemo } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
+import type { LengthUnit } from '../format';
 import { curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
+import { sliceGuideHandlers, sliceGuides } from './slice-guides';
 import { useFinState } from './use-fin';
 
 const TAB_FILL = 'rgba(138,155,179,0.18)';
@@ -34,17 +36,25 @@ const tabPolygon = (position: FinPosition) => {
 
 export const FinOutlinePane = memo(function FinOutlinePane({
   store,
+  units,
   onViewport,
   frameKey = '',
 }: {
   store: StoreApi<FinState>;
+  units: LengthUnit;
   onViewport?: (vp: Viewport) => void;
   /** Change it to re-fit the view (the pane moving large or small). */
   frameKey?: string;
 }) {
   const design = useFinState(store, (s) => s.design);
   const selection = useFinState(store, (s) => s.selection);
+  const activeFoil = useFinState(store, (s) => s.activeFoil);
   const position = design?.position ?? 'side';
+  const guides = useMemo(
+    () => (design ? sliceGuides(design, activeFoil, units, 'y') : []),
+    [design, activeFoil, units],
+  );
+  const guideHandlers = useMemo(() => sliceGuideHandlers(store, 'y'), [store]);
 
   const tab = useMemo(() => tabPolygon(position), [position]);
   const kind = finTabKind(position);
@@ -115,6 +125,8 @@ export const FinOutlinePane = memo(function FinOutlinePane({
       frameKey={`${position}-${frameKey}`}
       drawUnder={drawUnder}
       onViewport={onViewport}
+      guides={guides}
+      {...guideHandlers}
       {...handlers}
     />
   );

@@ -20,6 +20,7 @@ import {
   FIN_MAX_CANT,
   finReadouts,
   validateFinDesign,
+  type FinDesign,
   type FinHand,
   type FinPosition,
 } from '@openshaper/kernel';
@@ -211,6 +212,18 @@ function PlacementTools() {
 const OUTLINE_CURVES = ['outline'] as const;
 const TAPER_CURVES = ['taper'] as const;
 
+/**
+ * Where a new slice goes: halfway up the biggest gap between the root, the slices and
+ * the tip, so repeated clicks spread them out.
+ */
+const nextSliceHeight = (d: FinDesign): number => {
+  const hs = [0, ...d.slices.map((sl) => sl.height), 1];
+  let best = 0;
+  for (let i = 1; i < hs.length - 1; i++)
+    if (hs[i + 1]! - hs[i]! > hs[best + 1]! - hs[best]!) best = i;
+  return (hs[best]! + hs[best + 1]!) / 2;
+};
+
 /** The profile view's controls. */
 function OutlineTools({ units }: { units: LengthUnit }) {
   const design = useFinState(finStore, (s) => s.design);
@@ -225,6 +238,15 @@ function OutlineTools({ units }: { units: LengthUnit }) {
         onCommit={(cm) => finStore.getState().setDepth(cm)}
       />
       <PointTools store={finStore} curves={OUTLINE_CURVES} />
+      <Tooltip label="Add a foil slice: drag its line to place it, then shape its foil">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => finStore.getState().addSlice(nextSliceHeight(design))}
+        >
+          Add slice
+        </Button>
+      </Tooltip>
     </>
   );
 }
@@ -495,13 +517,13 @@ export function FinApp() {
           onSwap={swap}
           tools={<OutlineTools units={units} />}
         >
-          <FinOutlinePane store={finStore} frameKey={sizeKey('outline')} />
+          <FinOutlinePane store={finStore} units={units} frameKey={sizeKey('outline')} />
         </ViewPane>
         <ViewPane
           view="foil"
           slot={slotOf('foil')}
           onSwap={swap}
-          tools={<FinSectionTools store={finStore} />}
+          tools={<FinSectionTools store={finStore} units={units} />}
         >
           <FinSectionPane store={finStore} frameKey={sizeKey('foil')} />
         </ViewPane>

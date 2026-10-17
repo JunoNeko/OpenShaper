@@ -15,8 +15,10 @@ import {
   FIN_MAX_CANT,
   FIN_MAX_FRONT_OVERHANG,
   FIN_MIN_THICKNESS,
+  FIN_SLICE_MIN_GAP,
   finTabKind,
   type FinDesign,
+  type FinSection,
 } from './fin-design';
 import { finClearanceShortfall } from './fin-clearance';
 import { lateralOffsetRange } from './fin-placement';
@@ -35,6 +37,7 @@ export type FinIssueCode =
   | 'section-direction'
   | 'section-crossing'
   | 'section-symmetry'
+  | 'slice-height'
   | 'taper-span'
   | 'taper-thickness';
 
@@ -136,13 +139,17 @@ const checkFace = (face: Spline, name: string, issues: FinIssue[]): boolean => {
   return true;
 };
 
-const checkSection = (d: FinDesign, issues: FinIssue[]): void => {
-  const { outside, inside } = d.section;
+/** One foil's faces: ends, direction, no crossing, some thickness. `where` names it. */
+const checkFoil = (d: FinDesign, sec: FinSection, where: string, issues: FinIssue[]): void => {
+  const { outside, inside } = sec;
   if (d.position === 'centre' && inside !== null) {
-    issues.push({ code: 'section-symmetry', message: 'A centre fin has a symmetric foil.' });
+    issues.push({
+      code: 'section-symmetry',
+      message: `A centre fin has a symmetric foil${where}.`,
+    });
   }
-  const outsideOk = checkFace(outside, 'outside', issues);
-  const insideOk = inside === null || checkFace(inside, 'inside', issues);
+  const outsideOk = checkFace(outside, `outside${where}`, issues);
+  const insideOk = inside === null || checkFace(inside, `inside${where}`, issues);
   if (!outsideOk || !insideOk) return;
 
   // The inside face mirrors the outside when the foil is symmetric.
@@ -154,14 +161,34 @@ const checkSection = (d: FinDesign, issues: FinIssue[]): void => {
     if (t < -EPS) {
       issues.push({
         code: 'section-crossing',
-        message: 'The inside face crosses the outside face.',
+        message: `The inside face crosses the outside face${where}.`,
       });
       return;
     }
     thickest = Math.max(thickest, t);
   }
   if (thickest <= EPS) {
-    issues.push({ code: 'section-crossing', message: 'The foil has no thickness.' });
+    issues.push({ code: 'section-crossing', message: `The foil has no thickness${where}.` });
+  }
+};
+
+const checkSection = (d: FinDesign, issues: FinIssue[]): void => {
+  checkFoil(d, d.section, '', issues);
+  let below = 0;
+  for (const slice of d.slices) {
+    const pct = Math.round(slice.height * 100);
+    if (
+      !(slice.height >= below + FIN_SLICE_MIN_GAP - EPS) ||
+      !(slice.height <= 1 - FIN_SLICE_MIN_GAP + EPS)
+    ) {
+      issues.push({
+        code: 'slice-height',
+        message: `Foil slices must be in order up the blade, ${FIN_SLICE_MIN_GAP * 100}% of its depth apart and from the root and tip.`,
+      });
+      return;
+    }
+    below = slice.height;
+    checkFoil(d, slice.section, ` (slice at ${pct}%)`, issues);
   }
 };
 

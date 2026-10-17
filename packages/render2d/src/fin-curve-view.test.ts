@@ -4,12 +4,15 @@ import { knot, splineFromKnots, vec2 } from '@openshaper/kernel';
 import {
   boundsToView,
   dragTo,
+  guideValueAt,
+  pickGuide,
   fromView,
   layersBounds,
   pickCurve,
   pickHandle,
   splineToView,
   toView,
+  type FinCurveGuide,
   type FinCurveLayer,
   type ViewMap,
 } from './fin-curve-view';
@@ -136,5 +139,28 @@ describe('layersBounds', () => {
     expect(b.maxX).toBe(10);
     expect(b.minY).toBe(-5);
     expect(b.maxY).toBeCloseTo(6, 6); // the arch peaks at 3, stretched ×2
+  });
+});
+
+describe('guides', () => {
+  const level: FinCurveGuide = { id: 'a', axis: 'y', at: 2 };
+  const upright: ViewMap = { a: 0, b: 4, c: 10, d: 0 };
+  const across: FinCurveGuide = { id: 'b', axis: 'x', at: 0.5 }; // taper: fraction 0.5
+
+  it('picks a level guide anywhere along it, within the tolerance', () => {
+    const s = at(vec2(7, 2));
+    expect(pickGuide([level], vp, { x: s.x, y: s.y + 5 }, 1, 8)).toBe(level);
+    expect(pickGuide([level], vp, { x: s.x + 300, y: s.y - 5 }, 1, 8)).toBe(level);
+    expect(pickGuide([level], vp, { x: s.x, y: s.y + 12 }, 1, 8)).toBeNull();
+  });
+
+  it('reads a dragged guide back in data space, through a stretch or a swap', () => {
+    expect(guideValueAt(level, vp, at(vec2(3, 2.5)), 1)).toBeCloseTo(2.5, 12);
+    expect(guideValueAt(level, vp, at(vec2(3, 2.5), 4), 4)).toBeCloseTo(2.5, 12);
+    // Upright taper: the fraction runs up the view, so a guide on it is level on screen.
+    const s = worldToScreen(vp, toView(vec2(0.7, 0.2), upright));
+    expect(guideValueAt(across, vp, s, upright)).toBeCloseTo(0.7, 12);
+    const on = worldToScreen(vp, toView(vec2(0.5, 0.3), upright));
+    expect(pickGuide([across], vp, { x: on.x + 200, y: on.y + 3 }, upright, 8)).toBe(across);
   });
 });

@@ -111,6 +111,36 @@ test.describe('Fin designer', () => {
     await expect(page.getByText('— inside')).toBeVisible();
   });
 
+  test('a foil slice: add, shape, export, save and reopen', async ({ page }) => {
+    await openFin(page);
+    await page.getByRole('button', { name: 'Add slice' }).click();
+    await page.getByRole('button', { name: 'Show Foil section in the large pane' }).click();
+    const tabs = page.getByRole('tablist', { name: 'Foil' });
+    await expect(tabs.getByRole('tab')).toHaveText(['Root', '50.0 mm']);
+    await page.getByLabel('NACA preset').selectOption('0008');
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await expect(page.getByRole('status')).toHaveCount(0); // no rule broken
+
+    const [step] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Export STEP' }).click(),
+    ]);
+    expect(
+      (await readFile((await step.path())!, 'utf8')).match(/MANIFOLD_SOLID_BREP\(/g),
+    ).toHaveLength(2);
+
+    const [saved] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Save' }).click(),
+    ]);
+    const savedPath = (await saved.path())!;
+    expect(JSON.parse(await readFile(savedPath, 'utf8')).version).toBe(2);
+    await page.getByLabel('Start a new fin').selectOption({ label: 'Centre' });
+    await expect(page.getByRole('tablist', { name: 'Foil' })).toHaveCount(0);
+    await page.getByLabel('Open a fin file').setInputFiles(savedPath);
+    await expect(tabs.getByRole('tab')).toHaveText(['Root', '50.0 mm']);
+  });
+
   test('explains a foil a centre fin cannot take', async ({ page }) => {
     await openFin(page);
     await page.getByLabel('Start a new fin').selectOption({ label: 'Centre' });

@@ -33,12 +33,15 @@ import {
   setKnotContinuous,
 } from './edits';
 import {
+  addSlice,
   applyNaca,
   clampEdit,
   constrainKnot,
   getFinCurve,
   newFin,
+  moveSlice,
   newIssues,
+  removeSlice,
   setCant,
   setDepth,
   setHand,
@@ -70,6 +73,11 @@ export interface FinState {
   /** True during a drag: its moves coalesce into one undo step. */
   editing: boolean;
   selection: FinSelection | null;
+  /**
+   * The foil the section curves (`outside`, `inside`) edit: 0 the root, k the k-th
+   * slice. NACA presets and the inside-face buttons act on it too.
+   */
+  activeFoil: number;
 
   /** Open a design (a file, an autosave): history starts afresh. */
   load: (d: FinDesign) => void;
@@ -97,6 +105,18 @@ export interface FinState {
   /** Apply a NACA 4-digit preset to the section ('2412'). */
   applyNaca: (code: string) => boolean;
   setInsideFace: (kind: 'flat' | 'symmetric') => boolean;
+
+  /** Edit foil `foil` (0 the root, k the k-th slice). */
+  setActiveFoil: (foil: number) => void;
+  /** A new slice at `height` (fraction of the depth), made the active foil. */
+  addSlice: (height: number) => boolean;
+  /** Remove slice `foil` (1-based); the root becomes the active foil. */
+  removeSlice: (foil: number) => boolean;
+  /**
+   * Move slice `foil` to `height`, kept in order. Wrap a drag in beginEdit / endEdit so
+   * its moves are one undo step.
+   */
+  moveSlice: (foil: number, height: number) => boolean;
   /** Arrow buttons: move the fin along the tab (cm, + toward the nose). */
   nudgeFore: (dx: number) => boolean;
   /** Arrow buttons: slide the blade across the tab (cm, + outboard). */
@@ -110,10 +130,17 @@ export interface FinState {
 
 const MAX_HISTORY = 200;
 
+/** The active foil, or the root if an undo took its slice away. */
+const validFoil = (d: FinDesign, foil: number): number => (foil <= d.slices.length ? foil : 0);
+
 /** Keep a selection only while the point it names still exists. */
-const validSelection = (d: FinDesign, s: FinSelection | null): FinSelection | null => {
+const validSelection = (
+  d: FinDesign,
+  s: FinSelection | null,
+  foil: number,
+): FinSelection | null => {
   if (!s) return null;
-  const curve = getFinCurve(d, s.curve);
+  const curve = getFinCurve(d, s.curve, validFoil(d, foil));
   return curve && s.index < curve.knots.length ? s : null;
 };
 
@@ -171,7 +198,7 @@ export const createFinStore = (): StoreApi<FinState> =>
       fn: (s: NonNullable<ReturnType<typeof getFinCurve>>) => FinDesign | null,
     ): boolean => {
       const { design } = get();
-      const s = design && getFinCurve(design, curve);
+      const s = design && getFinCurve(design, curve, get().activeFoil);
       if (!design || !s) return false;
       return commitChecked(fn(s), label);
     };
@@ -182,14 +209,16 @@ export const createFinStore = (): StoreApi<FinState> =>
       future: [],
       editing: false,
       selection: null,
+      activeFoil: 0,
 
-      load: (d) => set({ design: d, past: [], future: [], editing: false, selection: null }),
+      load: (d) =>
+        set({ design: d, past: [], future: [], editing: false, selection: null, activeFoil: 0 }),
       newFin: (position, hand) => {
         if (!get().design) {
           get().load(newFin(position, hand));
           return;
         }
-        if (commit(newFin(position, hand), 'New fin')) set({ selection: null });
+        if (commit(newFin(position, hand), 'New fin')) set({ selection: null, activeFoil: 0 });
       },
       select: (selection) => set({ selection }),
 
@@ -211,7 +240,7 @@ export const createFinStore = (): StoreApi<FinState> =>
       },
 
       moveControlPoint: (curve, index, p) => {
-        const s = get().design && getFinCurve(get().design!, curve);
+        const s = get().design && getFinCurve(get().design!, curve, get().activeFoil);
         if (!s || !s.knots[index]) return false;
         const from = s.knots[index]!.end;
         // Constrain the target, not each step: every constraint is a line or a point, so
@@ -219,45 +248,48 @@ export const createFinStore = (): StoreApi<FinState> =>
         const to = constrainKnot(s, curve, index, p);
         if (to.x === from.x && to.y === from.y) return false;
         return drag('Move control point', from, to, (q) =>
-          withFinCurve(get().design!, curve, moveKnotEnd(s, index, q)),
+          withFinCurve(get().design!, curve, moveKnotEnd(s, index, q), get().activeFoil),
         );
       },
 
       moveTangent: (curve, index, which, p) => {
-        const s = get().design && getFinCurve(get().design!, curve);
+        const s = get().design && getFinCurve(get().design!, curve, get().activeFoil);
         const k = s?.knots[index];
         if (!s || !k) return false;
         const from = which === 'prev' ? k.tangentToPrev : k.tangentToNext;
         return drag('Move handle', from, p, (q) =>
-          withFinCurve(get().design!, curve, moveKnotTangent(s, index, which, q)),
+          withFinCurve(get().design!, curve, moveKnotTangent(s, index, which, q), get().activeFoil),
         );
       },
 
       addControlPoint: (curve, p) => {
         const { design } = get();
-        const s = design && getFinCurve(design, curve);
+        const s = design && getFinCurve(design, curve, get().activeFoil);
         if (!design || !s) return false;
         const r = insertKnotAt(s, p);
         if (!r) return false;
-        const ok = commitChecked(withFinCurve(design, curve, r.spline), 'Add control point');
+        const ok = commitChecked(
+          withFinCurve(design, curve, r.spline, get().activeFoil),
+          'Add control point',
+        );
         if (ok) set({ selection: { curve, index: r.index, kind: 'end' } });
         return ok;
       },
 
       addControlPointAfter: (curve, index) => {
         const { design } = get();
-        const s = design && getFinCurve(design, curve);
+        const s = design && getFinCurve(design, curve, get().activeFoil);
         const at = s && spanMidpoint(s, index);
         return at ? get().addControlPoint(curve, at) : false;
       },
 
       deleteControlPoint: (curve, index) => {
         const { design } = get();
-        const s = design && getFinCurve(design, curve);
+        const s = design && getFinCurve(design, curve, get().activeFoil);
         if (!design || !s || !canDeleteKnot(s, index)) return false;
         if (get().editing) set({ editing: false });
         const ok = commitChecked(
-          withFinCurve(design, curve, deleteKnot(s, index)),
+          withFinCurve(design, curve, deleteKnot(s, index), get().activeFoil),
           'Delete control point',
         );
         if (ok) set({ selection: null });
@@ -270,6 +302,7 @@ export const createFinStore = (): StoreApi<FinState> =>
             get().design!,
             curve,
             continuous ? smoothKnot(s, index) : setKnotContinuous(s, index, false),
+            get().activeFoil,
           ),
         ),
 
@@ -291,13 +324,15 @@ export const createFinStore = (): StoreApi<FinState> =>
       },
       applyNaca: (code) => {
         const d = get().design;
-        return d ? commitChecked(applyNaca(d, code), `NACA ${code.trim()}`) : false;
+        return d
+          ? commitChecked(applyNaca(d, code, get().activeFoil), `NACA ${code.trim()}`)
+          : false;
       },
       setInsideFace: (kind) => {
         const d = get().design;
         return d
           ? commitChecked(
-              setInsideFace(d, kind),
+              setInsideFace(d, kind, get().activeFoil),
               kind === 'flat' ? 'Flat inside' : 'Symmetric foil',
             )
           : false;
@@ -311,6 +346,32 @@ export const createFinStore = (): StoreApi<FinState> =>
         return d ? commitChecked(nudgeLateral(d, dy), 'Nudge fin') : false;
       },
 
+      setActiveFoil: (foil) => {
+        const { design, activeFoil, selection } = get();
+        if (!design || foil === activeFoil || validFoil(design, foil) !== foil) return;
+        const onFoil = selection?.curve === 'outside' || selection?.curve === 'inside';
+        set({ activeFoil: foil, selection: onFoil ? null : selection });
+      },
+      addSlice: (height) => {
+        const d = get().design;
+        const r = d && addSlice(d, height);
+        if (!r || !commitChecked(r.design, 'Add foil slice')) return false;
+        set({ activeFoil: r.foil, selection: null });
+        return true;
+      },
+      removeSlice: (foil) => {
+        const d = get().design;
+        if (!d) return false;
+        const next = removeSlice(d, foil);
+        if (next === d || !commit(next, 'Remove foil slice')) return false;
+        set({ activeFoil: 0, selection: null });
+        return true;
+      },
+      moveSlice: (foil, height) => {
+        const d = get().design;
+        return d ? commitChecked(moveSlice(d, foil, height), 'Move foil slice') : false;
+      },
+
       undo: () => {
         const { past, future, design, selection } = get();
         if (past.length === 0 || !design) return;
@@ -320,7 +381,8 @@ export const createFinStore = (): StoreApi<FinState> =>
           past: past.slice(0, -1),
           future: [{ design, label: prev.label }, ...future],
           editing: false,
-          selection: validSelection(prev.design, selection),
+          selection: validSelection(prev.design, selection, get().activeFoil),
+          activeFoil: validFoil(prev.design, get().activeFoil),
         });
       },
       redo: () => {
@@ -332,7 +394,8 @@ export const createFinStore = (): StoreApi<FinState> =>
           past: [...past, { design, label: next.label }],
           future: future.slice(1),
           editing: false,
-          selection: validSelection(next.design, selection),
+          selection: validSelection(next.design, selection, get().activeFoil),
+          activeFoil: validFoil(next.design, get().activeFoil),
         });
       },
       canUndo: () => get().past.length > 0,

@@ -39,16 +39,22 @@ export {
   type FinSelection,
 } from './fin-store';
 export {
+  addSlice,
   applyNaca,
   clampEdit,
   constrainKnot,
   getFinCurve,
+  getFoil,
+  moveSlice,
   newIssues,
+  removeSlice,
   setCant,
   setDepth,
   setHand,
   setInsideFace,
   setRootThickness,
   withFinCurve,
+  withFoil,
   type FinCurve,
+  type FinFoilIndex,
 } from './fin-edits';

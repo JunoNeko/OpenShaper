@@ -276,3 +276,79 @@ describe('fin store: point tools', () => {
     expect(k.tangentToNext).toEqual(before.tangentToNext);
   });
 });
+
+describe('fin store: foil slices', () => {
+  const outsideAt = (s: ReturnType<typeof storeWith>, foil: number) =>
+    foil === 0 ? design(s).section.outside : design(s).slices[foil - 1]!.section.outside;
+
+  it('adds a slice as a copy of the foil below, and edits it', () => {
+    const s = storeWith();
+    expect(s.getState().addSlice(0.5)).toBe(true);
+    expect(design(s).slices).toHaveLength(1);
+    expect(design(s).slices[0]!.height).toBe(0.5);
+    expect(design(s).slices[0]!.section).toBe(design(s).section); // a copy: nothing changes yet
+    expect(s.getState().activeFoil).toBe(1);
+    // NACA and the inside face now act on the slice, not the root.
+    expect(s.getState().applyNaca('0010')).toBe(true);
+    expect(design(s).slices[0]!.section.inside).toBeNull();
+    expect(design(s).section.inside).not.toBeNull();
+  });
+
+  it('drags a slice’s point without touching the root', () => {
+    const s = storeWith();
+    s.getState().addSlice(0.5);
+    s.getState().applyNaca('2410');
+    const root = design(s).section;
+    const k = outsideAt(s, 1).knots[1]!.end;
+    s.getState().beginEdit();
+    s.getState().moveControlPoint('outside', 1, vec2(k.x, k.y * 0.9));
+    s.getState().endEdit();
+    expect(outsideAt(s, 1).knots[1]!.end.y).toBeLessThan(k.y);
+    expect(design(s).section).toBe(root);
+  });
+
+  it('moves a slice, keeping it in order, as one undo step per drag', () => {
+    const s = storeWith();
+    s.getState().addSlice(0.3);
+    s.getState().addSlice(0.7);
+    s.getState().beginEdit('Move foil slice');
+    s.getState().moveSlice(1, 0.5);
+    s.getState().moveSlice(1, 0.9); // past the slice above: stops short of it
+    s.getState().endEdit();
+    const [a, b] = design(s).slices;
+    expect(a!.height).toBeLessThan(b!.height);
+    expect(validateFinDesign(design(s))).toEqual([]);
+    s.getState().undo();
+    expect(design(s).slices[0]!.height).toBe(0.3);
+  });
+
+  it('removes a slice and goes back to the root; an undo restores it', () => {
+    const s = storeWith();
+    s.getState().addSlice(0.5);
+    expect(s.getState().removeSlice(1)).toBe(true);
+    expect(design(s).slices).toHaveLength(0);
+    expect(s.getState().activeFoil).toBe(0);
+    s.getState().undo();
+    expect(design(s).slices).toHaveLength(1);
+  });
+
+  it('falls back to the root when an undo takes the active slice away', () => {
+    const s = storeWith();
+    s.getState().addSlice(0.5);
+    expect(s.getState().activeFoil).toBe(1);
+    s.getState().undo();
+    expect(design(s).slices).toHaveLength(0);
+    expect(s.getState().activeFoil).toBe(0);
+  });
+
+  it('switches foils, dropping a selection on the old foil’s faces', () => {
+    const s = storeWith();
+    s.getState().addSlice(0.5);
+    s.getState().select({ curve: 'outside', index: 1 });
+    s.getState().setActiveFoil(0);
+    expect(s.getState().selection).toBeNull();
+    s.getState().select({ curve: 'outline', index: 1 });
+    s.getState().setActiveFoil(1);
+    expect(s.getState().selection).toEqual({ curve: 'outline', index: 1 });
+  });
+});

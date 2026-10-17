@@ -33,12 +33,16 @@ import {
   TOUCH_HIT_TOL_PX,
   dragTo,
   drawFinCurves,
+  drawGuides,
+  guideValueAt,
+  pickGuide,
   fromView,
   layersBounds,
   pickCurve,
   pickHandle,
   splineToView,
   toView,
+  type FinCurveGuide,
   type FinCurveLayer,
   type FinCurvePick,
   type ViewScale,
@@ -79,6 +83,13 @@ export interface FinCurveEditorProps {
   onDragEnd?: () => void;
   /** Double-click on a curve: add a point there (data space). */
   onAddPoint?: (layer: string, at: Vec2) => void;
+  /** Draggable guide lines (foil slices); picked when no handle is under the pointer. */
+  guides?: readonly FinCurveGuide[];
+  onGuideSelect?: (id: string) => void;
+  onGuideDragStart?: (id: string) => void;
+  /** The dragged guide's new value on its axis, in data space. */
+  onGuideDrag?: (id: string, at: number) => void;
+  onGuideDragEnd?: () => void;
   /** Reports the view whenever it changes (tests, overlays). */
   onViewport?: (vp: Viewport) => void;
   /** Accessible name for the canvas. */
@@ -88,7 +99,8 @@ export interface FinCurveEditorProps {
 
 type Drag =
   | { kind: 'handle'; pick: FinCurvePick; grabbed: Vec2; pointerAt: Vec2; id: number }
-  | { kind: 'pan'; last: ScreenPoint; id: number };
+  | { kind: 'pan'; last: ScreenPoint; id: number }
+  | { kind: 'guide'; guide: FinCurveGuide; id: number };
 
 export function FinCurveEditor({
   layers,
@@ -102,6 +114,11 @@ export function FinCurveEditor({
   onDrag,
   onDragEnd,
   onAddPoint,
+  guides,
+  onGuideSelect,
+  onGuideDragStart,
+  onGuideDrag,
+  onGuideDragEnd,
   onViewport,
   label,
   background,
@@ -165,8 +182,9 @@ export function FinCurveEditor({
       const s = toView(p, yScale);
       return { x: vp.originX + s.x * vp.scale, y: vp.originY - s.y * vp.scale };
     });
+    if (guides) drawGuides(ctx, guides, vp, yScale);
     drawFinCurves(ctx, layers, vp, yScale, selection, hovered);
-  }, [vp, size, layers, selection, hovered, yScale, drawUnder, background]);
+  }, [vp, size, layers, selection, hovered, yScale, drawUnder, background, guides]);
 
   const local = (e: { clientX: number; clientY: number }): ScreenPoint => {
     const r = canvas.current!.getBoundingClientRect();
@@ -192,6 +210,13 @@ export function FinCurveEditor({
       onSelect?.(pick);
       onDragStart?.(pick);
     } else {
+      const guide = guides && pickGuide(guides, vp, p, yScale, tolFor(e));
+      if (guide) {
+        drag.current = { kind: 'guide', guide, id: e.pointerId };
+        onGuideSelect?.(guide.id);
+        onGuideDragStart?.(guide.id);
+        return;
+      }
       drag.current = { kind: 'pan', last: p, id: e.pointerId };
       onSelect?.(null);
     }
@@ -209,6 +234,8 @@ export function FinCurveEditor({
     if (d.kind === 'handle') {
       const to = dragTo(d.grabbed, d.pointerAt, screenToWorld(vp, p));
       onDrag?.(d.pick, fromView(to, yScale));
+    } else if (d.kind === 'guide') {
+      onGuideDrag?.(d.guide.id, guideValueAt(d.guide, vp, p, yScale));
     } else {
       userFramed.current = true;
       setVp(pan(vp, p.x - d.last.x, p.y - d.last.y));
@@ -222,6 +249,7 @@ export function FinCurveEditor({
     drag.current = null;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
     if (d.kind === 'handle') onDragEnd?.();
+    if (d.kind === 'guide') onGuideDragEnd?.();
   };
 
   const onDoubleClick = (e: MouseEvent<HTMLCanvasElement>) => {

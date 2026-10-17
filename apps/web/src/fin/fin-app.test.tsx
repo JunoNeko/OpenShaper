@@ -127,6 +127,31 @@ describe('FinApp', () => {
     );
   });
 
+  it('adds a foil slice from the profile, edits it from its tab, and removes it', () => {
+    localStorage.removeItem('bs.fin.views');
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add slice' }));
+    const d = () => finStore.getState().design!;
+    expect(d().slices).toHaveLength(1);
+    expect(d().slices[0]!.height).toBe(0.5); // halfway up: the biggest gap
+    // The foil view's tools come with it into the large pane.
+    fireEvent.click(screen.getByRole('button', { name: 'Show Foil section in the large pane' }));
+    const tabs = within(screen.getByRole('tablist', { name: 'Foil' }));
+    expect(tabs.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Root', '50.0 mm']);
+    expect(tabs.getByRole('tab', { name: '50.0 mm' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: '0008' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(d().slices[0]!.section.inside).toBeNull(); // the slice took the NACA foil
+    expect(d().section.inside).not.toBeNull(); // the root kept its flat inside
+    fireEvent.click(tabs.getByRole('tab', { name: 'Root' }));
+    expect(finStore.getState().activeFoil).toBe(0);
+    fireEvent.click(tabs.getByRole('tab', { name: '50.0 mm' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove slice' }));
+    expect(d().slices).toHaveLength(0);
+    expect(screen.queryByRole('tablist', { name: 'Foil' })).toBeNull();
+    localStorage.removeItem('bs.fin.views');
+  });
+
   it('lists the rules the design breaks', () => {
     act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
     render(<FinApp />);
