@@ -86,7 +86,7 @@ describe('fin store: drags stay inside the rules', () => {
     expect(knotAt(s, 0)).toEqual(vec2(le.x - 0.5, 0));
   });
 
-  it('stops the leading-edge root at the 2.5 mm front overhang', () => {
+  it('stops the leading-edge root at the 4 mm front overhang', () => {
     const s = storeWith();
     const le = knotAt(s, 0);
     s.getState().moveControlPoint('outline', 0, vec2(20, 0)); // far past the tab front

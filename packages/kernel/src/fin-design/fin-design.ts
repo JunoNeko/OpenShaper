@@ -46,8 +46,12 @@ export const defaultFinBase = (position: FinPosition): FinBase =>
 /** Largest cant (blade lean from the tab, deg) the designer allows. */
 export const FIN_MAX_CANT = 20;
 
-/** How far the leading-edge root may sit in front of the tab's top-front corner (cm). */
-export const FIN_MAX_FRONT_OVERHANG = 0.25;
+/**
+ * How far the leading-edge root may sit in front of a Futures tab's top-front corner
+ * (cm): 4 mm. The base foil clears the box's grub screw by that much; the owner measured
+ * production fins overhanging more than the 2.5 mm first assumed.
+ */
+export const FIN_MAX_FRONT_OVERHANG = 0.4;
 
 /** Thinnest the blade may get anywhere — edges and tip — for rider safety (cm). */
 export const FIN_MIN_THICKNESS = 0.05;

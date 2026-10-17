@@ -347,6 +347,12 @@ Asked for by the owner for small canard fins, which plug into an FCS 1 style sin
 - STEP/STL/preview take the tab from `finTabOutline(base)`; OpenCascade reads the FCS block as an exact 20.5 × 13.5 × 6.35 mm solid (1757.4 mm³).
 - Canard starting fin (`defaultCanard`, New fin → Canard, left / right): the owner's canard (69.3 mm base, 80.6 mm deep, 8 mm root, flat inside), on the FCS tab, centred, no cant. `FinStart` (a position or `canard`) is what New fin takes.
 
+## Front overhang 4 mm
+
+The owner measured production fins whose leading-edge root overhangs the tab's front by more
+than 2.5 mm: the base foil clears the box's grub screw. `FIN_MAX_FRONT_OVERHANG` is now 4 mm
+(it was 2.5 mm in the requirements above). Futures tabs only; the FCS tab has no front limit.
+
 Not ours: the console's `THREE.Clock` deprecation comes from `@react-three/fiber` (harmless,
 goes with a fiber update); `share-modal.js` is not in the repository, most likely a browser
 extension.

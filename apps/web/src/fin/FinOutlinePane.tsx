@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * The fin's side profile, editable, drawn over its tab: the base line and the tab
- * itself, and on a Futures tab the 2.5 mm front-overhang limit and the
+ * itself, and on a Futures tab the 4 mm front-overhang limit and the
  * insertion-clearance line behind the tab (fin-clearance.ts). An FCS single tab drops
  * straight into its plug, so it has neither. Points are dragged through the fin store, which clamps
  * every move to the fin's rules.
