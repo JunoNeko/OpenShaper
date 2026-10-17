@@ -142,15 +142,26 @@ export const emitSurface = (w: Writer, s: BSplineSurface, label: string): number
 export const oriented = (w: Writer, edge: number, sense: boolean): number =>
   w.emit(`ORIENTED_EDGE('',*,*,${ref(edge)},${sense ? '.T.' : '.F.'})`);
 
+/**
+ * A face bounded by `orientedEdges`, with any `holes` (each its own oriented edges,
+ * running the other way round). Without holes the output is exactly as before.
+ */
 export const face = (
   w: Writer,
   surface: number,
   orientedEdges: readonly number[],
   sameSense: boolean,
+  holes: readonly (readonly number[])[] = [],
 ): number => {
   const loop = w.emit(`EDGE_LOOP('',${refs(orientedEdges)})`);
   const bound = w.emit(`FACE_OUTER_BOUND('',${ref(loop)},.T.)`);
-  return w.emit(`ADVANCED_FACE('',(${ref(bound)}),${ref(surface)},${sameSense ? '.T.' : '.F.'})`);
+  const inner = holes.map((h) => {
+    const l = w.emit(`EDGE_LOOP('',${refs(h)})`);
+    return w.emit(`FACE_BOUND('',${ref(l)},.T.)`);
+  });
+  return w.emit(
+    `ADVANCED_FACE('',(${refs([bound, ...inner]).slice(1, -1)}),${ref(surface)},${sameSense ? '.T.' : '.F.'})`,
+  );
 };
 
 // --- geometry helpers ---

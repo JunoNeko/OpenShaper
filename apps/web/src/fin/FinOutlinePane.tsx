@@ -29,9 +29,12 @@ const TAB_LINE = 'rgba(138,155,179,0.7)';
 const LIMIT = 'rgba(249,115,22,0.85)';
 
 /** The tab profile in the blade frame (tab top at y = 0), for drawing. */
-const tabPolygon = (base: FinBase) => {
+/** The tab profile and its holes in the blade frame (tab top at y = 0), for drawing. */
+const tabPolygons = (base: FinBase) => {
   const tab = finTabOutline(base);
-  return tabProfilePoints(tab.segments, 0.002).map((p) => ({ x: p.x, y: p.y - tab.height }));
+  const ring = (segs: Parameters<typeof tabProfilePoints>[0]) =>
+    tabProfilePoints(segs, 0.002).map((p) => ({ x: p.x, y: p.y - tab.height }));
+  return [ring(tab.segments), ...tab.holes.map(ring)];
 };
 
 export const FinOutlinePane = memo(function FinOutlinePane({
@@ -57,7 +60,7 @@ export const FinOutlinePane = memo(function FinOutlinePane({
   const guideHandlers = useMemo(() => sliceGuideHandlers(store, 'y'), [store]);
 
   const base = design?.base ?? 'futures-side';
-  const tab = useMemo(() => tabPolygon(base), [base]);
+  const tab = useMemo(() => tabPolygons(base), [base]);
   const kind = futuresKind(base);
   const { length: tabLen, height: tabHeight } = finTabOutline(base);
   const frameBounds = useMemo(
@@ -77,16 +80,18 @@ export const FinOutlinePane = memo(function FinOutlinePane({
       toScreen: (p: { x: number; y: number }) => { x: number; y: number },
     ) => {
       if (!design) return;
-      // The tab.
+      // The tab, with its weight-saving holes cut out.
       ctx.beginPath();
-      tab.forEach((p, i) => {
-        const s = toScreen(p);
-        if (i === 0) ctx.moveTo(s.x, s.y);
-        else ctx.lineTo(s.x, s.y);
-      });
-      ctx.closePath();
+      for (const ring of tab) {
+        ring.forEach((p, i) => {
+          const s = toScreen(p);
+          if (i === 0) ctx.moveTo(s.x, s.y);
+          else ctx.lineTo(s.x, s.y);
+        });
+        ctx.closePath();
+      }
       ctx.fillStyle = TAB_FILL;
-      ctx.fill();
+      ctx.fill('evenodd');
       ctx.strokeStyle = TAB_LINE;
       ctx.lineWidth = 1;
       ctx.stroke();

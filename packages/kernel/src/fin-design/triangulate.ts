@@ -20,6 +20,8 @@ export const polygonArea = (pts: readonly Vec2[]): number => {
   return s / 2;
 };
 
+const same = (p: Vec2, q: Vec2): boolean => p.x === q.x && p.y === q.y;
+
 const inTriangle = (p: Vec2, a: Vec2, b: Vec2, c: Vec2): boolean =>
   cross(a, b, p) >= 0 && cross(b, c, p) >= 0 && cross(c, a, p) >= 0;
 
@@ -49,7 +51,10 @@ export const triangulate = (pts: readonly Vec2[]): [number, number, number][] =>
       let blocked = false;
       for (const j of ring) {
         if (j === ia || j === ib || j === ic) continue;
-        if (inTriangle(pts[j]!, a, b, c)) {
+        const p = pts[j]!;
+        // A bridge to a hole repeats points: a copy of a corner doesn't block the ear.
+        if (same(p, a) || same(p, b) || same(p, c)) continue;
+        if (inTriangle(p, a, b, c)) {
           blocked = true;
           break;
         }
@@ -80,4 +85,64 @@ export const triangulate = (pts: readonly Vec2[]): [number, number, number][] =>
   }
   if (ring.length === 3) tris.push([ring[0]!, ring[1]!, ring[2]!]);
   return ccw ? tris : tris.map(([a, b, c]) => [a, c, b]);
+};
+
+/** Whether segments pq and rs cross at a point inside both (touching ends don't count). */
+const properlyCross = (p: Vec2, q: Vec2, r: Vec2, s: Vec2): boolean => {
+  const d1 = cross(r, s, p);
+  const d2 = cross(r, s, q);
+  const d3 = cross(p, q, r);
+  const d4 = cross(p, q, s);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+};
+
+/**
+ * Triangles covering a polygon with holes (the tab's side, with its weight-saving
+ * holes): `outer` and each hole are simple and don't touch. Indices refer to the points
+ * in the order `[...outer, ...holes[0], ...holes[1], …]`; triangles wind as `outer` does.
+ *
+ * Each hole is joined to the outline by a cut, making one simple ring that visits the
+ * cut's two points twice (the usual bridging, rightmost hole first). Cuts only join
+ * existing points, so the faces either side of every edge still match.
+ */
+export const triangulateWithHoles = (
+  outer: readonly Vec2[],
+  holes: readonly (readonly Vec2[])[],
+): [number, number, number][] => {
+  const pts: Vec2[] = [...outer];
+  const ccwOuter = polygonArea(outer) > 0;
+  let ring = outer.map((_, i) => i);
+  if (!ccwOuter) ring.reverse(); // work counter-clockwise
+  const holeRings = holes.map((h) => {
+    const start = pts.length;
+    pts.push(...h);
+    const r = h.map((_, i) => start + i);
+    // Holes run clockwise against a counter-clockwise outline.
+    return polygonArea(h) > 0 ? r.reverse() : r;
+  });
+  const edgesOf = (r: readonly number[]) =>
+    r.map((a, i) => [pts[a]!, pts[r[(i + 1) % r.length]!]!] as const);
+  const remaining = [...holeRings].sort(
+    (a, b) => Math.max(...b.map((i) => pts[i]!.x)) - Math.max(...a.map((i) => pts[i]!.x)),
+  );
+  while (remaining.length) {
+    const hole = remaining.shift()!;
+    // The hole's rightmost point, joined to the nearest ring point it can see.
+    const k = hole.reduce((best, i, j) => (pts[i]!.x > pts[hole[best]!]!.x ? j : best), 0);
+    const m = pts[hole[k]!]!;
+    const blockers = [...edgesOf(ring), ...remaining.flatMap(edgesOf), ...edgesOf(hole)];
+    const candidates = ring
+      .map((v, pos) => ({ v, pos, d: Math.hypot(pts[v]!.x - m.x, pts[v]!.y - m.y) }))
+      .sort((a, b) => a.d - b.d);
+    const seen = candidates.find(
+      ({ v }) => pts[v]!.x >= m.x && !blockers.some(([a, b]) => properlyCross(m, pts[v]!, a, b)),
+    );
+    if (!seen) throw new Error('triangulateWithHoles: no outline point in view of a hole');
+    const loop = [...hole.slice(k), ...hole.slice(0, k), hole[k]!];
+    ring = [...ring.slice(0, seen.pos + 1), ...loop, seen.v, ...ring.slice(seen.pos + 1)];
+  }
+  const tris = triangulate(ring.map((i) => pts[i]!)).map(
+    ([a, b, c]) => [ring[a]!, ring[b]!, ring[c]!] as [number, number, number],
+  );
+  return ccwOuter ? tris : tris.map(([a, b, c]) => [a, c, b]);
 };

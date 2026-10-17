@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import {
   FCS_SINGLE_TAB,
+  FUTURES_TAB_HOLES,
   FIN_BASE_LABEL,
   FIN_MAX_CANT,
   FIN_MAX_FRONT_OVERHANG,
@@ -145,10 +146,13 @@ export default function DocsFinDesigner() {
         </p>
         <Terms>
           <Term name={FIN_BASE_LABEL['futures-side']}>
-            The {mm(side.height)}-deep Futures side tab, with cant built into the fin.
+            The {mm(side.height)}-deep Futures side tab, with cant built into the fin. Like the
+            1/2&quot; tab it has four weight-saving holes through it, {mm(FUTURES_TAB_HOLES.length)}{' '}
+            × {mm(FUTURES_TAB_HOLES.height)} with round ends, centred on its height.
           </Term>
           <Term name={FIN_BASE_LABEL['futures-centre']}>
-            The {mm(centre.height)}-deep Futures centre tab, for centre and quad-rear fins.
+            The {mm(centre.height)}-deep Futures centre tab, for centre and quad-rear fins. Its
+            weight-saving holes sit level with the rear slot.
           </Term>
           <Term name={FIN_BASE_LABEL['fcs-single']}>
             A plain {mm(FCS_SINGLE_TAB.length)} × {mm(FCS_SINGLE_TAB.height)} ×{' '}

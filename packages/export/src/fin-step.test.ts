@@ -25,6 +25,7 @@ import {
   tabCentreY,
   type FinDesign,
   type Vert3,
+  type TabSegment,
 } from '@openshaper/kernel';
 import { exportFinStep } from './fin-step';
 import {
@@ -155,14 +156,22 @@ const solidsOf = (m: Map3): Solid[] =>
     }));
 
 /** A face's outer loop as [edge id, sense] pairs. */
-const loopOf = (m: Map3, f: Entity): [number, boolean][] => {
-  const bound = m.get(refOf(asList(f.args[1])[0]))!;
+/** One bound's oriented edges: the outer bound (k = 0) or a hole's. */
+const boundOf = (m: Map3, f: Entity, k: number): [number, boolean][] => {
+  const bound = m.get(refOf(asList(f.args[1])[k]))!;
   const loop = m.get(refOf(bound.args[1]))!;
   return asList(loop.args[1]).map((oe) => {
     const o = m.get(refOf(oe))!;
     return [refOf(o.args[3]), raw(o.args[4]) === '.T.'];
   });
 };
+
+/** The face's outer loop. */
+const loopOf = (m: Map3, f: Entity): [number, boolean][] => boundOf(m, f, 0);
+
+/** Every edge of the face, the holes' included. */
+const allEdgesOf = (m: Map3, f: Entity): [number, boolean][] =>
+  asList(f.args[1]).flatMap((_, k) => boundOf(m, f, k));
 
 /** The loop as a polyline, each edge walked in its oriented direction. */
 const loopPolyline = (m: Map3, f: Entity): Vert3[] =>
@@ -277,7 +286,8 @@ describe.each(designs)('exportFinStep(%s)', (_, d) => {
     it('holds two solids, blade and tab, in one shape', () => {
       expect(solids.map((s) => s.name)).toEqual(['blade', 'tab']);
       expect(solids[0]!.faces).toHaveLength(3);
-      expect(solids[1]!.faces).toHaveLength(14);
+      // The tab: 2 sides, 12 round its profile and 16 through its four holes.
+      expect(solids[1]!.faces).toHaveLength(30);
       const shape = [...m.values()].find((e) => e.name === 'ADVANCED_BREP_SHAPE_REPRESENTATION')!;
       expect(asList(shape.args[1]).filter(isRef)).toHaveLength(3); // placement + 2 solids
     });
@@ -289,7 +299,7 @@ describe.each(designs)('exportFinStep(%s)', (_, d) => {
     it('is closed and consistently oriented: each edge used once each way', () => {
       const uses = new Map<number, boolean[]>();
       for (const f of solid.faces) {
-        for (const [edge, sense] of loopOf(m, f))
+        for (const [edge, sense] of allEdgesOf(m, f))
           uses.set(edge, [...(uses.get(edge) ?? []), sense]);
       }
       for (const senses of uses.values()) expect(senses.sort()).toEqual([false, true]);
@@ -307,25 +317,29 @@ describe.each(designs)('exportFinStep(%s)', (_, d) => {
       const b = prepareBlade(d);
       const tab = futuresTabOutline(finTabKind(d.position));
       const yc = tabCentreY(d);
-      // The profile as a polygon, arcs sampled finely (a chord would fill the slot).
-      const profile = tab.segments.flatMap((s) => {
-        if (s.kind === 'line') return [s.from];
-        const a = Math.atan2(s.from.y - s.center.y, s.from.x - s.center.x);
-        let sweep = Math.atan2(s.to.y - s.center.y, s.to.x - s.center.x) - a;
-        if (s.ccw && sweep <= 0) sweep += 2 * Math.PI;
-        if (!s.ccw && sweep >= 0) sweep -= 2 * Math.PI;
-        return Array.from({ length: 64 }, (_, i) => ({
-          x: s.center.x + s.radius * Math.cos(a + (sweep * i) / 64),
-          y: s.center.y + s.radius * Math.sin(a + (sweep * i) / 64),
-        }));
-      });
+      // The profile and holes as polygons, arcs sampled finely (a chord would fill the slot).
+      const polygon = (segs: readonly TabSegment[]) =>
+        segs.flatMap((s) => {
+          if (s.kind === 'line') return [s.from];
+          const a = Math.atan2(s.from.y - s.center.y, s.from.x - s.center.x);
+          let sweep = Math.atan2(s.to.y - s.center.y, s.to.x - s.center.x) - a;
+          if (s.ccw && sweep <= 0) sweep += 2 * Math.PI;
+          if (!s.ccw && sweep >= 0) sweep -= 2 * Math.PI;
+          return Array.from({ length: 64 }, (_, i) => ({
+            x: s.center.x + s.radius * Math.cos(a + (sweep * i) / 64),
+            y: s.center.y + s.radius * Math.sin(a + (sweep * i) / 64),
+          }));
+        });
+      const profile = polygon(tab.segments);
+      const holes = tab.holes.map(polygon);
       const inBlade = (p: Vert3) => {
         if (p.z <= 0 || p.z >= b.depth - 0.01) return false;
         return insidePoly(p, sectionLoop(bladeSection(b, p.z, cosineStations(400))));
       };
       const inTab = (p: Vert3) =>
         Math.abs(p.y - yc) < tab.spec.thickness / 2 &&
-        insidePoly({ x: p.x, y: p.z + tab.spec.height }, profile);
+        insidePoly({ x: p.x, y: p.z + tab.spec.height }, profile) &&
+        !holes.some((h) => insidePoly({ x: p.x, y: p.z + tab.spec.height }, h));
       const inside = k === 0 ? inBlade : inTab;
       const eps = 0.002; // cm
       for (const f of solid.faces) {
@@ -398,7 +412,8 @@ describe('exportFinStep: units', () => {
     const radii = [...parse(text).values()]
       .filter((e) => e.name === 'CIRCLE')
       .map((e) => (isNum(e.args[2]) ? e.args[2].num : NaN));
-    expect(radii.sort()).toEqual([0.1, 0.1, 0.22, 0.22]);
+    // The rear fillet and slot, then the holes' round ends (4 mm): one circle per side.
+    expect(radii.sort()).toEqual([0.1, 0.1, 0.22, 0.22, ...Array(16).fill(0.4)]);
   });
 });
 

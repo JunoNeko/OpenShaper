@@ -30,7 +30,7 @@ import type { FinDesign } from './fin-design';
 import { finTabOutline } from './fin-tab';
 import { tabCentreY } from './fin-placement';
 import type { TabSegment } from './futures-tab';
-import { polygonArea, triangulate } from './triangulate';
+import { polygonArea, triangulate, triangulateWithHoles } from './triangulate';
 
 export interface FinMeshOptions {
   /** Rings up the blade. */
@@ -162,23 +162,36 @@ const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
   const { height: H, thickness: t } = tab;
   const yc = tabCentreY(d);
   const profile = tabProfilePoints(tab.segments, o.arcTolerance);
+  const holes = tab.holes.map((h) => tabProfilePoints(h, o.arcTolerance));
   const m = builder();
   // Tab frame (x, y up from the bottom) to the fin frame: z = y − H.
-  const side = (y: number) => profile.map((p) => m.add({ x: p.x, y, z: p.y - H }));
-  const lo = side(yc - t / 2);
-  const hi = side(yc + t / 2);
-  cap(m, lo, profile, { x: 0, y: -1, z: 0 });
-  cap(m, hi, profile, { x: 0, y: 1, z: 0 });
-  const n = profile.length;
-  for (let i = 0; i < n; i++) {
-    const i1 = (i + 1) % n;
-    const dx = profile[i1]!.x - profile[i]!.x;
-    const dz = profile[i1]!.y - profile[i]!.y;
-    // Outward is right of travel round the counter-clockwise profile.
-    const out = { x: dz, y: 0, z: -dx };
-    m.tri(lo[i]!, lo[i1]!, hi[i1]!, out);
-    m.tri(lo[i]!, hi[i1]!, hi[i]!, out);
+  const side = (ring: readonly Vec2[], y: number) =>
+    ring.map((p) => m.add({ x: p.x, y, z: p.y - H }));
+  const rings = [profile, ...holes];
+  const lo = rings.map((r) => side(r, yc - t / 2));
+  const hi = rings.map((r) => side(r, yc + t / 2));
+  // The two sides: the profile less its holes.
+  const flatIds = (ids: number[][]) => ids.flat();
+  const tris = triangulateWithHoles(profile, holes);
+  for (const [a, b, c] of tris) {
+    const l = flatIds(lo);
+    const h = flatIds(hi);
+    m.tri(l[a]!, l[b]!, l[c]!, { x: 0, y: -1, z: 0 });
+    m.tri(h[a]!, h[b]!, h[c]!, { x: 0, y: 1, z: 0 });
   }
+  // The walls round the profile and through each hole. Outward is right of travel for
+  // both: the profile runs counter-clockwise, each hole clockwise.
+  rings.forEach((ring, r) => {
+    const n = ring.length;
+    for (let i = 0; i < n; i++) {
+      const i1 = (i + 1) % n;
+      const dx = ring[i1]!.x - ring[i]!.x;
+      const dz = ring[i1]!.y - ring[i]!.y;
+      const out = { x: dz, y: 0, z: -dx };
+      m.tri(lo[r]![i]!, lo[r]![i1]!, hi[r]![i1]!, out);
+      m.tri(lo[r]![i]!, hi[r]![i1]!, hi[r]![i]!, out);
+    }
+  });
   return m.done();
 };
 
