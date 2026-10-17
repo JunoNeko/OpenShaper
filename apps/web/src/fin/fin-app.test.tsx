@@ -202,6 +202,38 @@ describe('FinApp: files', () => {
     expect(names).toEqual(['fin-side-left.fin.json', 'fin-side-left.fin.json']);
   });
 
+  it('saves a left and a right fin with R & L ticked, and remembers the choice', async () => {
+    localStorage.removeItem('bs.fin.pair');
+    URL.createObjectURL = vi.fn(() => 'blob:fin');
+    URL.revokeObjectURL = vi.fn();
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    const { unmount } = render(<FinApp />);
+    const box = screen.getByRole('checkbox', { name: 'R & L' }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(names).toEqual(['fin-side-left.fin.json', 'fin-side-right.fin.json']),
+    );
+    unmount();
+    render(<FinApp />);
+    expect((screen.getByRole('checkbox', { name: 'R & L' }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+    localStorage.removeItem('bs.fin.pair');
+  });
+
+  it('offers no R & L for a centre fin', () => {
+    act(() => finStore.getState().load(defaultFinDesign('centre')));
+    render(<FinApp />);
+    expect(screen.queryByRole('checkbox', { name: 'R & L' })).toBeNull();
+  });
+
   it('opens a .fin.json file, replacing the fin', async () => {
     render(<FinApp />);
     const file = new File([writeFinJson(defaultFinDesign('centre'))], 'centre.fin.json');

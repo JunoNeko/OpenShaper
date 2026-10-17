@@ -364,6 +364,13 @@ shared writer, unchanged output without holes: a board STEP diffs byte-identical
 hole a plane or cylinder face per segment. OpenCascade: each tab loses 2900 mm³ (expected
 4 × (8·8 + π·4²) × 6.35 = 2902.5 mm³), 30 faces.
 
+## R & L pairs
+
+An **R & L** checkbox beside Save and Export (fins with a side only; remembered per device as
+`bs.fin.pair`). Ticked, Save, ⌘S, Export STEP and Export STL each write the fin and its mirror
+for the other side (`finsToWrite`: the same design with the other hand, which the kernel builds
+as an exact mirror), two files spaced by `MULTI_DOWNLOAD_GAP_MS` so browsers keep both.
+
 Not ours: the console's `THREE.Clock` deprecation comes from `@react-three/fiber` (harmless,
 goes with a fiber update); `share-modal.js` is not in the repository, most likely a browser
 extension.
