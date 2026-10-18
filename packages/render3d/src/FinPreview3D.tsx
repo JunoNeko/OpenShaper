@@ -13,13 +13,21 @@ import { finOutward, type FinDesign } from '@openshaper/kernel';
 import { OrbitControls } from '@react-three/drei';
 import { Canvas, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, type ComponentRef } from 'react';
-import { DoubleSide } from 'three';
-import { FIN_PREVIEW_FOV, finCameraPosition, finScene, type FinScene } from './fin-preview';
+import { BufferGeometry, DoubleSide, Vector3 } from 'three';
+import {
+  FIN_PREVIEW_FOV,
+  finCameraPosition,
+  finScene,
+  type FinPreviewView,
+  type FinScene,
+} from './fin-preview';
 
 export interface FinPreview3DProps {
   design: FinDesign | null;
   /** Change it to re-frame the camera (a new fin). */
   frameKey?: string | number;
+  /** Beside the fin (default) or from above; changing it re-frames the camera. */
+  view?: FinPreviewView;
   background?: string;
   bladeColor?: string;
   tabColor?: string;
@@ -30,10 +38,12 @@ function Framer({
   scene,
   frameKey,
   outward,
+  view,
 }: {
   scene: FinScene;
   frameKey: unknown;
   outward: 1 | -1;
+  view: FinPreviewView;
 }) {
   const { camera, controls, size, invalidate } = useThree();
   const framed = useRef<unknown>(Symbol('never'));
@@ -41,26 +51,51 @@ function Framer({
     // Wait for the orbit controls: they mount after this on the first frame, and would
     // otherwise start aimed at the origin and override the camera set here.
     const orbit = controls as ComponentRef<typeof OrbitControls> | null;
-    if (!orbit || framed.current === frameKey || size.width === 0) return;
-    framed.current = frameKey;
+    const key = `${String(frameKey)}|${view}`;
+    if (!orbit || framed.current === key || size.width === 0) return;
+    framed.current = key;
     const [x, y, z] = finCameraPosition(
       scene.center,
       scene.radius,
       outward,
       size.width / size.height,
+      view,
     );
-    camera.up.set(0, 0, 1);
+    // From above, the nose is up the screen; beside the fin, the blade's height is.
+    if (view === 'above') camera.up.set(1, 0, 0);
+    else camera.up.set(0, 0, 1);
     camera.position.set(x, y, z);
     orbit.target.set(...scene.center);
     orbit.update();
     invalidate();
-  }, [frameKey, scene, outward, camera, controls, size.width, size.height, invalidate]);
+  }, [frameKey, view, scene, outward, camera, controls, size.width, size.height, invalidate]);
   return null;
+}
+
+/** A faint line along the tab's centre: the box's direction. */
+function TabAxis({
+  from,
+  to,
+}: {
+  from: readonly [number, number, number];
+  to: readonly [number, number, number];
+}) {
+  const geometry = useMemo(
+    () => new BufferGeometry().setFromPoints([new Vector3(...from), new Vector3(...to)]),
+    [from, to],
+  );
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial color="#F97316" transparent opacity={0.7} />
+    </lineSegments>
+  );
 }
 
 export function FinPreview3D({
   design,
   frameKey,
+  view = 'side',
   background = '#0A1424',
   bladeColor = '#22D3EE',
   tabColor = '#8A9BB3',
@@ -96,7 +131,8 @@ export function FinPreview3D({
           <mesh geometry={scene.tab}>
             <meshStandardMaterial color={tabColor} roughness={0.6} />
           </mesh>
-          <Framer scene={scene} frameKey={frameKey} outward={outward} />
+          <TabAxis from={scene.tabAxis[0]} to={scene.tabAxis[1]} />
+          <Framer scene={scene} frameKey={frameKey} outward={outward} view={view} />
         </>
       )}
       <OrbitControls makeDefault enableDamping={false} />

@@ -14,6 +14,7 @@ import { slopeSigns, splineExtremes } from './curve-shape';
 import {
   FIN_MAX_CANT,
   FIN_MAX_FRONT_OVERHANG,
+  FIN_MAX_TOE,
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
   type FinDesign,
@@ -26,6 +27,7 @@ import { FIN_BASES, finTabOutline, futuresKind } from './fin-tab';
 export type FinIssueCode =
   | 'hand'
   | 'base'
+  | 'toe'
   | 'cant'
   | 'outline-root'
   | 'outline-rising'
@@ -236,6 +238,9 @@ export const validateFinDesign = (d: FinDesign): FinIssue[] => {
           ? 'On an FCS single tab the plug sets the cant: the fin has none.'
           : `Cant must be 0–${FIN_MAX_CANT}°.`,
     });
+  }
+  if (!(Math.abs(d.toe ?? 0) <= FIN_MAX_TOE)) {
+    issues.push({ code: 'toe', message: `Toe correction must be within ±${FIN_MAX_TOE}°.` });
   }
   if (!FIN_BASES.includes(d.base)) {
     issues.push({ code: 'base', message: 'Unknown base.' });

@@ -7,6 +7,7 @@
  */
 import {
   FIN_MAX_CANT,
+  FIN_MAX_TOE,
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
   defaultCanard,
@@ -185,6 +186,14 @@ export const setCant = (d: FinDesign, deg: number): FinDesign => {
   const fixed = d.position === 'centre' || !futuresKind(d.base);
   const cant = fixed ? 0 : Math.min(FIN_MAX_CANT, Math.max(0, deg));
   return cant === d.cant ? d : { ...d, cant };
+};
+
+/** Toe correction (deg, + toe in), clamped to ±FIN_MAX_TOE. */
+export const setToe = (d: FinDesign, deg: number): FinDesign => {
+  const toe = Math.min(FIN_MAX_TOE, Math.max(-FIN_MAX_TOE, deg));
+  // Snap away float noise from repeated quarter-degree steps.
+  const snapped = Math.round(toe * 1e6) / 1e6;
+  return snapped === d.toe ? d : { ...d, toe: snapped };
 };
 
 /**

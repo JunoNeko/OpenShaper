@@ -177,6 +177,20 @@ describe('FinApp', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
+  it('corrects toe a quarter-degree a click, within ±5°', () => {
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'Toe in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toe in' }));
+    expect(finStore.getState().design!.toe).toBe(0.5);
+    expect(measurements().getByText('in 0.50°')).toBeTruthy();
+    const field = screen.getByLabelText(/^Toe \(/);
+    fireEvent.change(field, { target: { value: '-9' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(finStore.getState().design!.toe).toBe(-5);
+    fireEvent.click(screen.getByRole('button', { name: 'Toe out' }));
+    expect(finStore.getState().design!.toe).toBe(-5); // already at the limit
+  });
+
   it('lists the rules the design breaks', () => {
     act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
     render(<FinApp />);

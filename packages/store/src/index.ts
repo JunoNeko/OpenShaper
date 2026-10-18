@@ -53,6 +53,7 @@ export {
   setHand,
   setInsideFace,
   setRootThickness,
+  setToe,
   withFinCurve,
   withFoil,
   type FinCurve,

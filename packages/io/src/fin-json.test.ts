@@ -140,6 +140,14 @@ describe('.fin.json versions', () => {
     expect(readFinJson(writeFinJson(d)).design.base).toBe('fcs-single');
   });
 
+  it('writes a toe correction as version 2 and reads it back', () => {
+    const d = { ...defaultFinDesign('side', 'left'), toe: -1.25 };
+    const doc = JSON.parse(writeFinJson(d)) as Record<string, unknown>;
+    expect(doc.version).toBe(2);
+    expect(readFinJson(writeFinJson(d)).design.toe).toBe(-1.25);
+    expect(readFinJson(writeFinJson(defaultFinDesign('side'))).design.toe).toBe(0);
+  });
+
   it('reads a file without a base as its position’s Futures tab', () => {
     expect(readFinJson(writeFinJson(defaultFinDesign('side'))).design.base).toBe('futures-side');
     expect(readFinJson(writeFinJson(defaultFinDesign('centre'))).design.base).toBe(
