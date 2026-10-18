@@ -1,4 +1,5 @@
 import type { RouteRecord } from 'vite-react-ssg';
+import { FinHelpLayout } from './layouts/FinHelpLayout';
 import { MarketingLayout } from './layouts/MarketingLayout';
 import { RootLayout } from './layouts/RootLayout';
 import { RouteErrorBoundary } from './RouteErrorBoundary';
@@ -64,10 +65,6 @@ export const routes: RouteRecord[] = [
           { path: 'docs/editing', lazy: page(() => import('./pages/docs/Editing')) },
           { path: 'docs/specs', lazy: page(() => import('./pages/docs/Specs')) },
           { path: 'docs/fins', lazy: page(() => import('./pages/docs/Fins')) },
-          {
-            path: 'docs/fin-designer',
-            lazy: page(() => import('./pages/docs/FinDesigner')),
-          },
           { path: 'docs/construction', lazy: page(() => import('./pages/docs/Construction')) },
           { path: 'docs/export', lazy: page(() => import('./pages/docs/Export')) },
           { path: 'docs/files', lazy: page(() => import('./pages/docs/Files')) },
@@ -79,6 +76,14 @@ export const routes: RouteRecord[] = [
         path: 'app',
         lazy: page(() => import('./pages/EditorPage')),
         errorElement: <RouteErrorBoundary />,
+      },
+      {
+        // The fin designer's help: documentation, but in a bare frame that leads only
+        // back to the designer (FinHelpLayout), not the site's marketing chrome.
+        path: 'docs/fin-designer',
+        element: <FinHelpLayout />,
+        entry: 'src/layouts/FinHelpLayout.tsx',
+        children: [{ index: true, lazy: page(() => import('./pages/docs/FinDesigner')) }],
       },
       {
         // The fin designer: a second client-only island, offline like /app.
