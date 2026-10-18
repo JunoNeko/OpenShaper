@@ -32,12 +32,3 @@ directory = "apps/web/dist"
 # analytics into two pages for what's really one route. drop-trailing-slash
 # flips the redirect direction to match the canonical form used everywhere else.
 html_handling = "drop-trailing-slash"
-# Static assets are normally served without running the Worker, so a request for /
-# (index.html) never reaches HOME_PATH's redirect in worker/index.ts. Run the Worker
-# first for the home page only; every other file is still served directly.
-run_worker_first = ["/"]
-
-[vars]
-# This deployment serves the fin designer to testers: the home page sends visitors
-# to it (worker/index.ts). Remove to serve the OpenShaper home page at / again.
-HOME_PATH = "/fin"
