@@ -35,6 +35,13 @@ export interface DocsPageProps {
   lede: string;
   /** In-page anchors. Ids must match the `<Section>` ids used below. */
   toc?: { id: string; label: string }[];
+  /**
+   * List the other documentation pages beside this one (default). Off for a page that
+   * stands alone, such as the fin designer's help.
+   */
+  siblings?: boolean;
+  /** Shown above the first section: a notice for readers. */
+  notice?: ReactNode;
   children: ReactNode;
 }
 
@@ -70,39 +77,52 @@ export function Terms({ children }: { children: ReactNode }) {
   return <dl className="mt-2">{children}</dl>;
 }
 
-export function DocsPage({ route, title, lede, toc, children }: DocsPageProps) {
+export function DocsPage({
+  route,
+  title,
+  lede,
+  toc,
+  siblings = true,
+  notice,
+  children,
+}: DocsPageProps) {
   return (
     <>
       <Seo title={title} description={lede} path={route} />
       <ArticleHero eyebrow="Documentation" title={title} lede={lede} />
       <Container className="grid gap-12 py-12 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-24 lg:self-start">
-          <nav aria-label="Documentation" className="text-sm">
-            <p className="label-tech mb-3">Documentation</p>
-            <ul className="space-y-2 border-l border-border">
-              {DOCS_ROUTES.map((r) => (
-                <li key={r}>
-                  <Link
-                    to={r}
-                    className={
-                      r === route
-                        ? '-ml-px block border-l border-primary pl-4 text-foreground'
-                        : '-ml-px block border-l border-transparent pl-4 text-muted-foreground transition-colors hover:border-primary hover:text-foreground'
-                    }
-                  >
-                    {DOCS_NAV[r]}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          {siblings && (
+            <nav aria-label="Documentation" className="text-sm">
+              <p className="label-tech mb-3">Documentation</p>
+              <ul className="space-y-2 border-l border-border">
+                {DOCS_ROUTES.map((r) => (
+                  <li key={r}>
+                    <Link
+                      to={r}
+                      className={
+                        r === route
+                          ? '-ml-px block border-l border-primary pl-4 text-foreground'
+                          : '-ml-px block border-l border-transparent pl-4 text-muted-foreground transition-colors hover:border-primary hover:text-foreground'
+                      }
+                    >
+                      {DOCS_NAV[r]}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
           {toc && toc.length > 0 && (
-            <div className="mt-8">
+            <div className={siblings ? 'mt-8' : undefined}>
               <Toc items={toc} />
             </div>
           )}
         </aside>
-        <article className="min-w-0 max-w-2xl">{children}</article>
+        <article className="min-w-0 max-w-2xl">
+          {notice}
+          {children}
+        </article>
       </Container>
     </>
   );

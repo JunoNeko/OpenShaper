@@ -18,11 +18,33 @@ import { DocsPage, Section, Term, Terms } from './DocsPage';
 const mm = (cm: number) => `${Number((cm * 10).toFixed(2))} mm`;
 const deg = (d: number) => `${Number(d.toFixed(1))}°`;
 
+/**
+ * Where testers send feedback, if this deployment says (`VITE_FEEDBACK_EMAIL`): a
+ * callout at the top of the help page.
+ */
+function FeedbackNotice() {
+  const email = import.meta.env.VITE_FEEDBACK_EMAIL as string | undefined;
+  if (!email) return null;
+  return (
+    <aside
+      aria-label="Feedback"
+      className="mb-10 rounded-lg border border-primary/40 bg-primary/10 px-5 py-4 text-foreground"
+    >
+      Please email feedback to:{' '}
+      <a className="font-medium text-primary underline underline-offset-4" href={`mailto:${email}`}>
+        {email}
+      </a>
+    </aside>
+  );
+}
+
 export default function DocsFinDesigner() {
   const side = FUTURES_TABS.side;
   const centre = FUTURES_TABS.centre;
   return (
     <DocsPage
+      siblings={false}
+      notice={<FeedbackNotice />}
       route="/docs/fin-designer"
       title="Fin designer"
       lede="Design a Futures-tab surf fin from scratch — outline, foil and flex — and export it for a CNC mill or a 3D printer."
@@ -43,8 +65,8 @@ export default function DocsFinDesigner() {
         <p>
           Open the <Link to="/fin">fin designer</Link> and choose a starting fin from{' '}
           <strong>New fin</strong>. The starting fins are a place to begin, not a catalogue: reshape
-          them as far as you like. Each one sits on a standard Futures tab, which you don&apos;t
-          edit — every Futures box takes the same tab.
+          them as far as you like. Each one sits on a standard tab, which you don&apos;t edit (see
+          The base).
         </p>
         <Terms>
           <Term name="Side, left or right">
@@ -243,8 +265,8 @@ export default function DocsFinDesigner() {
         <p>
           The fin saves itself in your browser as you work, so a reload or a closed tab doesn&apos;t
           lose it. <strong>Save</strong> ({shortcutKeys('save')}) downloads it as a{' '}
-          <code>.fin.json</code> file to keep or share; <strong>Open…</strong> loads one back. Like
-          the rest of OpenShaper, the designer works offline.
+          <code>.fin.json</code> file to keep or share; <strong>Open…</strong> loads one back. The
+          designer works offline.
         </p>
         <p>
           For a side, quad-rear or canard fin, tick <strong>R &amp; L</strong> beside Save and
