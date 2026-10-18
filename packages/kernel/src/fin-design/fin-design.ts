@@ -43,6 +43,9 @@ export const finTabKind = (position: FinPosition): FuturesTabKind =>
 export const defaultFinBase = (position: FinPosition): FinBase =>
   position === 'side' ? 'futures-side' : 'futures-centre';
 
+/** Largest toe correction either way (deg). A little toe makes a big difference. */
+export const FIN_MAX_TOE = 5;
+
 /** Largest cant (blade lean from the tab, deg) the designer allows. */
 export const FIN_MAX_CANT = 20;
 
@@ -96,6 +99,13 @@ export interface FinDesign {
   readonly cant: number;
   /** The tab the fin sits on (fin-tab.ts). */
   readonly base: FinBase;
+  /**
+   * Toe correction (deg), −{@link FIN_MAX_TOE} to +{@link FIN_MAX_TOE}: the blade turned
+   * on its tab about an upright axis through the centre of the root's thickest point,
+   * to correct a box set at the wrong angle to the stringer. Positive is more toe in
+   * (the leading edge turned toward the stringer), whichever side the fin is for.
+   */
+  readonly toe: number;
   /**
    * The blade's side profile in the tab frame (cm): x from the tab's rear end toward its
    * front (+x toward the nose), y = height above the tab top (the blade root plane).

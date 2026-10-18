@@ -48,6 +48,7 @@ import {
   setHand,
   setInsideFace,
   setRootThickness,
+  setToe,
   smoothKnot,
   spanMidpoint,
   withFinCurve,
@@ -104,6 +105,8 @@ export interface FinState {
   setRootThickness: (cm: number) => boolean;
   setDepth: (cm: number) => boolean;
   setHand: (hand: FinHand) => boolean;
+  /** Toe correction (deg, + toe in), clamped to ±5°. */
+  setToe: (deg: number) => boolean;
   /** Move the fin onto another tab, placed as that tab's fins start (placeOnBase). */
   setBase: (base: FinBase) => boolean;
   /** Apply a NACA 4-digit preset to the section ('2412'). */
@@ -310,6 +313,10 @@ export const createFinStore = (): StoreApi<FinState> =>
           ),
         ),
 
+      setToe: (deg) => {
+        const d = get().design;
+        return d ? commitChecked(setToe(d, deg), 'Set toe') : false;
+      },
       setBase: (base) => {
         const d = get().design;
         // Re-placing can break a rule the old placement kept (a long base on a short

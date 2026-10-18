@@ -4,6 +4,7 @@ import {
   FUTURES_TAB_HOLES,
   FIN_BASE_LABEL,
   FIN_MAX_CANT,
+  FIN_MAX_TOE,
   FIN_MAX_FRONT_OVERHANG,
   FIN_MIN_THICKNESS,
   FUTURES_TABS,
@@ -181,6 +182,15 @@ export default function DocsFinDesigner() {
           <Term name={`Cant (0–${FIN_MAX_CANT}°)`}>
             How far the blade leans out from the tab. Futures builds cant into the fin, not the box.
             A centre fin has none.
+          </Term>
+          <Term name={`Toe (±${FIN_MAX_TOE}°)`}>
+            Turns the blade on its tab, about the centre of the root&apos;s thickest point, to
+            correct a box set at the wrong angle to the stringer: toed in too much, or not enough.
+            The arrows turn it a quarter-degree a click (a little toe makes a big difference), or
+            type the angle. Plus is more toe in: the leading edge turned toward the stringer, on
+            either side, so a left and right pair match. <strong>From above</strong> looks down the
+            blade, with an orange line along the tab: the box&apos;s direction to judge it by. A
+            flat inside face turned this way no longer lies exactly along the tab.
           </Term>
         </Terms>
       </Section>

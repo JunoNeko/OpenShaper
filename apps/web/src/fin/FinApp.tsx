@@ -20,6 +20,7 @@ import {
   FIN_BASES,
   FIN_BASE_LABEL,
   FIN_MAX_CANT,
+  FIN_MAX_TOE,
   finTabOutline,
   futuresKind,
   finReadouts,
@@ -29,9 +30,10 @@ import {
   type FinHand,
   type FinPosition,
 } from '@openshaper/kernel';
+import type { FinPreviewView } from '@openshaper/render3d';
 import type { FinStart } from '@openshaper/store';
 import { Button, Tooltip } from '@openshaper/ui';
-import { Maximize2 } from 'lucide-react';
+import { Maximize2, RotateCcw, RotateCw } from 'lucide-react';
 import {
   lazy,
   Suspense,
@@ -70,14 +72,14 @@ const FinPreview3D = lazy(() =>
   import('@openshaper/render3d').then((m) => ({ default: m.FinPreview3D })),
 );
 
-function Preview({ frameKey }: { frameKey: string }) {
+function Preview({ frameKey, view }: { frameKey: string; view: FinPreviewView }) {
   const design = useSettledDesign(finStore);
   const position = useFinState(finStore, (s) => s.design?.position);
   const hand = useFinState(finStore, (s) => s.design?.hand);
   return (
     <div className="h-full overflow-hidden" aria-label="3D preview">
       <Suspense fallback={null}>
-        <FinPreview3D design={design} frameKey={`${position}-${hand}-${frameKey}`} />
+        <FinPreview3D design={design} frameKey={`${position}-${hand}-${frameKey}`} view={view} />
       </Suspense>
     </div>
   );
@@ -119,6 +121,12 @@ function Readouts({ units }: { units: LengthUnit }) {
       <Readout label="Depth" value={fmtLen(r.depth, units)} />
       <Readout label="Base (root chord)" value={fmtLen(r.rootChord, units)} />
       <Readout label="Sweep" value={`${r.sweep.toFixed(1)}°`} />
+      {design!.toe !== 0 && (
+        <Readout
+          label="Toe"
+          value={`${design!.toe > 0 ? 'in' : 'out'} ${Math.abs(design!.toe).toFixed(2)}°`}
+        />
+      )}
       {/* Futures only: the limit is the grub screw at the box's front. */}
       {futuresKind(design!.base) && (
         <Readout label="Front overhang" value={fmtLen(r.frontOverhang, units)} />
@@ -195,7 +203,59 @@ function NudgePad() {
 }
 
 /** The 3D view's controls: side, cant and the nudges. */
-function PlacementTools() {
+/** Toe steps (deg): a little toe makes a big difference. */
+const TOE_STEP = 0.25;
+
+/**
+ * Toe correction: turn the blade on its tab, a quarter-degree a click or typed. Plus
+ * toe in turns the leading edge toward the stringer; the view from above shows it
+ * against the tab's axis.
+ */
+function ToeTools({ view, onView }: { view: FinPreviewView; onView: (v: FinPreviewView) => void }) {
+  const toe = useFinState(finStore, (s) => s.design?.toe ?? 0);
+  const s = finStore.getState;
+  return (
+    <div className="flex items-center gap-1" role="group" aria-label="Toe">
+      <Tooltip label={`Toe out ${TOE_STEP}°: turn the leading edge away from the stringer`}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Toe out"
+          onClick={() => s().setToe(toe - TOE_STEP)}
+        >
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+      </Tooltip>
+      <Tooltip label={`Toe in ${TOE_STEP}°: turn the leading edge toward the stringer`}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Toe in"
+          onClick={() => s().setToe(toe + TOE_STEP)}
+        >
+          <RotateCw className="h-4 w-4" />
+        </Button>
+      </Tooltip>
+      <DegField label={`Toe (±${FIN_MAX_TOE}°)`} value={toe} onCommit={(v) => s().setToe(v)} />
+      <Button
+        size="sm"
+        variant={view === 'above' ? 'default' : 'outline'}
+        aria-pressed={view === 'above'}
+        onClick={() => onView(view === 'above' ? 'side' : 'above')}
+      >
+        From above
+      </Button>
+    </div>
+  );
+}
+
+function PlacementTools({
+  view,
+  onView,
+}: {
+  view: FinPreviewView;
+  onView: (v: FinPreviewView) => void;
+}) {
   const position = useFinState(finStore, (s) => s.design?.position);
   const hand = useFinState(finStore, (s) => s.design?.hand);
   const cant = useFinState(finStore, (s) => s.design?.cant ?? 0);
@@ -248,6 +308,7 @@ function PlacementTools() {
         </Tooltip>
       )}
       <NudgePad />
+      <ToeTools view={view} onView={onView} />
     </>
   );
 }
@@ -528,6 +589,7 @@ function ExportButtons({ pair }: { pair: boolean }) {
 
 export function FinApp() {
   const units = lengthUnitByKey('mm');
+  const [view3d, setView3d] = useState<FinPreviewView>('side');
   const [pair, setPair] = useState(() => readStored(PAIR_KEY, false, (v) => v === true));
   const changePair = useCallback((on: boolean) => {
     setPair(on);
@@ -619,8 +681,13 @@ export function FinApp() {
         >
           <FinTaperPane store={finStore} units={units} frameKey={sizeKey('taper')} />
         </ViewPane>
-        <ViewPane view="3d" slot={slotOf('3d')} onSwap={swap} tools={<PlacementTools />}>
-          <Preview frameKey={sizeKey('3d')} />
+        <ViewPane
+          view="3d"
+          slot={slotOf('3d')}
+          onSwap={swap}
+          tools={<PlacementTools view={view3d} onView={setView3d} />}
+        >
+          <Preview frameKey={sizeKey('3d')} view={view3d} />
         </ViewPane>
         <Status units={units} />
       </main>

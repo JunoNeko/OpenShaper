@@ -566,6 +566,29 @@ export const foilRange = (b: PreparedBlade, h: number): { from: number; to: numb
   return { from: clamp((leading - fl) / span), to: clamp((trailing - fl) / span) };
 };
 
+/**
+ * Where the toe turns the blade, and by how much: about the upright axis through the
+ * centre of the root's thickest point, x along the root chord at the foil's thickest
+ * fraction, y midway between its faces. Positive toe turns the leading edge toward the
+ * stringer: on a fin whose outside face is +Y (a left fin), toward −Y, so a turn of
+ * −toe about +Z; a right fin's mirror turns the other way. Null for no toe.
+ */
+export const toeTurn = (
+  b: PreparedBlade,
+): { x: number; y: number; cos: number; sin: number } | null => {
+  const toe = b.design.toe ?? 0;
+  if (!toe) return null;
+  const { leading, trailing } = chordAt(b, 0);
+  const faces = rootThickestFaces(b);
+  const a = -b.outward * toe * DEG_TO_RAD;
+  return {
+    x: leading + (trailing - leading) * b.thickestAt,
+    y: (faces.outside + faces.inside) / 2,
+    cos: Math.cos(a),
+    sin: Math.sin(a),
+  };
+};
+
 /** The horizontal section of the blade at height `h` (cm above the tab top). */
 export const bladeSection = (
   b: PreparedBlade,
@@ -595,11 +618,19 @@ export const bladeSection = (
   const m = FIN_MIN_THICKNESS;
   const scale = thickestShape > 0 ? Math.max(0, thickness - m) / thickestShape : 0;
   const slide = h * b.lean;
-  const at = (x: number, offset: number): Vert3 => ({
-    x,
-    y: b.outward * (slide + offset * b.widen),
-    z: h,
-  });
+  const turn = toeTurn(b);
+  const at = (x: number, offset: number): Vert3 => {
+    const y = b.outward * (slide + offset * b.widen);
+    if (!turn) return { x, y, z: h };
+    // Toe: turned about the upright axis through the root's thickest point.
+    const dx = x - turn.x;
+    const dy = y - turn.y;
+    return {
+      x: turn.x + dx * turn.cos - dy * turn.sin,
+      y: turn.y + dx * turn.sin + dy * turn.cos,
+      z: h,
+    };
+  };
 
   const outside: Vert3[] = [];
   const inside: Vert3[] = [];

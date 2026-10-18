@@ -371,6 +371,23 @@ An **R & L** checkbox beside Save and Export (fins with a side only; remembered 
 for the other side (`finsToWrite`: the same design with the other hand, which the kernel builds
 as an exact mirror), two files spaced by `MULTI_DOWNLOAD_GAP_MS` so browsers keep both.
 
+## Toe correction
+
+For a box set at the wrong angle to the stringer. `FinDesign.toe` (deg, ±`FIN_MAX_TOE` = 5,
+
+- is more toe in: the leading edge toward the stringer, hand-relative so R & L pairs match).
+  Each section is turned about the upright axis through the centre of the root's thickest point
+  (`toeTurn`: x along the root chord at the foil's thickest fraction, y midway between its faces),
+  so slices stay horizontal and the root stays on the tab top. The 3D view's toolbar has toe
+  in/out (0.25° a click), a typed field, and **From above** (looking down the blade, an orange line
+  along the tab's axis). `.fin.json` writes `toe` (version 2) when it isn't 0. Rules on the root
+  (front overhang, clearance) still read the outline before the turn: at 5° the leading-edge root
+  moves a few tenths of a millimetre.
+
+Next (agreed, not built): per-slice cant (may be negative) and toe, each with a "transition
+zone below slice" in mm over which it blends in; a slice selector in the 3D view, the position
+arrows greyed out for a slice; the FCS root stays at 0° cant, slices may add cant.
+
 Not ours: the console's `THREE.Clock` deprecation comes from `@react-three/fiber` (harmless,
 goes with a fiber update); `share-modal.js` is not in the repository, most likely a browser
 extension.

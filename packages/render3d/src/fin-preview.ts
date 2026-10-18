@@ -29,6 +29,11 @@ export interface FinScene {
   /** Centre and radius of everything, for framing (cm). */
   readonly center: [number, number, number];
   readonly radius: number;
+  /**
+   * The tab's centre line on the tab top, run on past both ends: the box's direction,
+   * to judge a toe correction against (start and end, cm).
+   */
+  readonly tabAxis: [[number, number, number], [number, number, number]];
 }
 
 /** The fin's preview meshes (preview quality: a few ms, rebuilt per settled edit). */
@@ -38,13 +43,23 @@ export const finScene = (d: FinDesign): FinScene => {
   const tab = finMeshGeometry(m.tab);
   const box = new Box3().copy(blade.boundingBox!).union(tab.boundingBox!);
   const c = box.getCenter(new Vector3());
+  const t = tab.boundingBox!;
+  const yc = (t.min.y + t.max.y) / 2;
+  const reach = (t.max.x - t.min.x) * 0.25;
   return {
     blade,
     tab,
     center: [c.x, c.y, c.z],
     radius: box.getSize(new Vector3()).length() / 2,
+    tabAxis: [
+      [t.min.x - reach, yc, 0.001],
+      [t.max.x + reach, yc, 0.001],
+    ],
   };
 };
+
+/** Where the preview looks from: beside the fin, or from above (down the blade from the tip). */
+export type FinPreviewView = 'side' | 'above';
 
 /** Vertical field of view of the preview camera (deg). */
 export const FIN_PREVIEW_FOV = 35;
@@ -59,8 +74,12 @@ export const finCameraPosition = (
   radius: number,
   outward: 1 | -1,
   aspect = 1,
+  view: FinPreviewView = 'side',
 ): [number, number, number] => {
-  const dir = new Vector3(-0.35, outward, 0.4).normalize();
+  // From above: straight down the blade from past its tip, the tab's axis across the
+  // view, so a toe correction shows as the blade turned against it.
+  const dir =
+    view === 'above' ? new Vector3(0, 0, 1) : new Vector3(-0.35, outward, 0.4).normalize();
   const half = ((FIN_PREVIEW_FOV / 2) * Math.PI) / 180;
   // Fit the narrower of the vertical and horizontal fields.
   const fit = Math.min(half, Math.atan(Math.tan(half) * aspect));
