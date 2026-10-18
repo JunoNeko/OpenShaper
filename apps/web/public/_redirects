@@ -1,0 +1,4 @@
+# This deployment serves the fin designer to testers: the home page goes straight to it.
+# Cloudflare applies this when it serves the site's files (wrangler.toml [assets]).
+# Remove this line to serve the OpenShaper home page at / again.
+/  /fin  302
