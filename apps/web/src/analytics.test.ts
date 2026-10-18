@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import posthog from 'posthog-js';
 import {
+  analyticsDisabled,
   captureError,
   resolveApiHost,
   resolveDisplayMode,
@@ -265,5 +266,15 @@ describe('captureError', () => {
     expect(() => captureError('route_error', 'a bare string')).not.toThrow();
     expect(() => captureError('route_error', undefined)).not.toThrow();
     expect(posthog.captureException).not.toHaveBeenCalled();
+  });
+});
+
+describe('analyticsDisabled', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('is off unless the deployment says so', () => {
+    expect(analyticsDisabled()).toBe(false);
+    vi.stubEnv('VITE_DISABLE_ANALYTICS', 'true');
+    expect(analyticsDisabled()).toBe(true);
   });
 });
