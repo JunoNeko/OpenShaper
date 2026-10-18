@@ -43,6 +43,12 @@ const CANONICAL_HOST = 'openshaper.com';
 interface Env {
   /** Static-assets binding — the prerendered site in apps/web/dist. */
   ASSETS: { fetch: (request: Request) => Promise<Response> };
+  /**
+   * Where the home page sends visitors, if anywhere (`[vars]` in wrangler.toml): a
+   * deployment serving one tool, such as the fin designer at `/fin`. Unset, `/` is
+   * the home page as usual.
+   */
+  HOME_PATH?: string;
 }
 
 interface ExecutionContext {
@@ -57,6 +63,11 @@ export default {
     const url = new URL(request.url);
     const canonical = canonicalRedirect(request, url);
     if (canonical) return canonical;
+    // A deployment that serves one tool sends the home page to it. 302: it's a setting,
+    // not the site's permanent shape, so browsers mustn't cache it for good.
+    if (url.pathname === '/' && env.HOME_PATH && env.HOME_PATH.startsWith('/')) {
+      return Response.redirect(new URL(env.HOME_PATH, url).toString(), 302);
+    }
     const isProxied = url.pathname === PROXY_PREFIX || url.pathname.startsWith(`${PROXY_PREFIX}/`);
     return isProxied ? proxy(request, url, ctx) : env.ASSETS.fetch(request);
   },

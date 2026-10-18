@@ -137,8 +137,16 @@ export function resolveApiHost(configured: string | undefined, origin: string): 
   }
 }
 
+/**
+ * True when this deployment turns analytics off altogether (`VITE_DISABLE_ANALYTICS`,
+ * e.g. a fork serving the fin designer to testers): nothing is sent, and the consent
+ * banner isn't shown, since there is nothing to consent to.
+ */
+export const analyticsDisabled = (): boolean => import.meta.env.VITE_DISABLE_ANALYTICS === 'true';
+
 export function initAnalytics(): void {
   if (typeof window === 'undefined') return;
+  if (analyticsDisabled()) return;
   if (import.meta.env.VITEST) return; // never fire real events from the Vitest suite
   // Suppress automated browsers: Playwright e2e runs `pnpm dev`, so the VITEST
   // guard above doesn't cover it. Real users don't set navigator.webdriver.

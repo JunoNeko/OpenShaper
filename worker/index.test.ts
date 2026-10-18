@@ -146,3 +146,27 @@ describe('canonical origin', () => {
     expect(assetsFetch).toHaveBeenCalledOnce();
   });
 });
+
+describe('home page setting (HOME_PATH)', () => {
+  const withHome = { ...env, HOME_PATH: '/fin' };
+  const callWith = (url: string) => worker.fetch(new Request(url), withHome, ctx);
+
+  it('sends the home page to the configured tool, temporarily', async () => {
+    const res = await callWith('https://openfinshaper.example.workers.dev/');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('https://openfinshaper.example.workers.dev/fin');
+    expect(assetsFetch).not.toHaveBeenCalled();
+  });
+
+  it('leaves every other path alone, the tool itself included', async () => {
+    for (const path of ['/fin', '/app', '/docs/fin-designer']) {
+      await callWith(`https://openfinshaper.example.workers.dev${path}`);
+    }
+    expect(assetsFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('serves the home page as usual when unset', async () => {
+    const res = await call('https://openfinshaper.example.workers.dev/');
+    expect(res.status).toBe(200);
+  });
+});

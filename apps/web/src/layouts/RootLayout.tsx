@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { ClientOnly } from 'vite-react-ssg';
-import { initAnalytics } from '../analytics';
+import { analyticsDisabled, initAnalytics } from '../analytics';
 import { ConsentBanner } from '../ConsentBanner';
 
 /**
@@ -21,7 +21,7 @@ export function RootLayout() {
       {/* Prerendered marketing pages aren't wrapped in ClientOnly today — scope
           the client-only guard to just the banner so it doesn't affect their
           static HTML, and so consent (localStorage) is only read post-mount. */}
-      <ClientOnly>{() => <ConsentBanner />}</ClientOnly>
+      {!analyticsDisabled() && <ClientOnly>{() => <ConsentBanner />}</ClientOnly>}
     </>
   );
 }

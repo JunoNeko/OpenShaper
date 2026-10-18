@@ -50,6 +50,7 @@ import {
 import { DegField, LenField } from '../components/fields';
 import { fmtArea, fmtLen, lengthUnitByKey, type LengthUnit } from '../format';
 import { readStored, writeStored } from '../persisted';
+import { GITHUB_URL } from '../seo/site';
 import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane, FinSectionTools } from './FinSectionPane';
@@ -744,7 +745,16 @@ export function FinApp() {
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <header className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-        <h1 className="mr-2 text-sm font-semibold">Fin designer</h1>
+        <h1 className="text-sm font-semibold">Fin designer</h1>
+        {/* Credit where it's due: the fin designer is part of OpenShaper (GPL). */}
+        <a
+          className="mr-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
+          href={GITHUB_URL}
+          target="_blank"
+          rel="noreferrer"
+        >
+          part of OpenShaper
+        </a>
         <label className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">New fin</span>
           <select
