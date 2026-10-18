@@ -140,6 +140,21 @@ describe('.fin.json versions', () => {
     expect(readFinJson(writeFinJson(d)).design.base).toBe('fcs-single');
   });
 
+  it('keeps a slice’s cant and toe change through a save', () => {
+    const base = defaultFinDesign('side', 'left');
+    const d = {
+      ...base,
+      slices: [
+        { height: 0.6, section: base.section, twist: { cant: 12, toe: -1, transition: 0.15 } },
+      ],
+    };
+    expect(readFinJson(writeFinJson(d)).design.slices[0]!.twist).toEqual({
+      cant: 12,
+      toe: -1,
+      transition: 0.15,
+    });
+  });
+
   it('writes a toe correction as version 2 and reads it back', () => {
     const d = { ...defaultFinDesign('side', 'left'), toe: -1.25 };
     const doc = JSON.parse(writeFinJson(d)) as Record<string, unknown>;

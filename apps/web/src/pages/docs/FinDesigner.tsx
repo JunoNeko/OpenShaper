@@ -127,6 +127,18 @@ export default function DocsFinDesigner() {
           from the thickness curve. <strong>Remove slice</strong> takes the selected slice away.
           Slices keep at least 2% of the depth from each other and from the root and tip.
         </p>
+        <p>
+          A slice can also change the cant and toe above it, bending the upper blade out and
+          twisting it, as some Futures designs do. Pick the slice in the 3D view&apos;s{' '}
+          <strong>Slice</strong> list (or its tab in the foil view): the position arrows grey out,
+          and <strong>Cant above slice</strong> (−20° to 20°: it may lean back past upright) and{' '}
+          <strong>Toe above slice</strong> set its change. <strong>Transition below slice</strong>{' '}
+          is how far below the slice the change starts (10 mm to begin with): below it the blade is
+          as it was, through it the change eases in with no crease, above the slice it holds. Each
+          section turns about its own thickest point. <strong>No change here</strong> takes the
+          change away. On an FCS single tab the root has no cant (the plug sets it), but a slice may
+          still add some.
+        </p>
       </Section>
 
       <Section id="taper" title="Thickness and flex">

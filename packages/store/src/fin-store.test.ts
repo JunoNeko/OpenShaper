@@ -352,3 +352,34 @@ describe('fin store: foil slices', () => {
     expect(s.getState().selection).toEqual({ curve: 'outline', index: 1 });
   });
 });
+
+describe('fin store: a slice’s cant and toe', () => {
+  it('starts a change from what the blade has there, with a 10 mm zone that fits', () => {
+    const s = storeWith();
+    s.getState().addSlice(0.5);
+    expect(s.getState().setSliceTwist(1, { cant: 12 })).toBe(true);
+    const tw = design(s).slices[0]!.twist!;
+    expect(tw.cant).toBe(12);
+    expect(tw.toe).toBe(0); // the fin's toe, unchanged
+    expect(tw.transition * finReadouts(design(s)).depth).toBeCloseTo(1, 9); // 10 mm
+  });
+
+  it('clamps its values, the zone to the room below the slice', () => {
+    const s = storeWith();
+    s.getState().addSlice(0.5);
+    s.getState().setSliceTwist(1, { cant: -40, toe: 9, transition: 3 });
+    const tw = design(s).slices[0]!.twist!;
+    expect([tw.cant, tw.toe, tw.transition]).toEqual([-20, 5, 0.5]);
+    expect(validateFinDesign(design(s))).toEqual([]);
+  });
+
+  it('drops the change, and an undo brings it back', () => {
+    const s = storeWith();
+    s.getState().addSlice(0.5);
+    s.getState().setSliceTwist(1, { toe: 1 });
+    s.getState().setSliceTwist(1, null);
+    expect(design(s).slices[0]!.twist).toBeUndefined();
+    s.getState().undo();
+    expect(design(s).slices[0]!.twist!.toe).toBe(1);
+  });
+});

@@ -21,6 +21,7 @@ import {
   vec2,
   type FinBase,
   type FinDesign,
+  type FinTwist,
   type FinHand,
   type Vec2,
 } from '@openshaper/kernel';
@@ -48,6 +49,7 @@ import {
   setHand,
   setInsideFace,
   setRootThickness,
+  setSliceTwist,
   setToe,
   smoothKnot,
   spanMidpoint,
@@ -105,6 +107,11 @@ export interface FinState {
   setRootThickness: (cm: number) => boolean;
   setDepth: (cm: number) => boolean;
   setHand: (hand: FinHand) => boolean;
+  /**
+   * Slice `foil` (1-based) changing the cant / toe / transition (any of them), or `null`
+   * to drop its change. Clamped to range.
+   */
+  setSliceTwist: (foil: number, change: Partial<FinTwist> | null) => boolean;
   /** Toe correction (deg, + toe in), clamped to ±5°. */
   setToe: (deg: number) => boolean;
   /** Move the fin onto another tab, placed as that tab's fins start (placeOnBase). */
@@ -313,6 +320,12 @@ export const createFinStore = (): StoreApi<FinState> =>
           ),
         ),
 
+      setSliceTwist: (foil, change) => {
+        const d = get().design;
+        const next = d && setSliceTwist(d, foil, change);
+        if (!d || !next) return false;
+        return commitChecked(next, change ? 'Change slice cant / toe' : 'Remove slice twist');
+      },
       setToe: (deg) => {
         const d = get().design;
         return d ? commitChecked(setToe(d, deg), 'Set toe') : false;

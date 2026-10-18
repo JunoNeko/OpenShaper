@@ -566,6 +566,63 @@ export const foilRange = (b: PreparedBlade, h: number): { from: number; to: numb
   return { from: clamp((leading - fl) / span), to: clamp((trailing - fl) / span) };
 };
 
+/** Whether any slice changes the cant or toe. */
+export const hasTwist = (d: FinDesign): boolean => d.slices.some((sl) => sl.twist);
+
+/**
+ * Cant and toe (deg) at height `eta` (fraction of the depth): the fin's own, changed by
+ * each slice with a twist as it is passed. Below a slice's transition zone the blade
+ * keeps what it had; through the zone it eases to the slice's values (`smoother`, so the
+ * bend and twist have no crease where they start or end); above, it has them.
+ */
+export const twistAt = (d: FinDesign, eta: number): { cant: number; toe: number } => {
+  let cant = d.cant;
+  let toe = d.toe ?? 0;
+  let floor = 0; // the last anchor: a zone can't start below it
+  for (const sl of d.slices) {
+    if (!sl.twist) continue;
+    const top = sl.height;
+    const start = Math.max(floor, top - sl.twist.transition);
+    if (eta >= top) {
+      cant = sl.twist.cant;
+      toe = sl.twist.toe;
+    } else if (eta > start) {
+      const w = smoother((eta - start) / (top - start));
+      cant += (sl.twist.cant - cant) * w;
+      toe += (sl.twist.toe - toe) * w;
+      break;
+    } else break;
+    floor = top;
+  }
+  return { cant, toe };
+};
+
+const slideCache = new WeakMap<PreparedBlade, Float64Array>();
+
+/**
+ * How far the blade has leant out by height `h` (cm): the lean, tan(cant), added up
+ * from the root, since with a slice's cant the lean changes up the blade and bends it.
+ * Tabulated once per blade (Simpson's rule per step), read by interpolation.
+ */
+const slideAt = (b: PreparedBlade, h: number): number => {
+  let table = slideCache.get(b);
+  const n = EDGE_SAMPLES;
+  if (!table) {
+    table = new Float64Array(n + 1);
+    const lean = (z: number) =>
+      Math.tan(twistAt(b.design, b.depth > 0 ? z / b.depth : 0).cant * DEG_TO_RAD);
+    const dz = b.depth / n;
+    for (let i = 1; i <= n; i++) {
+      const z0 = (i - 1) * dz;
+      table[i] = table[i - 1]! + (dz / 6) * (lean(z0) + 4 * lean(z0 + dz / 2) + lean(z0 + dz));
+    }
+    slideCache.set(b, table);
+  }
+  const f = Math.min(n, Math.max(0, (h / b.depth) * n));
+  const i = Math.min(n - 1, Math.floor(f));
+  return table[i]! + (table[i + 1]! - table[i]!) * (f - i);
+};
+
 /**
  * Where the toe turns the blade, and by how much: about the upright axis through the
  * centre of the root's thickest point, x along the root chord at the foil's thickest
@@ -617,10 +674,34 @@ export const bladeSection = (
     foil.thickest.at <= end ? foil.thickest.thickness : foil.shapeAt(end)[0] - foil.shapeAt(end)[1];
   const m = FIN_MIN_THICKNESS;
   const scale = thickestShape > 0 ? Math.max(0, thickness - m) / thickestShape : 0;
-  const slide = h * b.lean;
   const turn = toeTurn(b);
-  const at = (x: number, offset: number): Vert3 => {
-    const y = b.outward * (slide + offset * b.widen);
+  // Cant and toe here: the fin's own, unless a slice changes them (twistAt).
+  const tw = hasTwist(b.design) ? twistAt(b.design, b.depth > 0 ? h / b.depth : 0) : null;
+  const slide = tw ? slideAt(b, h) : h * b.lean;
+  const widen = tw ? 1 / Math.cos(tw.cant * DEG_TO_RAD) : b.widen;
+  // A slice's own toe turns its section about its thickest point, before the fin's toe.
+  const own = tw && tw.toe !== (b.design.toe ?? 0) ? tw.toe - (b.design.toe ?? 0) : 0;
+  let pivot: { x: number; y: number; cos: number; sin: number } | null = null;
+  if (own) {
+    const [ot, it] = foil.shapeAt(foil.thickest.at);
+    const centre = ((ot + it) * scale + m * (2 * foil.outsideShare - 1)) / 2;
+    const a = -b.outward * own * DEG_TO_RAD;
+    pivot = {
+      x: leading + (trailing - leading) * foil.thickest.at,
+      y: b.outward * (slide + centre * widen),
+      cos: Math.cos(a),
+      sin: Math.sin(a),
+    };
+  }
+  const at = (x0: number, offset: number): Vert3 => {
+    let x = x0;
+    let y = b.outward * (slide + offset * widen);
+    if (pivot) {
+      const dx = x - pivot.x;
+      const dy = y - pivot.y;
+      x = pivot.x + dx * pivot.cos - dy * pivot.sin;
+      y = pivot.y + dx * pivot.sin + dy * pivot.cos;
+    }
     if (!turn) return { x, y, z: h };
     // Toe: turned about the upright axis through the root's thickest point.
     const dx = x - turn.x;
