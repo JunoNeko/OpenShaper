@@ -79,7 +79,12 @@ export interface FinJson {
   /** Version 2: the tab. Absent means the position's default Futures tab. */
   base?: FinBase;
   /** Version 2: foils at other heights, lowest first; height is a fraction of the depth. */
-  slices?: { height: number; section: SectionJson }[];
+  slices?: {
+    height: number;
+    section: SectionJson;
+    /** A cant and toe change at the slice (deg); transition as a fraction of the depth. */
+    twist?: { cant: number; toe: number; transition: number };
+  }[];
   taper: KnotJson[];
   metadata?: Record<string, unknown>;
 }
@@ -129,6 +134,7 @@ export const writeFinJson = (d: FinDesign, metadata?: Record<string, unknown>): 
           slices: d.slices.map((sl) => ({
             height: sl.height,
             section: sectionToJson(sl.section),
+            ...(sl.twist ? { twist: { ...sl.twist } } : {}),
           })),
         }
       : {}),
@@ -173,6 +179,13 @@ const assertStructure = (doc: Record<string, unknown>): void => {
       if (!isObject(sl) || !isNumber(sl.height))
         fail(`Malformed fin: slice ${i + 1} has no height`);
       assertSection((sl as Record<string, unknown>).section, `slice ${i + 1}`);
+      const tw = (sl as Record<string, unknown>).twist;
+      if (
+        tw !== undefined &&
+        (!isObject(tw) || !isNumber(tw.cant) || !isNumber(tw.toe) || !isNumber(tw.transition))
+      ) {
+        fail(`Malformed fin: slice ${i + 1} has a damaged cant / toe change`);
+      }
     });
   }
 };
@@ -215,6 +228,7 @@ export const readFinJson = (
     slices: (doc.slices ?? []).map((sl) => ({
       height: sl.height,
       section: sectionFromJson(sl.section),
+      ...(sl.twist ? { twist: { ...sl.twist } } : {}),
     })),
     taper: scaleSpline(splineFromJson(doc.taper), same, toCm),
   };

@@ -15,6 +15,7 @@ import {
   FIN_MAX_CANT,
   FIN_MAX_FRONT_OVERHANG,
   FIN_MAX_TOE,
+  FIN_MIN_SLICE_CANT,
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
   type FinDesign,
@@ -197,6 +198,25 @@ const checkSection = (d: FinDesign, issues: FinIssue[]): void => {
     }
     below = slice.height;
     checkFoil(d, slice.section, ` (slice at ${pct}%)`, issues);
+    const tw = slice.twist;
+    if (tw) {
+      const where = ` (slice at ${pct}%)`;
+      if (!(tw.cant >= FIN_MIN_SLICE_CANT && tw.cant <= FIN_MAX_CANT)) {
+        issues.push({
+          code: 'cant',
+          message: `A slice's cant must be ${FIN_MIN_SLICE_CANT} to ${FIN_MAX_CANT}°${where}.`,
+        });
+      }
+      if (!(Math.abs(tw.toe) <= FIN_MAX_TOE)) {
+        issues.push({ code: 'toe', message: `Toe must be within ±${FIN_MAX_TOE}°${where}.` });
+      }
+      if (!(tw.transition >= 0 && tw.transition <= slice.height + EPS)) {
+        issues.push({
+          code: 'slice-height',
+          message: `The transition zone must fit between the root and the slice${where}.`,
+        });
+      }
+    }
   }
 };
 

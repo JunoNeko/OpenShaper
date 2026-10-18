@@ -384,9 +384,21 @@ For a box set at the wrong angle to the stringer. `FinDesign.toe` (deg, ±`FIN_M
   (front overhang, clearance) still read the outline before the turn: at 5° the leading-edge root
   moves a few tenths of a millimetre.
 
-Next (agreed, not built): per-slice cant (may be negative) and toe, each with a "transition
-zone below slice" in mm over which it blends in; a slice selector in the 3D view, the position
-arrows greyed out for a slice; the FCS root stays at 0° cant, slices may add cant.
+## Bent and twisted upper blade (slice cant and toe)
+
+`FinSlice.twist` (`FinTwist`: cant −20…20° (may be negative), toe ±5°, transition: a fraction
+of the depth). `twistAt(design, eta)` walks the slices: below a slice's transition zone the blade
+keeps what it had, through the zone it eases to the slice's values (`smoother`, C2), above it
+holds them. Lean becomes height-dependent: the lateral slide is the integral of tan(cant) up the
+blade (`slideAt`, Simpson per step on the edge-sample grid), the horizontal widening is
+1/cos(local cant); a slice's own toe (its toe less the fin's) turns each section about that
+section's thickest point, before the fin's toe turns everything about the root's. Fins without
+any twist take the old code path unchanged. The 3D toolbar gets a **Slice** selector (shared
+with the foil tabs): with a slice selected the position arrows (and arrow keys) are off, and cant,
+toe and **Transition below slice** (mm; 10 mm to start, never below the slice beneath) set its
+change; **No change here** removes it. `.fin.json` writes `twist` per slice. STEP: a side fin
+with 12° cant and −1° toe above 60% over a 15% zone fits within 0.0089 mm (dense check) and
+OpenCascade reads two closed solids.
 
 Not ours: the console's `THREE.Clock` deprecation comes from `@react-three/fiber` (harmless,
 goes with a fiber update); `share-modal.js` is not in the repository, most likely a browser

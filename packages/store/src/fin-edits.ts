@@ -8,6 +8,9 @@
 import {
   FIN_MAX_CANT,
   FIN_MAX_TOE,
+  FIN_MIN_SLICE_CANT,
+  finReadouts,
+  twistAt,
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
   defaultCanard,
@@ -28,6 +31,7 @@ import {
   type FinIssueCode,
   type FinPosition,
   type FinSection,
+  type FinTwist,
   type Spline,
   type Vec2,
 } from '@openshaper/kernel';
@@ -103,6 +107,44 @@ export const addSlice = (
   const below = pos === 0 ? d.section : d.slices[pos - 1]!.section;
   const slices = [...d.slices.slice(0, pos), { height: h, section: below }, ...d.slices.slice(pos)];
   return { design: { ...d, slices }, foil: pos + 1 };
+};
+
+/**
+ * Slice `foil` (1-based) changing the cant and toe: `change` sets any of them, starting
+ * from what the blade has there now (so a new change begins as no change), with a
+ * transition zone of 10 mm or the room below the slice, if smaller. `null` removes it.
+ * Values are clamped to their ranges.
+ */
+export const setSliceTwist = (
+  d: FinDesign,
+  foil: FinFoilIndex,
+  change: Partial<FinTwist> | null,
+): FinDesign => {
+  const i = foil - 1;
+  const sl = d.slices[i];
+  if (!sl) return d;
+  let twist: FinTwist | undefined;
+  if (change) {
+    const below = i === 0 ? 0 : d.slices[i - 1]!.height;
+    const depth = finReadouts(d).depth;
+    const now = sl.twist ?? {
+      ...twistAt(d, sl.height),
+      transition: Math.min(sl.height - below, depth > 0 ? 1 / depth : 0.1),
+    };
+    const next = { ...now, ...change };
+    twist = {
+      cant: Math.min(FIN_MAX_CANT, Math.max(FIN_MIN_SLICE_CANT, next.cant)),
+      toe: Math.round(Math.min(FIN_MAX_TOE, Math.max(-FIN_MAX_TOE, next.toe)) * 1e6) / 1e6,
+      transition: Math.min(sl.height - below, Math.max(0, next.transition)),
+    };
+  }
+  const slices = d.slices.map((s, j) => {
+    if (j !== i) return s;
+    const { twist: _old, ...rest } = s;
+    void _old;
+    return twist ? { ...rest, twist } : rest;
+  });
+  return { ...d, slices };
 };
 
 /** The design without slice `foil` (1-based); unchanged for the root or no such slice. */

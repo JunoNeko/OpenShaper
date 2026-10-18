@@ -80,7 +80,28 @@ export interface FinSlice {
   /** Height as a fraction of the blade's depth, like the taper's x: 0 root, 1 tip. */
   readonly height: number;
   readonly section: FinSection;
+  /**
+   * A change of cant and toe at this slice, or none (the blade carries on as below it).
+   * Above the slice the blade has this cant and toe; below the transition zone it keeps
+   * what it had; in between it eases from one to the other. More cant bends the blade
+   * out, a different toe twists it (Futures' upper-blade designs). Each section turns
+   * about its own thickest point.
+   */
+  readonly twist?: FinTwist;
 }
+
+/** Cant and toe at a slice, and how far below it they blend in. */
+export interface FinTwist {
+  /** Cant above the slice (deg), {@link FIN_MIN_SLICE_CANT} to {@link FIN_MAX_CANT}. */
+  readonly cant: number;
+  /** Toe above the slice (deg, + toe in), ±{@link FIN_MAX_TOE}. */
+  readonly toe: number;
+  /** The transition zone: how far below the slice the change starts (fraction of the depth). */
+  readonly transition: number;
+}
+
+/** A slice may take the blade's lean back past upright: an edge case owners asked for. */
+export const FIN_MIN_SLICE_CANT = -20;
 
 /**
  * How close slices may sit to each other, the root or the tip (fraction of the depth):

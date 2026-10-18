@@ -53,6 +53,7 @@ export {
   setHand,
   setInsideFace,
   setRootThickness,
+  setSliceTwist,
   setToe,
   withFinCurve,
   withFoil,

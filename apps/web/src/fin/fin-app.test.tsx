@@ -191,6 +191,36 @@ describe('FinApp', () => {
     expect(finStore.getState().design!.toe).toBe(-5); // already at the limit
   });
 
+  it('bends and twists the blade above a slice from the 3D view', () => {
+    localStorage.removeItem('bs.fin.views');
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add slice' }));
+    const d = () => finStore.getState().design!;
+    const threeD = within(screen.getByRole('region', { name: '3D' }));
+    // The new slice is selected: cant and toe now set its change; the arrows are off.
+    expect(threeD.getByLabelText('Slice')).toHaveProperty('value', '1');
+    expect(
+      threeD.getByRole('group', { name: 'Position on the tab' }).getAttribute('aria-disabled'),
+    ).toBe('true');
+    const cant = threeD.getByLabelText(/^Cant above slice/);
+    fireEvent.change(cant, { target: { value: '12' } });
+    fireEvent.keyDown(cant, { key: 'Enter' });
+    expect(d().slices[0]!.twist).toEqual({ cant: 12, toe: 0, transition: 0.1 }); // 10 mm zone
+    fireEvent.click(threeD.getByRole('button', { name: 'Toe out' }));
+    expect(d().slices[0]!.twist!.toe).toBe(-0.25);
+    expect(d().toe).toBe(0); // the whole fin's toe is untouched
+    // The arrow keys don't move the fin while a slice is selected.
+    const le = d().outline.knots[0]!.end.x;
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(d().outline.knots[0]!.end.x).toBe(le);
+    fireEvent.click(threeD.getByRole('button', { name: 'No change here' }));
+    expect(d().slices[0]!.twist).toBeUndefined();
+    // Back to the root: the arrows work again.
+    fireEvent.change(threeD.getByLabelText('Slice'), { target: { value: '0' } });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(d().outline.knots[0]!.end.x).toBeGreaterThan(le);
+  });
+
   it('lists the rules the design breaks', () => {
     act(() => finStore.getState().load({ ...defaultFinDesign('side', 'left'), cant: 30 }));
     render(<FinApp />);

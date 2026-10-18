@@ -40,6 +40,20 @@ export function useFinShortcuts(
           if (!s.selection) return false;
           s.select(null);
           return true;
+        // The nudges move the whole fin: off while a slice is selected, as their buttons are.
+        case 'fin-nudge-forward':
+        case 'fin-nudge-back':
+        case 'fin-nudge-out':
+        case 'fin-nudge-in':
+          if (s.activeFoil > 0) return false;
+          return nudge(id);
+        default:
+          return false;
+      }
+    };
+    const nudge = (id: string): boolean => {
+      const s = store.getState();
+      switch (id) {
         case 'fin-nudge-forward':
           s.nudgeFore(NUDGE_FORE_CM);
           return true;

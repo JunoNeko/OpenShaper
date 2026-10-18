@@ -21,6 +21,8 @@ import {
   FIN_BASE_LABEL,
   FIN_MAX_CANT,
   FIN_MAX_TOE,
+  FIN_MIN_SLICE_CANT,
+  twistAt,
   finTabOutline,
   futuresKind,
   finReadouts,
@@ -28,6 +30,7 @@ import {
   type FinBase,
   type FinDesign,
   type FinHand,
+  type FinTwist,
   type FinPosition,
 } from '@openshaper/kernel';
 import type { FinPreviewView } from '@openshaper/render3d';
@@ -169,10 +172,15 @@ function Nudge({
 }
 
 /** Fore/aft and across nudges, in one row. */
-function NudgePad() {
+function NudgePad({ disabled = false }: { disabled?: boolean }) {
   const s = finStore.getState;
   return (
-    <div className="flex items-center gap-1" role="group" aria-label="Position on the tab">
+    <div
+      className={`flex items-center gap-1 ${disabled ? 'pointer-events-none opacity-40' : ''}`}
+      role="group"
+      aria-label="Position on the tab"
+      aria-disabled={disabled}
+    >
       <span className="mr-1 text-muted-foreground">Position</span>
       <Nudge
         id="fin-nudge-back"
@@ -202,7 +210,6 @@ function NudgePad() {
   );
 }
 
-/** The 3D view's controls: side, cant and the nudges. */
 /** Toe steps (deg): a little toe makes a big difference. */
 const TOE_STEP = 0.25;
 
@@ -211,9 +218,19 @@ const TOE_STEP = 0.25;
  * toe in turns the leading edge toward the stringer; the view from above shows it
  * against the tab's axis.
  */
-function ToeTools({ view, onView }: { view: FinPreviewView; onView: (v: FinPreviewView) => void }) {
-  const toe = useFinState(finStore, (s) => s.design?.toe ?? 0);
-  const s = finStore.getState;
+function ToeTools({
+  toe,
+  onSet,
+  label,
+  view,
+  onView,
+}: {
+  toe: number;
+  onSet: (deg: number) => void;
+  label: string;
+  view: FinPreviewView;
+  onView: (v: FinPreviewView) => void;
+}) {
   return (
     <div className="flex items-center gap-1" role="group" aria-label="Toe">
       <Tooltip label={`Toe out ${TOE_STEP}°: turn the leading edge away from the stringer`}>
@@ -221,7 +238,7 @@ function ToeTools({ view, onView }: { view: FinPreviewView; onView: (v: FinPrevi
           variant="outline"
           size="icon"
           aria-label="Toe out"
-          onClick={() => s().setToe(toe - TOE_STEP)}
+          onClick={() => onSet(toe - TOE_STEP)}
         >
           <RotateCcw className="h-4 w-4" />
         </Button>
@@ -231,12 +248,12 @@ function ToeTools({ view, onView }: { view: FinPreviewView; onView: (v: FinPrevi
           variant="outline"
           size="icon"
           aria-label="Toe in"
-          onClick={() => s().setToe(toe + TOE_STEP)}
+          onClick={() => onSet(toe + TOE_STEP)}
         >
           <RotateCw className="h-4 w-4" />
         </Button>
       </Tooltip>
-      <DegField label={`Toe (±${FIN_MAX_TOE}°)`} value={toe} onCommit={(v) => s().setToe(v)} />
+      <DegField label={label} value={toe} onCommit={onSet} />
       <Button
         size="sm"
         variant={view === 'above' ? 'default' : 'outline'}
@@ -249,17 +266,105 @@ function ToeTools({ view, onView }: { view: FinPreviewView; onView: (v: FinPrevi
   );
 }
 
-function PlacementTools({
+/**
+ * Which part the 3D view's cant and toe set: the whole fin (Root) or a slice's change
+ * above it. Shares the selection with the foil view's tabs.
+ */
+function SliceSelect({ units }: { units: LengthUnit }) {
+  const design = useFinState(finStore, (s) => s.design);
+  const activeFoil = useFinState(finStore, (s) => s.activeFoil);
+  if (!design || design.slices.length === 0) return null;
+  const depth = finReadouts(design).depth;
+  return (
+    <label className="flex items-center gap-2">
+      <span className="text-muted-foreground">Slice</span>
+      <select
+        className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+        value={activeFoil}
+        aria-label="Slice"
+        onChange={(e) => finStore.getState().setActiveFoil(Number(e.target.value))}
+      >
+        <option value={0}>Root (whole fin)</option>
+        {design.slices.map((sl, i) => (
+          <option key={i} value={i + 1}>
+            {fmtLen(sl.height * depth, units)}
+            {sl.twist ? ' · cant / toe' : ''}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** A selected slice's cant and toe above it, and its transition zone below. */
+function SliceTwistTools({
+  foil,
+  units,
   view,
   onView,
 }: {
+  foil: number;
+  units: LengthUnit;
   view: FinPreviewView;
   onView: (v: FinPreviewView) => void;
+}) {
+  const design = useFinState(finStore, (s) => s.design);
+  if (!design) return null;
+  const sl = design.slices[foil - 1];
+  if (!sl) return null;
+  const depth = finReadouts(design).depth;
+  // A slice without a change shows what the blade has there now.
+  const now = sl.twist ?? { ...twistAt(design, sl.height), transition: 0 };
+  const set = (change: Partial<FinTwist> | null) => finStore.getState().setSliceTwist(foil, change);
+  return (
+    <>
+      <DegField
+        label={`Cant above slice (${FIN_MIN_SLICE_CANT}–${FIN_MAX_CANT}°)`}
+        value={now.cant}
+        onCommit={(v) => set({ cant: v })}
+      />
+      <ToeTools
+        toe={now.toe}
+        onSet={(v) => set({ toe: v })}
+        label="Toe above slice"
+        view={view}
+        onView={onView}
+      />
+      {sl.twist && (
+        <>
+          <LenField
+            label="Transition below slice"
+            valueCm={sl.twist.transition * depth}
+            units={units}
+            onCommit={(cm) => set({ transition: depth > 0 ? cm / depth : 0 })}
+          />
+          <Button size="sm" variant="outline" onClick={() => set(null)}>
+            No change here
+          </Button>
+        </>
+      )}
+    </>
+  );
+}
+
+function PlacementTools({
+  view,
+  onView,
+  units,
+}: {
+  view: FinPreviewView;
+  onView: (v: FinPreviewView) => void;
+  units: LengthUnit;
 }) {
   const position = useFinState(finStore, (s) => s.design?.position);
   const hand = useFinState(finStore, (s) => s.design?.hand);
   const cant = useFinState(finStore, (s) => s.design?.cant ?? 0);
+  const toe = useFinState(finStore, (s) => s.design?.toe ?? 0);
   const base = useFinState(finStore, (s) => s.design?.base);
+  // A slice selected (here or in the foil view): cant and toe set its change instead.
+  const slice = useFinState(finStore, (s) =>
+    s.design && s.activeFoil > 0 && s.activeFoil <= s.design.slices.length ? s.activeFoil : 0,
+  );
   if (!position || !base) return null;
   const s = finStore.getState;
   const fcs = !futuresKind(base);
@@ -295,20 +400,38 @@ function PlacementTools({
           ))}
         </div>
       )}
-      {position !== 'centre' && (
-        <Tooltip label={fcs ? 'Set by the FCS plug (0°, 5° or 9°)' : 'Blade lean out from the tab'}>
-          <div>
-            <DegField
-              label={fcs ? 'Cant (plug)' : `Cant (0–${FIN_MAX_CANT}°)`}
-              value={cant}
-              disabled={fcs}
-              onCommit={(v) => s().setCant(v)}
-            />
-          </div>
-        </Tooltip>
+      <SliceSelect units={units} />
+      {slice > 0 ? (
+        <>
+          <NudgePad disabled />
+          <SliceTwistTools foil={slice} units={units} view={view} onView={onView} />
+        </>
+      ) : (
+        <>
+          {position !== 'centre' && (
+            <Tooltip
+              label={fcs ? 'Set by the FCS plug (0°, 5° or 9°)' : 'Blade lean out from the tab'}
+            >
+              <div>
+                <DegField
+                  label={fcs ? 'Cant (plug)' : `Cant (0–${FIN_MAX_CANT}°)`}
+                  value={cant}
+                  disabled={fcs}
+                  onCommit={(v) => s().setCant(v)}
+                />
+              </div>
+            </Tooltip>
+          )}
+          <NudgePad />
+          <ToeTools
+            toe={toe}
+            onSet={(v) => s().setToe(v)}
+            label={`Toe (±${FIN_MAX_TOE}°)`}
+            view={view}
+            onView={onView}
+          />
+        </>
       )}
-      <NudgePad />
-      <ToeTools view={view} onView={onView} />
     </>
   );
 }
@@ -685,7 +808,7 @@ export function FinApp() {
           view="3d"
           slot={slotOf('3d')}
           onSwap={swap}
-          tools={<PlacementTools view={view3d} onView={setView3d} />}
+          tools={<PlacementTools view={view3d} onView={setView3d} units={units} />}
         >
           <Preview frameKey={sizeKey('3d')} view={view3d} />
         </ViewPane>
