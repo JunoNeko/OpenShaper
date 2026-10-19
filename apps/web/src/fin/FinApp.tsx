@@ -67,7 +67,7 @@ import {
   type FinViewOrder,
 } from './fin-views';
 import { useFinAutosave } from './use-fin-autosave';
-import { NUDGE_FORE_CM, NUDGE_LATERAL_CM, useFinShortcuts } from './use-fin-shortcuts';
+import { acrossSign, NUDGE_FORE_CM, nudgeAcross, useFinShortcuts } from './use-fin-shortcuts';
 import { useFinState } from './use-fin';
 import { useSettledDesign } from './use-settled-design';
 
@@ -172,9 +172,14 @@ function Nudge({
   );
 }
 
-/** Fore/aft and across nudges, in one row. */
+/**
+ * Fore/aft and across nudges, in one row. They follow the view from above (nose up the
+ * screen): up/down move the fin along the tab, left/right slide the blade across it.
+ */
 function NudgePad({ disabled = false }: { disabled?: boolean }) {
   const s = finStore.getState;
+  const hand = useFinState(finStore, (st) => st.design?.hand ?? null);
+  const across = (side: 'left' | 'right') => (acrossSign(hand, side) > 0 ? 'outboard' : 'inboard');
   return (
     <div
       className={`flex items-center gap-1 ${disabled ? 'pointer-events-none opacity-40' : ''}`}
@@ -184,28 +189,28 @@ function NudgePad({ disabled = false }: { disabled?: boolean }) {
     >
       <span className="mr-1 text-muted-foreground">Position</span>
       <Nudge
-        id="fin-nudge-back"
-        label="Move the fin back"
-        dir="←"
-        act={() => s().nudgeFore(-NUDGE_FORE_CM)}
-      />
-      <Nudge
         id="fin-nudge-forward"
         label="Move the fin forward"
-        dir="→"
+        dir="↑"
         act={() => s().nudgeFore(NUDGE_FORE_CM)}
       />
       <Nudge
-        id="fin-nudge-out"
-        label="Slide the blade outboard"
-        dir="↑"
-        act={() => s().nudgeLateral(NUDGE_LATERAL_CM)}
+        id="fin-nudge-back"
+        label="Move the fin back"
+        dir="↓"
+        act={() => s().nudgeFore(-NUDGE_FORE_CM)}
       />
       <Nudge
-        id="fin-nudge-in"
-        label="Slide the blade inboard"
-        dir="↓"
-        act={() => s().nudgeLateral(-NUDGE_LATERAL_CM)}
+        id="fin-nudge-left"
+        label={`Slide the blade left (${across('left')})`}
+        dir="←"
+        act={() => nudgeAcross(s(), 'left')}
+      />
+      <Nudge
+        id="fin-nudge-right"
+        label={`Slide the blade right (${across('right')})`}
+        dir="→"
+        act={() => nudgeAcross(s(), 'right')}
       />
     </div>
   );

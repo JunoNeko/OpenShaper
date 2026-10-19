@@ -40,7 +40,7 @@ test.describe('Fin designer', () => {
 
     // Start from a right-hand side fin and size it.
     await page.getByLabel('Start a new fin').selectOption({ label: 'Side, right' });
-    await expect(page.getByRole('button', { name: 'Right' })).toHaveAttribute(
+    await expect(page.getByRole('button', { name: 'Right', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
@@ -61,7 +61,7 @@ test.describe('Fin designer', () => {
     const overhang = measurement(page, 'Front overhang');
     const start = await overhang.textContent();
     await page.getByRole('button', { name: 'Move the fin forward' }).click();
-    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowUp');
     const twice = await overhang.textContent();
     expect(twice).not.toBe(start);
     await page.keyboard.press('ControlOrMeta+z');

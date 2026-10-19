@@ -141,34 +141,35 @@ export const SHORTCUTS: readonly Shortcut[] = [
     match: { keys: ['escape'], notInField: true },
   },
   // The fin designer's nudge arrows (/fin). The board editor has no binding for these
-  // ids, so on /app the arrows keep their usual behaviour.
+  // ids, so on /app the arrows keep their usual behaviour. They follow the 3D view from
+  // above, where the nose is up the screen: up/down along the tab, left/right across it.
   {
     id: 'fin-nudge-forward',
-    keys: '→',
-    label: 'Move the fin forward on the tab (0.5 mm)',
-    group: 'Fin designer',
-    match: { keys: ['arrowright'], notInField: true },
-  },
-  {
-    id: 'fin-nudge-back',
-    keys: '←',
-    label: 'Move the fin back on the tab (0.5 mm)',
-    group: 'Fin designer',
-    match: { keys: ['arrowleft'], notInField: true },
-  },
-  {
-    id: 'fin-nudge-out',
     keys: '↑',
-    label: 'Slide the blade outboard across the tab (0.1 mm)',
+    label: 'Move the fin forward on the tab (0.5 mm)',
     group: 'Fin designer',
     match: { keys: ['arrowup'], notInField: true },
   },
   {
-    id: 'fin-nudge-in',
+    id: 'fin-nudge-back',
     keys: '↓',
-    label: 'Slide the blade inboard across the tab (0.1 mm)',
+    label: 'Move the fin back on the tab (0.5 mm)',
     group: 'Fin designer',
     match: { keys: ['arrowdown'], notInField: true },
+  },
+  {
+    id: 'fin-nudge-left',
+    keys: '←',
+    label: 'Slide the blade left across the tab, as seen from above (0.1 mm)',
+    group: 'Fin designer',
+    match: { keys: ['arrowleft'], notInField: true },
+  },
+  {
+    id: 'fin-nudge-right',
+    keys: '→',
+    label: 'Slide the blade right across the tab, as seen from above (0.1 mm)',
+    group: 'Fin designer',
+    match: { keys: ['arrowright'], notInField: true },
   },
   ...VIEW_KEYS.map(
     ({ key, label }): Shortcut => ({
