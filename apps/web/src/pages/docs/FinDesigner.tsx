@@ -206,12 +206,13 @@ export default function DocsFinDesigner() {
           end. A flat inside face sits flush with the tab; a symmetric foil is centred on it.
         </p>
         <Terms>
-          <Term name={`${shortcutKeys('fin-nudge-back')} ${shortcutKeys('fin-nudge-forward')}`}>
-            Move the fin back or forward along the tab.
+          <Term name={`${shortcutKeys('fin-nudge-forward')} ${shortcutKeys('fin-nudge-back')}`}>
+            Move the fin forward or back along the tab.
           </Term>
-          <Term name={`${shortcutKeys('fin-nudge-out')} ${shortcutKeys('fin-nudge-in')}`}>
-            Slide the blade across the tab — for a strongly curved inside face that overhangs the
-            tab, slide it back over.
+          <Term name={`${shortcutKeys('fin-nudge-left')} ${shortcutKeys('fin-nudge-right')}`}>
+            Slide the blade left or right across the tab, as the 3D view from above shows it (nose
+            up the screen) — for a strongly curved inside face that overhangs the tab, slide it back
+            over. On a left fin, left is outboard; on a right fin, right is.
           </Term>
           <Term name={`Cant (0–${FIN_MAX_CANT}°)`}>
             How far the blade leans out from the tab. Futures builds cant into the fin, not the box.

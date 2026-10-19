@@ -48,12 +48,33 @@ describe('FinApp', () => {
     const before = overhang();
     fireEvent.click(screen.getByRole('button', { name: 'Move the fin forward' }));
     expect(overhang()).toBeCloseTo(before + 0.05, 9);
-    fireEvent.keyDown(window, { key: 'ArrowRight' });
-    expect(overhang()).toBeCloseTo(before + 0.1, 9);
     fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(overhang()).toBeCloseTo(before + 0.1, 9);
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    expect(overhang()).toBeCloseTo(before + 0.05, 9);
+    // Left/right follow the view from above, so which is outboard depends on the hand.
+    const hand = finStore.getState().design!.hand;
+    fireEvent.keyDown(window, { key: hand === 'right' ? 'ArrowRight' : 'ArrowLeft' });
     expect(finStore.getState().design!.lateralOffset).toBeCloseTo(0.01, 12);
     fireEvent.keyDown(window, { key: 'z', metaKey: true });
     expect(finStore.getState().design!.lateralOffset).toBe(0);
+  });
+
+  it('slides the blade left and right as the view from above shows it, for either hand', () => {
+    render(<FinApp />);
+    const offset = () => finStore.getState().design!.lateralOffset;
+    fireEvent.click(screen.getByRole('button', { name: 'Left' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Slide the blade left (outboard)' }));
+    expect(offset()).toBeCloseTo(0.01, 12);
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(offset()).toBeCloseTo(0, 12);
+    // A right fin is the mirror image: its outside face is on the right from above.
+    fireEvent.click(screen.getByRole('button', { name: 'Right' }));
+    const start = offset();
+    fireEvent.click(screen.getByRole('button', { name: 'Slide the blade right (outboard)' }));
+    expect(offset()).toBeCloseTo(start + 0.01, 12);
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(offset()).toBeCloseTo(start, 12);
   });
 
   it('clamps the cant field to the allowed range', () => {
@@ -211,13 +232,13 @@ describe('FinApp', () => {
     expect(d().toe).toBe(0); // the whole fin's toe is untouched
     // The arrow keys don't move the fin while a slice is selected.
     const le = d().outline.knots[0]!.end.x;
-    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
     expect(d().outline.knots[0]!.end.x).toBe(le);
     fireEvent.click(threeD.getByRole('button', { name: 'No change here' }));
     expect(d().slices[0]!.twist).toBeUndefined();
     // Back to the root: the arrows work again.
     fireEvent.change(threeD.getByLabelText('Slice'), { target: { value: '0' } });
-    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
     expect(d().outline.knots[0]!.end.x).toBeGreaterThan(le);
   });
 
