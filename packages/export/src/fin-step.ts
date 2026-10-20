@@ -38,6 +38,7 @@ import {
   type BSplineSurface,
   type BladeSurfaceModel,
   type FinDesign,
+  type FinLaminate,
   type TabSegment,
   type Vert3,
 } from '@openshaper/kernel';
@@ -71,6 +72,8 @@ export interface FinStepOptions {
   timestamp?: string;
   /** How closely the blade surface follows the design (cm). */
   tolerance?: number;
+  /** Write the blade as the core under this laminate, for bagging (cm per face). */
+  laminate?: FinLaminate;
 }
 
 const sub = (a: Vert3, b: Vert3): Vert3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
@@ -380,10 +383,10 @@ export const exportFinStep = (d: FinDesign, opts: FinStepOptions = {}): string =
   const unit: SheetUnit = opts.unit ?? 'mm';
   const name = opts.name ?? 'fin';
   const timestamp = opts.timestamp ?? new Date().toISOString().slice(0, 19);
-  const model = fitBladeSurface(
-    d,
-    opts.tolerance === undefined ? {} : { tolerance: opts.tolerance },
-  );
+  const model = fitBladeSurface(d, {
+    ...(opts.tolerance === undefined ? {} : { tolerance: opts.tolerance }),
+    ...(opts.laminate ? { laminate: opts.laminate } : {}),
+  });
 
   const w = writerFor(unit);
   header(w, 'Surf fin as B-spline surfaces', `${name}.step`, timestamp);

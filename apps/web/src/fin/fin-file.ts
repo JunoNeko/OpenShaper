@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /** Saving a fin to a `.fin.json` file and opening one, for the fin designer's File buttons. */
-import type { FinDesign } from '@openshaper/kernel';
+import type { FinDesign, FinLaminate } from '@openshaper/kernel';
 import { FinJsonError, readFinJson, writeFinJson } from '@openshaper/io';
 import { download, MULTI_DOWNLOAD_GAP_MS } from '../file-io';
 
@@ -30,15 +30,22 @@ const each = async (fins: FinDesign[], write: (d: FinDesign) => void | Promise<v
  * Export the design for manufacture and download it: STEP (CNC) or STL (printing),
  * both in mm; with `pair`, a left and a right fin, one file each. The exporters are loaded on first use, so the page doesn't carry them.
  * STEP fits its surfaces on the main thread (about a second), as the board's does.
+ * With `laminate`, the blade is the core to bag that laminate onto, in `…-core` files.
  */
-export async function exportFin(d: FinDesign, format: 'step' | 'stl', pair = false): Promise<void> {
+export async function exportFin(
+  d: FinDesign,
+  format: 'step' | 'stl',
+  pair = false,
+  laminate?: FinLaminate,
+): Promise<void> {
   const { exportFinStep, exportFinStl } = await import('@openshaper/export');
   await each(finsToWrite(d, pair), (f) => {
-    const stem = finFileStem(f);
+    const stem = `${finFileStem(f)}${laminate ? '-core' : ''}`;
+    const opts = laminate ? { name: stem, laminate } : { name: stem };
     if (format === 'step') {
-      download(exportFinStep(f, { name: stem }), `${stem}.step`, 'model/step');
+      download(exportFinStep(f, opts), `${stem}.step`, 'model/step');
     } else {
-      download(exportFinStl(f, { name: stem }) as unknown as BlobPart, `${stem}.stl`, 'model/stl');
+      download(exportFinStl(f, opts) as unknown as BlobPart, `${stem}.stl`, 'model/stl');
     }
   });
 }

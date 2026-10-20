@@ -344,6 +344,32 @@ describe('FinApp: export', () => {
     });
   }, 20_000);
 
+  it('exports a core for laminating, with the thickness and faces chosen', async () => {
+    localStorage.removeItem('bs.fin.core');
+    const names = captureDownloads();
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'Export core…' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Export core for laminating' }));
+    const field = dialog.getByLabelText('Laminate thickness');
+    expect((field as HTMLInputElement).value).toBe('0.20'); // one ply of 200 gsm uni
+    expect((dialog.getByLabelText('Both') as HTMLInputElement).checked).toBe(true);
+    // Out of range: nothing to export.
+    fireEvent.change(field, { target: { value: '5' } });
+    expect(
+      (dialog.getByRole('button', { name: 'Export STL core' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    fireEvent.change(field, { target: { value: '0.25' } });
+    fireEvent.click(dialog.getByLabelText('Inside'));
+    fireEvent.click(dialog.getByRole('button', { name: 'Export STL core' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(names).toEqual(['fin-side-left-core.stl']), { timeout: 10_000 });
+    // Remembered for next time.
+    expect(JSON.parse(localStorage.getItem('bs.fin.core')!)).toEqual({
+      thickness: 0.025,
+      sides: 'inside',
+    });
+  }, 20_000);
+
   it(
     'is unavailable while the fin breaks a rule',
     () => {
@@ -354,6 +380,9 @@ describe('FinApp: export', () => {
       ).toBe(true);
       expect(
         (screen.getByRole('button', { name: 'Export STL' }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      expect(
+        (screen.getByRole('button', { name: 'Export core…' }) as HTMLButtonElement).disabled,
       ).toBe(true);
     },
     HEAVY,

@@ -290,6 +290,17 @@ export default function DocsFinDesigner() {
           <Term name="STL">
             For 3D printing. A fine triangle mesh in millimetres, the unit slicers assume.
           </Term>
+          <Term name="Core (for laminating)">
+            For a printed fin that gets laminate vacuum-bagged onto it, such as unidirectional
+            carbon to stiffen the base so it doesn&apos;t snap under load. Export core… asks for the
+            laminate&apos;s thickness per face (one ply of 200 gsm uni is about 0.20–0.25 mm; add
+            plies up) and which faces it goes on: outside, inside or both. The blade is made thinner
+            by that much on those faces, so with the laminate on it matches your design, and
+            exported as STEP or STL in files ending <code>-core</code>. It never goes under{' '}
+            {mm(FIN_MIN_THICKNESS)}: where the blade is already near it, less is taken, so the edges
+            stay as designed and come out a little thicker once laminated. The tab is unchanged, so
+            it still fits the box.
+          </Term>
         </Terms>
         <p>Export is unavailable while the fin breaks a rule; the readouts say which.</p>
       </Section>
