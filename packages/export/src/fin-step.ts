@@ -33,7 +33,7 @@ import {
   finTabOutline,
   knotMultiplicities,
   surfaceBoundaryCurve,
-  tabCentreY,
+  tabFacesY,
   type BSplineCurve,
   type BSplineSurface,
   type BladeSurfaceModel,
@@ -72,7 +72,7 @@ export interface FinStepOptions {
   timestamp?: string;
   /** How closely the blade surface follows the design (cm). */
   tolerance?: number;
-  /** Write the blade as the core under this laminate, for bagging (cm per face). */
+  /** Write the blade, and the tab if it wraps it, as the core under this laminate (cm per face). */
   laminate?: FinLaminate;
 }
 
@@ -250,11 +250,15 @@ const emitBlade = (w: Writer, m: BladeSurfaceModel): number => {
 
 // --- tab ---
 
-const emitTab = (w: Writer, d: FinDesign, factor: number): number => {
+const emitTab = (
+  w: Writer,
+  d: FinDesign,
+  factor: number,
+  laminate: FinLaminate | undefined,
+): number => {
   const tab = finTabOutline(d.base);
-  const { height: H, thickness: t } = tab;
-  const yc = tabCentreY(d);
-  const sides = [yc - t / 2, yc + t / 2] as const;
+  const { height: H } = tab;
+  const sides = tabFacesY(d, laminate);
   // Tab frame (x, y up from the tab bottom) to the fin frame: z = y − H.
   const at = (p: { x: number; y: number }, y: number): Vert3 => ({ x: p.x, y, z: p.y - H });
   const segs = tab.segments;
@@ -393,6 +397,6 @@ export const exportFinStep = (d: FinDesign, opts: FinStepOptions = {}): string =
   const defShape = productDefinition(w, name);
   const context = unitContext(w, unit);
   const blade = emitBlade(w, model);
-  const tab = emitTab(w, d, SHEET_UNIT[unit].factor);
+  const tab = emitTab(w, d, SHEET_UNIT[unit].factor, opts.laminate);
   return finishShape(w, defShape, context, [blade, tab]);
 };

@@ -367,7 +367,27 @@ describe('FinApp: export', () => {
     expect(JSON.parse(localStorage.getItem('bs.fin.core')!)).toEqual({
       thickness: 0.025,
       sides: 'inside',
+      tab: false,
     });
+  }, 20_000);
+
+  it('can wrap the tab too, and remembers it', async () => {
+    // Saved before the tab option existed: read as not wrapping it.
+    localStorage.setItem('bs.fin.core', JSON.stringify({ thickness: 0.02, sides: 'inside' }));
+    const names = captureDownloads();
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'Export core…' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Export core for laminating' }));
+    const tab = dialog.getByLabelText('Include the tab') as HTMLInputElement;
+    expect(tab.checked).toBe(false);
+    expect(dialog.getByText(/The tab is unchanged/)).toBeTruthy();
+    fireEvent.click(tab);
+    expect(dialog.getByText(/The tab is thinned/)).toBeTruthy();
+    fireEvent.click(dialog.getByRole('button', { name: 'Export STL core' }));
+    await waitFor(() => expect(names).toEqual(['fin-side-left-core.stl']), { timeout: 10_000 });
+    const saved = JSON.parse(localStorage.getItem('bs.fin.core')!);
+    expect(saved).toMatchObject({ sides: 'inside', tab: true });
+    expect(saved.thickness).toBeCloseTo(0.02, 12);
   }, 20_000);
 
   it(
