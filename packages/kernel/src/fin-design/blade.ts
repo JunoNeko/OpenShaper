@@ -23,6 +23,13 @@
  *   leaning blade is wider than the blade is thick, so lateral offsets are divided by
  *   cos(cant); the thickness measured square to the blade is then the taper value.
  *
+ * For a laminated fin, the blade can be built as its **core** ({@link FinLaminate}):
+ * each face pulled in by the laminate that will be bagged onto it, so the finished fin
+ * is the design. The core is never thinner than the minimum: where the laminate would
+ * take it below, less is taken, shared between the faces as the laminate is. So the
+ * edges, which end at the minimum, are left as they are; laminate trimmed flush there
+ * makes them a little thicker than designed.
+ *
  * **Smoothed edges.** Stretching the foil from the leading to the trailing edge of
  * each slice ties every point of it to both edges: wherever an edge bends sharply
  * (a hooked tip, the underside of a raised rear), the whole slice shifts at once and the
@@ -58,9 +65,23 @@ export const cosineStations = (n: number): number[] =>
 
 export const DEFAULT_CHORD_STATIONS: readonly number[] = cosineStations(48);
 
+/**
+ * Laminate to be bagged onto the blade's faces (cm, square to the blade): the blade is
+ * then built as the core under it (see the file comment). Zero on a face leaves it be.
+ */
+export interface FinLaminate {
+  readonly outside: number;
+  readonly inside: number;
+}
+
+/** No laminate: the blade is the design. */
+export const NO_LAMINATE: FinLaminate = { outside: 0, inside: 0 };
+
 /** Everything about a design that doesn't depend on the height, worked out once. */
 export interface PreparedBlade {
   readonly design: FinDesign;
+  /** Laminate the blade is the core of; {@link NO_LAMINATE} for the finished fin. */
+  readonly laminate: FinLaminate;
   /** Height of the tip above the tab top (cm). */
   readonly depth: number;
   /** Chord fraction where the section shape is thickest. */
@@ -258,11 +279,12 @@ export const foilAt = (d: FinDesign, eta: number): Foil => {
  * Work out the height-independent parts of the blade. The design must pass
  * `validateFinDesign`; the result is undefined otherwise.
  */
-export const prepareBlade = (d: FinDesign): PreparedBlade => {
+export const prepareBlade = (d: FinDesign, laminate: FinLaminate = NO_LAMINATE): PreparedBlade => {
   const { at, thickness } = sectionThickest(d.section);
   const cant = d.cant * DEG_TO_RAD;
   return {
     design: d,
+    laminate,
     depth: splineExtremes(d.outline, 'y').max.point.y,
     thickestAt: at,
     shapeThickness: thickness,
@@ -713,12 +735,20 @@ export const bladeSection = (
     };
   };
 
+  const { outside: lamOut, inside: lamIn } = b.laminate;
+  const lam = lamOut + lamIn;
   const outside: Vert3[] = [];
   const inside: Vert3[] = [];
   for (const u of stations) {
     const [o, i] = foil.shapeAt(fractionAt(u));
-    const out = o * scale + m * foil.outsideShare;
-    const ins = i * scale - m * (1 - foil.outsideShare);
+    let out = o * scale + m * foil.outsideShare;
+    let ins = i * scale - m * (1 - foil.outsideShare);
+    if (lam > 0) {
+      // The core: each face in by its laminate, but never under the minimum.
+      const k = Math.min(1, Math.max(0, out - ins - m) / lam);
+      out -= lamOut * k;
+      ins += lamIn * k;
+    }
     const x = leading + (trailing - leading) * u;
     outside.push(at(x, out));
     inside.push(at(x, ins));

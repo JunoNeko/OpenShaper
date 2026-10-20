@@ -30,6 +30,7 @@ import {
   type FinBase,
   type FinDesign,
   type FinHand,
+  type FinLaminate,
   type FinTwist,
   type FinPosition,
 } from '@openshaper/kernel';
@@ -48,6 +49,7 @@ import {
   type ReactNode,
 } from 'react';
 import { DegField, LenField } from '../components/fields';
+import { CoreExportDialog } from './CoreExportDialog';
 import { fmtArea, fmtLen, lengthUnitByKey, type LengthUnit } from '../format';
 import { readStored, writeStored } from '../persisted';
 import { GITHUB_URL } from '../seo/site';
@@ -675,17 +677,18 @@ function PairOption({ pair, onChange }: { pair: boolean; onChange: (on: boolean)
   );
 }
 
-function ExportButtons({ pair }: { pair: boolean }) {
+function ExportButtons({ pair, units }: { pair: boolean; units: LengthUnit }) {
   const design = useFinState(finStore, (s) => s.design);
   const issues = useMemo(() => (design ? validateFinDesign(design) : []), [design]);
-  const [busy, setBusy] = useState<'step' | 'stl' | null>(null);
-  const run = (format: 'step' | 'stl') => {
+  const [busy, setBusy] = useState<'step' | 'stl' | 'core' | null>(null);
+  const [coreOpen, setCoreOpen] = useState(false);
+  const run = (format: 'step' | 'stl', laminate?: FinLaminate) => {
     const d = finStore.getState().design;
     if (!d || busy) return;
-    setBusy(format);
+    setBusy(laminate ? 'core' : format);
     // Let "Exporting…" paint before the work starts.
     window.setTimeout(() => {
-      void exportFin(d, format, pair).finally(() => setBusy(null));
+      void exportFin(d, format, pair, laminate).finally(() => setBusy(null));
     }, 0);
   };
   const blocked = issues.length > 0;
@@ -712,6 +715,29 @@ function ExportButtons({ pair }: { pair: boolean }) {
           {busy === 'stl' ? 'Exporting…' : 'Export STL'}
         </Button>
       </Tooltip>
+      <Tooltip
+        label={why ?? 'Export a thinner core to bag laminate onto, such as unidirectional carbon'}
+      >
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={blocked || busy !== null}
+          onClick={() => setCoreOpen(true)}
+        >
+          {busy === 'core' ? 'Exporting…' : 'Export core…'}
+        </Button>
+      </Tooltip>
+      {coreOpen && (
+        <CoreExportDialog
+          units={units}
+          pair={pair}
+          onClose={() => setCoreOpen(false)}
+          onExport={(format, laminate) => {
+            setCoreOpen(false);
+            run(format, laminate);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -784,7 +810,7 @@ export function FinApp() {
         <div className="ml-auto flex flex-wrap items-center gap-1">
           <FileButtons onSave={save} />
           <PairOption pair={pair} onChange={changePair} />
-          <ExportButtons pair={pair} />
+          <ExportButtons pair={pair} units={units} />
           <History />
           <a
             className="px-2 text-sm text-muted-foreground underline-offset-4 hover:underline"

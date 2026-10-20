@@ -445,3 +445,27 @@ describe('exportFinStep: hand', () => {
     expect(l.every((p) => mirrored.has(p))).toBe(true);
   });
 });
+
+describe('exportFinStep: laminate core', () => {
+  const d = defaultFinDesign('side', 'left');
+  const laminate = { outside: 0.02, inside: 0.02 };
+  const step = exportFinStep(d, { timestamp: FIXED, laminate });
+  const m = parse(step);
+
+  it('still holds the blade and the tab as two solids', () => {
+    expect(solidsOf(m).map((s) => s.name)).toEqual(['blade', 'tab']);
+  });
+
+  it('writes the core, not the finished blade, within tolerance', () => {
+    const surf = [...m.values()].find((e) => e.name === 'B_SPLINE_SURFACE_WITH_KNOTS')!;
+    const s = decodeSurface(surf, m, 1 / MM);
+    const model = fitBladeSurface(d, { laminate });
+    expect(bladeSurfaceDeviation(prepareBlade(d, laminate), s, model.topZ)).toBeLessThanOrEqual(
+      BLADE_CI_TOLERANCE,
+    );
+    // The finished blade is a laminate's thickness away, well over the tolerance.
+    expect(bladeSurfaceDeviation(prepareBlade(d), s, model.topZ)).toBeGreaterThan(
+      BLADE_CI_TOLERANCE,
+    );
+  });
+});

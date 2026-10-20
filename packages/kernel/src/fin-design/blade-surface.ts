@@ -59,6 +59,7 @@ import {
   cosineStations,
   prepareBlade,
   type BladeSection,
+  type FinLaminate,
   type PreparedBlade,
 } from './blade';
 import type { FinDesign } from './fin-design';
@@ -74,6 +75,8 @@ export interface BladeSurfaceOptions {
   readonly tipGap?: number;
   /** Refinement passes after the first. */
   readonly maxRefinements?: number;
+  /** Fit the blade as the core under this laminate (blade.ts). */
+  readonly laminate?: FinLaminate;
 }
 
 export const BLADE_DEFAULTS = {
@@ -314,7 +317,7 @@ export const fitBladeSurface = (
   opts: BladeSurfaceOptions = {},
 ): BladeSurfaceModel => {
   const o = { ...BLADE_DEFAULTS, ...opts };
-  const b = prepareBlade(d);
+  const b = prepareBlade(d, o.laminate);
   const topZ = b.depth - o.tipGap;
   let rows = o.rows;
   let stations = o.stations;

@@ -22,6 +22,8 @@ import {
   bladeRowHeights,
   bladeSection,
   cosineStations,
+  type FinLaminate,
+  NO_LAMINATE,
   outlineFeatureHeights,
   prepareBlade,
 } from './blade';
@@ -41,13 +43,27 @@ export interface FinMeshOptions {
   readonly tipGap?: number;
   /** Largest gap between a tab arc and its chords (cm). */
   readonly arcTolerance?: number;
+  /** Mesh the blade as the core under this laminate (blade.ts). The tab is unchanged. */
+  readonly laminate?: FinLaminate;
 }
 
 /** Light enough to rebuild on every edit. */
-export const FIN_MESH_PREVIEW = { rows: 40, stations: 32, tipGap: 0.01, arcTolerance: 0.002 };
+export const FIN_MESH_PREVIEW = {
+  rows: 40,
+  stations: 32,
+  tipGap: 0.01,
+  arcTolerance: 0.002,
+  laminate: NO_LAMINATE,
+};
 
 /** For STL: rings about 0.5 mm apart on a 100 mm fin. */
-export const FIN_MESH_FINE = { rows: 200, stations: 120, tipGap: 0.01, arcTolerance: 0.0005 };
+export const FIN_MESH_FINE = {
+  rows: 200,
+  stations: 120,
+  tipGap: 0.01,
+  arcTolerance: 0.0005,
+  laminate: NO_LAMINATE,
+};
 
 export interface FinMesh {
   readonly blade: BoardMesh;
@@ -96,7 +112,7 @@ const cap = (
 const FEATURE_RINGS = [0.01, 0.03, 0.1];
 
 const bladeMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
-  const b = prepareBlade(d);
+  const b = prepareBlade(d, o.laminate);
   const top = b.depth - o.tipGap;
   const st = cosineStations(o.stations);
   // Rings spaced along the edges' travel: they gather at the tip, and wherever an edge
