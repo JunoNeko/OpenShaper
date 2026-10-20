@@ -166,7 +166,7 @@ describe('validateFinDesign', () => {
     });
 
     it('catches a dip below the minimum between knots', () => {
-      // Ends are fine, but the handles pull the middle of the last curve under 0.5 mm.
+      // Ends are fine, but the handles pull the middle of the last curve under the minimum.
       const t = defaultTaper(0.8);
       const k = t.knots[2]!;
       const dipping = withKnot(t, 2, knot(k.end, vec2(0.92, 0), k.tangentToNext, false));

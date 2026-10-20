@@ -14,7 +14,7 @@
  * v: up the blade, from the root on the tab top (z = 0) to just under the tip.
  * ```
  *
- * The 0.5 mm minimum thickness gives the blade blunt edges, so each section is a
+ * The 1 mm minimum thickness gives the blade blunt edges, so each section is a
  * closed loop with four corners: the ends of the two edge caps. Those are creases
  * (`uBreaks`): C0 there, smooth everywhere else. Corners in the outline or the taper
  * crease along v the same way (`vBreaks`).
@@ -27,7 +27,7 @@
  *
  * Sections stop {@link BladeSurfaceOptions.tipGap} below the tip, and a flat cap
  * closes the blade there. A surface pinched to a point is legal STEP but a common
- * cause of import failures. The cap is a sliver a couple of mm long and 0.5 mm wide;
+ * cause of import failures. The cap is a sliver a couple of mm long and 1 mm wide;
  * the CNC cutter rounds it.
  *
  * ## Accuracy
