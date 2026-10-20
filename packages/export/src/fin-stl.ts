@@ -17,7 +17,7 @@ export interface FinStlOptions {
   unit?: SheetUnit;
   /** Name written into the header. Default 'fin'. */
   name?: string;
-  /** Write the blade as the core under this laminate, for bagging (cm per face). */
+  /** Write the blade, and the tab if it wraps it, as the core under this laminate (cm per face). */
   laminate?: FinLaminate;
 }
 

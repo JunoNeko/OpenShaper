@@ -25,10 +25,13 @@
  *
  * For a laminated fin, the blade can be built as its **core** ({@link FinLaminate}):
  * each face pulled in by the laminate that will be bagged onto it, so the finished fin
- * is the design. The core is never thinner than the minimum: where the laminate would
- * take it below, less is taken, shared between the faces as the laminate is. So the
- * edges, which end at the minimum, are left as they are; laminate trimmed flush there
- * makes them a little thicker than designed.
+ * is the design. The core is never thinner than the minimum. Where the laminate would
+ * take it below (toward the edges, which end at the minimum), a laminated face is still
+ * pulled in by its whole laminate, so it stays true (a flat inside face stays flat and
+ * flush with a wrapped tab), and the face with less laminate makes up the shortfall:
+ * all of it on the bare face when only one is laminated, half each when both are
+ * equally. So the edges come out a little thicker than designed once laminated, on
+ * the side with less laminate.
  *
  * **Smoothed edges.** Stretching the foil from the leading to the trailing edge of
  * each slice ties every point of it to both edges: wherever an edge bends sharply
@@ -72,6 +75,12 @@ export const DEFAULT_CHORD_STATIONS: readonly number[] = cosineStations(48);
 export interface FinLaminate {
   readonly outside: number;
   readonly inside: number;
+  /**
+   * The laminate also wraps the tab, over the base where the fin leaves the box (a
+   * likely snap point in PLA and similar): the tab's laminated faces are pulled in by
+   * the same amount, so laminated it still fits the box ({@link tabFacesY}).
+   */
+  readonly tab?: boolean;
 }
 
 /** No laminate: the blade is the design. */
@@ -744,10 +753,11 @@ export const bladeSection = (
     let out = o * scale + m * foil.outsideShare;
     let ins = i * scale - m * (1 - foil.outsideShare);
     if (lam > 0) {
-      // The core: each face in by its laminate, but never under the minimum.
-      const k = Math.min(1, Math.max(0, out - ins - m) / lam);
-      out -= lamOut * k;
-      ins += lamIn * k;
+      // The core: each face in by its laminate. Under the minimum, the face with less
+      // laminate makes up the shortfall, so a laminated face stays true.
+      const short = Math.max(0, m - (out - ins - lam));
+      out += short * (lamIn / lam) - lamOut;
+      ins += lamIn - short * (lamOut / lam);
     }
     const x = leading + (trailing - leading) * u;
     outside.push(at(x, out));

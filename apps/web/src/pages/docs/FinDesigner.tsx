@@ -297,9 +297,16 @@ export default function DocsFinDesigner() {
             plies up) and which faces it goes on: outside, inside or both. The blade is made thinner
             by that much on those faces, so with the laminate on it matches your design, and
             exported as STEP or STL in files ending <code>-core</code>. It never goes under{' '}
-            {mm(FIN_MIN_THICKNESS)}: where the blade is already near it, less is taken, so the edges
-            stay as designed and come out a little thicker once laminated. The tab is unchanged, so
-            it still fits the box.
+            {mm(FIN_MIN_THICKNESS)}. A laminated face is always thinned by the full laminate, edges
+            included, so a flat inside face stays flat and flush with a wrapped tab. Near the edges,
+            where the blade is already close to the minimum, the face with less laminate is left
+            thicker to make it up (the bare face if only one is laminated; half each if both are
+            equally), so the edges come out a little thicker on that side once laminated. The tab is
+            unchanged unless you tick Include the tab: then the laminate wraps over the base, where
+            the fin leaves the box (a likely snap point in PLA and similar), and the tab&apos;s
+            laminated faces are thinned by the same amount so it still fits the box. That suits a
+            flat inside face, which runs straight on into the tab; the outside usually meets the tab
+            at too sharp a step for laminate to follow.
           </Term>
         </Terms>
         <p>Export is unavailable while the fin breaks a rule; the readouts say which.</p>

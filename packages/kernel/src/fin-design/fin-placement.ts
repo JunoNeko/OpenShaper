@@ -20,7 +20,7 @@
  *
  * The frame is blade.ts's: the blade is fixed and the tab is placed under it.
  */
-import { prepareBlade, rootThickestFaces } from './blade';
+import { NO_LAMINATE, prepareBlade, rootThickestFaces, type FinLaminate } from './blade';
 import { clearanceShortfall, rearClearance } from './fin-clearance';
 import { FIN_MAX_FRONT_OVERHANG, finOutward, type FinDesign } from './fin-design';
 import { finTabOutline, futuresKind, type FinBase } from './fin-tab';
@@ -37,6 +37,24 @@ const defaultTabCentreY = (d: FinDesign): number =>
 /** The tab's centre plane (blade-frame Y, cm): its default, less the blade's offset. */
 export const tabCentreY = (d: FinDesign): number =>
   defaultTabCentreY(d) - outwardOf(d) * d.lateralOffset;
+
+/**
+ * The tab's two faces (blade-frame Y, cm), lower first. With a laminate that wraps the
+ * tab ({@link FinLaminate.tab}), each laminated face is pulled in by its laminate, so
+ * the tab is its core too: on a flat inside face it stays flush with the blade's core,
+ * and the laminate runs unbroken from the blade over the base.
+ */
+export const tabFacesY = (
+  d: FinDesign,
+  laminate: FinLaminate = NO_LAMINATE,
+): readonly [number, number] => {
+  const half = finTabOutline(d.base).thickness / 2;
+  const yc = tabCentreY(d);
+  const out = outwardOf(d);
+  const outside = yc + out * (half - (laminate.tab ? laminate.outside : 0));
+  const inside = yc - out * (half - (laminate.tab ? laminate.inside : 0));
+  return outside < inside ? [outside, inside] : [inside, outside];
+};
 
 /**
  * The lateral offsets (cm) that keep the tab under the foil: its centre plane between

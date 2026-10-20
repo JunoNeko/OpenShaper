@@ -468,4 +468,16 @@ describe('exportFinStep: laminate core', () => {
       BLADE_CI_TOLERANCE,
     );
   });
+
+  it('thins the tab too when the laminate wraps it', () => {
+    const ys = (text: string) => {
+      const tabPart = text.slice(text.indexOf("MANIFOLD_SOLID_BREP('blade'"));
+      return [...tabPart.matchAll(/CARTESIAN_POINT\('',\(([^)]*)\)\)/g)].map(
+        (x) => x[1]!.split(',').map(Number)[1]!,
+      );
+    };
+    const spread = (v: number[]) => Math.max(...v) - Math.min(...v);
+    const wrapped = exportFinStep(d, { timestamp: FIXED, laminate: { ...laminate, tab: true } });
+    expect(spread(ys(step)) - spread(ys(wrapped))).toBeCloseTo(2 * laminate.outside * MM, 6);
+  });
 });

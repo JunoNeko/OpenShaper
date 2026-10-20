@@ -30,7 +30,7 @@ import {
 import { sectionLoop } from './blade-surface';
 import type { FinDesign } from './fin-design';
 import { finTabOutline } from './fin-tab';
-import { tabCentreY } from './fin-placement';
+import { tabFacesY } from './fin-placement';
 import type { TabSegment } from './futures-tab';
 import { polygonArea, triangulate, triangulateWithHoles } from './triangulate';
 
@@ -43,7 +43,7 @@ export interface FinMeshOptions {
   readonly tipGap?: number;
   /** Largest gap between a tab arc and its chords (cm). */
   readonly arcTolerance?: number;
-  /** Mesh the blade as the core under this laminate (blade.ts). The tab is unchanged. */
+  /** Mesh the blade as the core under this laminate (blade.ts), and the tab if it wraps it. */
   readonly laminate?: FinLaminate;
 }
 
@@ -175,8 +175,8 @@ export const tabProfilePoints = (segments: readonly TabSegment[], tolerance: num
 
 const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
   const tab = finTabOutline(d.base);
-  const { height: H, thickness: t } = tab;
-  const yc = tabCentreY(d);
+  const { height: H } = tab;
+  const [yLo, yHi] = tabFacesY(d, o.laminate);
   const profile = tabProfilePoints(tab.segments, o.arcTolerance);
   const holes = tab.holes.map((h) => tabProfilePoints(h, o.arcTolerance));
   const m = builder();
@@ -184,8 +184,8 @@ const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
   const side = (ring: readonly Vec2[], y: number) =>
     ring.map((p) => m.add({ x: p.x, y, z: p.y - H }));
   const rings = [profile, ...holes];
-  const lo = rings.map((r) => side(r, yc - t / 2));
-  const hi = rings.map((r) => side(r, yc + t / 2));
+  const lo = rings.map((r) => side(r, yLo));
+  const hi = rings.map((r) => side(r, yHi));
   // The two sides: the profile less its holes.
   const flatIds = (ids: number[][]) => ids.flat();
   const tris = triangulateWithHoles(profile, holes);

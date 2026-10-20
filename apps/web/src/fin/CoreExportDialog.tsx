@@ -4,7 +4,8 @@
  * unidirectional carbon) vacuum-bagged onto its faces for stiffness at the base. The
  * blade is pulled in by the laminate on the chosen faces, never under the 1 mm
  * minimum (FinLaminate in kernel blade.ts), so with the laminate on it is the design.
- * The tab is unchanged: it still has to fit the box.
+ * The tab is unchanged unless the laminate wraps it too, over the base where the fin
+ * leaves the box: then its laminated faces are thinned the same, so it still fits.
  */
 import { FIN_MIN_THICKNESS, type FinLaminate } from '@openshaper/kernel';
 import { Button, Panel, PanelBody, PanelHeader, PanelTitle } from '@openshaper/ui';
@@ -27,10 +28,12 @@ export interface CoreSettings {
   /** Laminate per face (cm). */
   readonly thickness: number;
   readonly sides: LaminateSides;
+  /** The laminate wraps the tab too: thin its laminated faces. */
+  readonly tab: boolean;
 }
 
 /** One ply of 200 gsm unidirectional carbon is about 0.20–0.25 mm. */
-export const DEFAULT_CORE: CoreSettings = { thickness: 0.02, sides: 'both' };
+export const DEFAULT_CORE: CoreSettings = { thickness: 0.02, sides: 'both', tab: false };
 
 /** What the field accepts (cm): 0.05 mm up to 2 mm a face. */
 export const LAMINATE_MIN = 0.005;
@@ -42,22 +45,24 @@ const SIDES: { value: LaminateSides; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-export const laminateFor = ({ thickness, sides }: CoreSettings): FinLaminate => ({
+export const laminateFor = ({ thickness, sides, tab }: CoreSettings): FinLaminate => ({
   outside: sides === 'inside' ? 0 : thickness,
   inside: sides === 'outside' ? 0 : thickness,
+  tab,
 });
 
 const CORE_KEY = 'bs.fin.core';
 
-const isSettings = (v: unknown): v is CoreSettings => {
-  const s = v as CoreSettings | null;
-  return (
+/** Stored settings, or the defaults; settings saved before `tab` existed don't wrap it. */
+const readSettings = (v: unknown): CoreSettings => {
+  const s = v as Partial<CoreSettings> | null;
+  const valid =
     !!s &&
     typeof s.thickness === 'number' &&
     s.thickness >= LAMINATE_MIN &&
     s.thickness <= LAMINATE_MAX &&
-    SIDES.some((o) => o.value === s.sides)
-  );
+    SIDES.some((o) => o.value === s.sides);
+  return valid ? { thickness: s.thickness!, sides: s.sides!, tab: s.tab === true } : DEFAULT_CORE;
 };
 
 export function CoreExportDialog({
@@ -72,20 +77,19 @@ export function CoreExportDialog({
   onExport: (format: 'step' | 'stl', laminate: FinLaminate) => void;
   onClose: () => void;
 }) {
-  const [initial] = useState(() =>
-    readStored(CORE_KEY, DEFAULT_CORE, (v) => (isSettings(v) ? v : DEFAULT_CORE)),
-  );
+  const [initial] = useState(() => readStored(CORE_KEY, DEFAULT_CORE, readSettings));
   // A ply is a fraction of a millimetre: show one more decimal than other lengths.
   const show = (cm: number) => cmToUnitNumber(cm, units).toFixed(unitDecimals(units) + 1);
   const withUnit = (cm: number) => `${show(cm)} ${unitSuffix(units)}`;
   const [text, setText] = useState(() => show(initial.thickness));
   const [sides, setSides] = useState<LaminateSides>(initial.sides);
+  const [tab, setTab] = useState(initial.tab);
   const typed = parseTypedLen(text, units);
   const ok = typed !== null && typed >= LAMINATE_MIN - 1e-9 && typed <= LAMINATE_MAX + 1e-9;
 
   const run = (format: 'step' | 'stl') => {
     if (!ok) return;
-    const settings: CoreSettings = { thickness: typed, sides };
+    const settings: CoreSettings = { thickness: typed, sides, tab };
     writeStored(CORE_KEY, settings);
     onExport(format, laminateFor(settings));
   };
@@ -106,8 +110,9 @@ export function CoreExportDialog({
           <p className="text-muted-foreground">
             For a printed fin with laminate bagged onto it. The blade is made thinner by the
             laminate on the faces you choose, so with the laminate on it matches your design. It
-            never goes under {withUnit(FIN_MIN_THICKNESS)}, so the edges stay as they are. The tab
-            is unchanged.
+            never goes under {withUnit(FIN_MIN_THICKNESS)}: near the edges, the face with less
+            laminate is left thicker to make it up, so a laminated face is always thinned by the
+            full amount.
           </p>
           <label className="flex items-center gap-2">
             <span className="flex-1">Laminate thickness, per face</span>
@@ -143,6 +148,17 @@ export function CoreExportDialog({
               </label>
             ))}
           </fieldset>
+          <div>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={tab} onChange={(e) => setTab(e.target.checked)} />
+              Include the tab
+            </label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {tab
+                ? 'The tab is thinned by the laminate on the same faces, so wrapped it still fits the box. Wrapping the base, where the fin leaves the box, strengthens a likely snap point. It suits a flat inside face, which runs straight on into the tab; the outside usually meets the tab at too sharp a step for laminate to follow.'
+                : 'The tab is unchanged: the laminate stops at the base.'}
+            </p>
+          </div>
           {pair && (
             <p className="text-xs text-muted-foreground">
               R &amp; L is on: each export writes a left and a right core.
