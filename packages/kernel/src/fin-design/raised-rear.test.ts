@@ -123,8 +123,9 @@ describe('the underside of a raised rear', () => {
 
   it('has the foil’s thickness, thinning toward the low point', () => {
     // The foil runs over the smoothed trailing edge, well behind the underside, and is
-    // cut off at it: a real edge, not the 0.5 mm flap a slice ending there would give.
-    expect(atTe(0)).toBeGreaterThan(4 * FIN_MIN_THICKNESS);
+    // cut off at it: a real edge, not the minimum-thickness flap a slice ending there
+    // would give.
+    expect(atTe(0)).toBeGreaterThan(2 * FIN_MIN_THICKNESS);
     let last = Infinity;
     for (const f of [0, 0.2, 0.4, 0.6, 0.8]) {
       const t = atTe(LOW.y * f);

@@ -56,8 +56,11 @@ export const FIN_MAX_CANT = 20;
  */
 export const FIN_MAX_FRONT_OVERHANG = 0.4;
 
-/** Thinnest the blade may get anywhere — edges and tip — for rider safety (cm). */
-export const FIN_MIN_THICKNESS = 0.05;
+/**
+ * Thinnest the blade may get anywhere — edges and tip — for rider safety and so it
+ * prints: some 3D printing materials can't hold a wall under 1 mm (cm).
+ */
+export const FIN_MIN_THICKNESS = 0.1;
 
 /**
  * The horizontal foil, as two faces offset from the chord line. Frame: x = chord fraction

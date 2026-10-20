@@ -6,7 +6,7 @@
  * the depth, thickness); it is drawn with height up at the fin's true depth, so it lines
  * up with the profile, and thickness across, stretched so it reads. Straight then
  * curving toward the tip is the usual shape: the curve is what controls flex. The
- * dashed line is the 0.5 mm minimum; the store stops a point there.
+ * dashed line is the 1 mm minimum; the store stops a point there.
  */
 import { FIN_MIN_THICKNESS, finReadouts } from '@openshaper/kernel';
 import { FinCurveEditor, type ViewMap } from '@openshaper/render2d';

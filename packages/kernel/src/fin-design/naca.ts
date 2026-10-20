@@ -8,7 +8,7 @@
  * XX = thickness (% chord). The standard equations, with two choices:
  *
  * - **Closed trailing edge** (the −0.1036 x⁴ coefficient, not −0.1015), so both faces
- *   end on the chord line as the section model requires. The blade's 0.5 mm minimum
+ *   end on the chord line as the section model requires. The blade's 1 mm minimum
  *   then blunts the edge. Differs from the open-edge tables by 0.126% chord at the
  *   trailing edge, falling as x⁴.
  * - **Thickness applied square to the chord, not the camber line.** The textbook
