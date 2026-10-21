@@ -156,7 +156,7 @@ export function CoreExportDialog({
             <p className="mt-1 text-xs text-muted-foreground">
               {tab
                 ? 'The tab is thinned by the laminate on the same faces, so wrapped it still fits the box. Wrapping the base, where the fin leaves the box, strengthens a likely snap point. It suits a flat inside face, which runs straight on into the tab; the outside usually meets the tab at too sharp a step for laminate to follow.'
-                : 'The tab is unchanged: the laminate stops at the base.'}
+                : 'Checking this narrows the tab to allow for laminate. Unchecked the tab remains the standard width.'}
             </p>
           </div>
           {pair && (

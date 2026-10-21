@@ -380,7 +380,7 @@ describe('FinApp: export', () => {
     const dialog = within(screen.getByRole('dialog', { name: 'Export core for laminating' }));
     const tab = dialog.getByLabelText('Include the tab') as HTMLInputElement;
     expect(tab.checked).toBe(false);
-    expect(dialog.getByText(/The tab is unchanged/)).toBeTruthy();
+    expect(dialog.getByText(/Unchecked the tab remains the standard width/)).toBeTruthy();
     fireEvent.click(tab);
     expect(dialog.getByText(/The tab is thinned/)).toBeTruthy();
     fireEvent.click(dialog.getByRole('button', { name: 'Export STL core' }));
