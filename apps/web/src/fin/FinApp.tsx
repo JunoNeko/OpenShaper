@@ -816,7 +816,7 @@ export function FinApp() {
             className="px-2 text-sm text-muted-foreground underline-offset-4 hover:underline"
             href="/docs/fin-designer"
           >
-            Help
+            Help / Feedback
           </a>
         </div>
       </header>
