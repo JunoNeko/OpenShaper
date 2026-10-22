@@ -6,6 +6,7 @@ import {
   resolveApiHost,
   resolveDisplayMode,
   resolveInternalTraffic,
+  resolveServedFrom,
 } from './analytics';
 
 vi.mock('posthog-js', () => ({
@@ -276,5 +277,28 @@ describe('analyticsDisabled', () => {
     expect(analyticsDisabled()).toBe(false);
     vi.stubEnv('VITE_DISABLE_ANALYTICS', 'true');
     expect(analyticsDisabled()).toBe(true);
+  });
+});
+
+describe('resolveServedFrom', () => {
+  it('is network when no service worker controls the page (a first visit)', () => {
+    expect(resolveServedFrom({ transferSize: 0 }, false, '/fin')).toBe('network');
+  });
+
+  it('is cache when the worker answered without the network', () => {
+    expect(resolveServedFrom({ transferSize: 0 }, true, '/fin')).toBe('cache');
+    expect(resolveServedFrom({ transferSize: 0 }, true, '/app')).toBe('cache');
+  });
+
+  it('is network when the worker passed the request on', () => {
+    // A guide page under the worker's control: NetworkOnly, so bytes moved.
+    expect(resolveServedFrom({ transferSize: 18_000 }, true, '/docs/fin-designer')).toBe('network');
+  });
+
+  it('falls back to the cached shells where the browser reports no transfer size', () => {
+    expect(resolveServedFrom({}, true, '/fin')).toBe('cache');
+    expect(resolveServedFrom(undefined, true, '/app/')).toBe('cache');
+    expect(resolveServedFrom({}, true, '/apple')).toBe('network');
+    expect(resolveServedFrom({}, true, '/docs')).toBe('network');
   });
 });

@@ -588,6 +588,19 @@ persistent — so it belongs to the anonymous baseline. Detection is the
 `(display-mode: standalone)` media query plus `navigator.standalone` for iOS
 Safari, which never implemented the query for home-screen apps.
 
+### `served_from` (super property)
+
+`resolveServedFrom()` registers `served_from: 'cache' | 'network'`: whether this
+page's document came from the service worker's cache or the network. After a first
+visit, `/app` and `/fin` open from the precache (docs/design/offline.md), so the
+request never reaches Cloudflare and its numbers stop at the first load; this is
+where those loads show. A page the worker controls whose navigation entry moved no
+bytes (`transferSize` 0) is `cache`; anything else is `network`. Where a browser
+doesn't report `transferSize`, a controlled `/app` or `/fin` counts as `cache`, as
+the worker serves only those shells from its cache. Like `display_mode`, it
+describes the page load, not the visitor, so it sits in the anonymous baseline.
+It only counts loads made online: see below.
+
 **Offline usage is deliberately not tracked.** `posthog-js` holds failed requests
 in an in-memory queue (exponential backoff, flushed on the browser's `online`
 event), and the baseline runs `persistence: 'memory'`, so events captured offline
