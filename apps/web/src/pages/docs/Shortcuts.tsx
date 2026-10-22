@@ -7,7 +7,7 @@ import { DocsPage, Section } from './DocsPage';
  * tooltips also read, so this page cannot describe a binding the app does not
  * have. Nothing here is transcribed by hand.
  */
-const GROUPS: ShortcutGroup[] = ['File', 'Edit', 'View', 'Cross-sections', 'Fin designer'];
+const GROUPS: ShortcutGroup[] = ['File', 'Edit', 'View', 'Cross-sections', 'OpenFinShaper'];
 
 export default function DocsShortcuts() {
   return (

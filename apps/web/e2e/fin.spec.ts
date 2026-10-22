@@ -206,7 +206,7 @@ test.describe('Fin designer', () => {
   test('links to its documentation', async ({ page }) => {
     await openFin(page);
     await page.getByRole('link', { name: 'Help / Feedback' }).click();
-    await expect(page.getByRole('heading', { name: 'Fin designer', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'OpenFinShaper help', level: 1 })).toBeVisible();
     await expect(page.getByRole('link', { name: 'fin designer', exact: true })).toHaveAttribute(
       'href',
       '/fin',

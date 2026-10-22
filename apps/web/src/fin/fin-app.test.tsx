@@ -22,7 +22,7 @@ const HEAVY = 20_000;
 describe('FinApp', () => {
   it('shows the fin’s measurements in mm', () => {
     render(<FinApp />);
-    expect(screen.getByRole('heading', { name: 'Fin designer' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'OpenFinShaper' })).toBeTruthy();
     expect(measurements().getByText(/mm²$/)).toBeTruthy();
     expect(measurements().getByText('49.8°')).toBeTruthy(); // the default sweep
   });

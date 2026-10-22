@@ -79,7 +79,13 @@ export function WaveLines({ className }: MarkProps) {
  */
 export function Brandmark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 32 32" className={className} role="img" aria-label="OpenShaper" fill="none">
+    <svg
+      viewBox="0 0 32 32"
+      className={className}
+      role="img"
+      aria-label="OpenFinShaper"
+      fill="none"
+    >
       <rect width="32" height="32" rx="8" fill="#0F1C30" />
       <rect
         x="0.6"

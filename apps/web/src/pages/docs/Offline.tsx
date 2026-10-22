@@ -29,8 +29,8 @@ export default function DocsOffline() {
 
       <Section id="install" title="Installing">
         <p>
-          You can also install OpenShaper as an app: it gets an icon, opens in its own window with
-          no browser chrome, and starts straight in the editor. Use your browser's own install
+          You can also install OpenFinShaper as an app: it gets an icon, opens in its own window
+          with no browser chrome, and starts straight in the editor. Use your browser's own install
           option — "Install app" in Chrome and Edge, "Add to Home Screen" on iOS.
         </p>
         <p>

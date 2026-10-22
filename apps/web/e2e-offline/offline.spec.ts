@@ -64,7 +64,7 @@ test.describe('offline editor', () => {
     await context.setOffline(true);
     await page.goto('/fin');
 
-    await expect(page.getByRole('heading', { name: 'Fin designer' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'OpenFinShaper' })).toBeVisible();
     await expect(page.getByRole('img', { name: 'Fin outline' })).toBeVisible();
     // Readouts mean the kernel ran: the default fin's area, in mm².
     await expect(page.getByLabel('Fin measurements')).toContainText('mm²');

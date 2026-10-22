@@ -48,8 +48,7 @@
   </g>
 
   <!-- type -->
-  <text x="170" y="138" font-family="'Courier New', monospace" font-size="26" fill="#22D3EE" letter-spacing="9">OPEN SOURCE · SURFBOARD CAD</text>
-  <text x="76" y="320" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="128" fill="#E6EDF5" letter-spacing="-4">OpenShaper</text>
-  <text x="80" y="392" font-family="'Helvetica Neue', Arial, sans-serif" font-size="38" fill="#8A9BB3">Free surfboard design software, right in your browser.</text>
-  <text x="80" y="600" font-family="'Courier New', monospace" font-size="26" fill="#8A9BB3" letter-spacing="2">openshaper.com</text>
+  <text x="170" y="138" font-family="'Courier New', monospace" font-size="26" fill="#22D3EE" letter-spacing="9">OPEN SOURCE · SURF FIN CAD</text>
+  <text x="76" y="320" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="128" fill="#E6EDF5" letter-spacing="-4">OpenFinShaper</text>
+  <text x="80" y="392" font-family="'Helvetica Neue', Arial, sans-serif" font-size="38" fill="#8A9BB3">Free surf fin design software, right in your browser.</text>
 </svg>
