@@ -79,6 +79,43 @@ export function resolveInternalTraffic(): boolean {
 /** How the app is being presented: its own installed window, or a browser tab. */
 export type DisplayMode = 'standalone' | 'browser';
 
+/** Where this page's document came from: the service worker's cache, or the network. */
+export type ServedFrom = 'cache' | 'network';
+
+/** The editor shells the service worker serves from its precache (`SHELLS` in sw.ts). */
+const CACHED_SHELL = /^\/(?:app|fin)(?:\/|$)/;
+
+/**
+ * Whether this page load was served from the service worker's cache.
+ *
+ * After a first visit, `/app` and `/fin` open from the precache, so Cloudflare
+ * never sees the request and its numbers stop at the first load. Registered as a
+ * super property, so every event, the pageview included, says which it was.
+ *
+ * A page the worker controls whose navigation moved no bytes (`transferSize` 0)
+ * came from the cache; any other is network. Where the browser doesn't report
+ * `transferSize`, a controlled `/app` or `/fin` counts as cache, since the worker
+ * serves those shells from its cache and every other page from the network
+ * (docs/design/offline.md).
+ */
+export function resolveServedFrom(
+  nav: { transferSize?: number } | undefined = navigationEntry(),
+  controlled: boolean = !!globalThis.navigator?.serviceWorker?.controller,
+  path: string = globalThis.location?.pathname ?? '',
+): ServedFrom {
+  if (!controlled) return 'network';
+  if (typeof nav?.transferSize === 'number') return nav.transferSize === 0 ? 'cache' : 'network';
+  return CACHED_SHELL.test(path) ? 'cache' : 'network';
+}
+
+function navigationEntry(): { transferSize?: number } | undefined {
+  try {
+    return performance.getEntriesByType('navigation')[0] as { transferSize?: number } | undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Whether this page is running as an installed PWA.
  *
@@ -253,6 +290,9 @@ export function initAnalytics(): void {
   if (resolveInternalTraffic()) posthog.register({ internal_traffic: true });
   // Segments every event by installed-app vs browser tab.
   posthog.register({ display_mode: resolveDisplayMode() });
+  // Segments every event by a load from the service worker's cache vs the network:
+  // cached loads never reach Cloudflare, so this is the only place they show.
+  posthog.register({ served_from: resolveServedFrom() });
   // The moment of conversion. Fires while online, so unlike anything captured
   // offline it actually sends. `display_mode` still reads 'browser' on this
   // event — the current window keeps running as a tab; subsequent launches
