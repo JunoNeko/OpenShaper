@@ -34,6 +34,7 @@ export {
 export { selectSpecs, type BoardSpecs } from './selectors';
 export {
   createFinStore,
+  selectedEnds,
   type FinState,
   type FinHistoryEntry,
   type FinSelection,

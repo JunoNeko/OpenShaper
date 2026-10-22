@@ -188,6 +188,8 @@ export const drawControlPoints = (
   selectedKind: Hit['kind'] = 'end',
   /** The individual point currently under the cursor. */
   hovered: Hit | null = null,
+  /** Other endpoints selected along with `selectedIndex` (multi-select). */
+  alsoSelected: ReadonlySet<number> | null = null,
 ): void => {
   const r = pointSize ?? 5;
   const rSq = pointSize != null ? Math.max(1, pointSize - 1) : 4;
@@ -205,21 +207,19 @@ export const drawControlPoints = (
     ctx.stroke();
     if (k.lock) drawLockBars(ctx, k, vp, style);
 
-    const endActive =
-      (i === selectedIndex && selectedKind === 'end') ||
-      (hovered?.index === i && hovered.kind === 'end');
+    const endSelected = (i === selectedIndex && selectedKind === 'end') || !!alsoSelected?.has(i);
+    const endActive = endSelected || (hovered?.index === i && hovered.kind === 'end');
     const prevActive =
       (i === selectedIndex && selectedKind === 'prev') ||
       (hovered?.index === i && hovered.kind === 'prev');
     const nextActive =
       (i === selectedIndex && selectedKind === 'next') ||
       (hovered?.index === i && hovered.kind === 'next');
-    const endFill =
-      i === selectedIndex && selectedKind === 'end'
-        ? style.pointSelected
-        : k.continuous
-          ? style.point
-          : style.pointCorner;
+    const endFill = endSelected
+      ? style.pointSelected
+      : k.continuous
+        ? style.point
+        : style.pointCorner;
 
     // Draw the endpoint first and handles last. A selected zero-length handle then
     // remains visible on top of the endpoint and can be dragged out again.

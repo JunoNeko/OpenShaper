@@ -61,6 +61,8 @@ import {
 export interface FinCurveEditorProps {
   layers: readonly FinCurveLayer[];
   selection: FinCurvePick | null;
+  /** Endpoints selected along with `selection`, on its layer (shift-click). */
+  alsoSelected?: readonly number[];
   /**
    * Data to view: a vertical stretch (data y × yScale; 1 draws true to scale) or a
    * general linear map, such as swapped axes.
@@ -76,7 +78,8 @@ export interface FinCurveEditorProps {
     vp: Viewport,
     toScreen: (p: Vec2) => ScreenPoint,
   ) => void;
-  onSelect?: (pick: FinCurvePick | null) => void;
+  /** A click picks a point, or nothing; `extend` is a shift-click, adding to the selection. */
+  onSelect?: (pick: FinCurvePick | null, extend?: boolean) => void;
   onDragStart?: (pick: FinCurvePick) => void;
   /** The dragged handle's new position, in data space. */
   onDrag?: (pick: FinCurvePick, to: Vec2) => void;
@@ -105,6 +108,7 @@ type Drag =
 export function FinCurveEditor({
   layers,
   selection,
+  alsoSelected,
   yScale = 1,
   frameBounds,
   frameKey,
@@ -183,8 +187,8 @@ export function FinCurveEditor({
       return { x: vp.originX + s.x * vp.scale, y: vp.originY - s.y * vp.scale };
     });
     if (guides) drawGuides(ctx, guides, vp, yScale);
-    drawFinCurves(ctx, layers, vp, yScale, selection, hovered);
-  }, [vp, size, layers, selection, hovered, yScale, drawUnder, background, guides]);
+    drawFinCurves(ctx, layers, vp, yScale, selection, hovered, alsoSelected);
+  }, [vp, size, layers, selection, alsoSelected, hovered, yScale, drawUnder, background, guides]);
 
   const local = (e: { clientX: number; clientY: number }): ScreenPoint => {
     const r = canvas.current!.getBoundingClientRect();
@@ -207,7 +211,7 @@ export function FinCurveEditor({
         pointerAt: screenToWorld(vp, p),
         id: e.pointerId,
       };
-      onSelect?.(pick);
+      onSelect?.(pick, e.shiftKey);
       onDragStart?.(pick);
     } else {
       const guide = guides && pickGuide(guides, vp, p, yScale, tolFor(e));
@@ -218,7 +222,8 @@ export function FinCurveEditor({
         return;
       }
       drag.current = { kind: 'pan', last: p, id: e.pointerId };
-      onSelect?.(null);
+      // A shift-click that misses keeps the selection, so a slip doesn't lose it.
+      if (!e.shiftKey) onSelect?.(null);
     }
   };
 

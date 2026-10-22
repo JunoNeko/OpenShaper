@@ -14,7 +14,7 @@ import type { FinState } from '@openshaper/store';
 import { memo, useCallback, useMemo } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
 import { fmtLen, type LengthUnit } from '../format';
-import { curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
+import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { sliceGuideHandlers, sliceGuides } from './slice-guides';
 import { useFinState } from './use-fin';
 
@@ -116,6 +116,7 @@ export const FinTaperPane = memo(function FinTaperPane({
       label="Thickness taper"
       layers={layers}
       selection={pickFromSelection(selection, ['taper'])}
+      alsoSelected={alsoFromSelection(selection, ['taper'])}
       yScale={view}
       frameBounds={{ minX: -0.04, maxX: 1.06, minY: -0.12, maxY: root * 1.15 }}
       frameKey={`${design.position}-${frameKey}`}

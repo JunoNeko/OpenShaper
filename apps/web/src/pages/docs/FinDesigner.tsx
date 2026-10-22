@@ -108,6 +108,13 @@ export default function DocsFinDesigner() {
           to zoom. The outline starts and ends on the base: its two ends slide along it.
         </p>
         <p>
+          To move several points at once, hold Shift and click each one (Shift-click a selected
+          point to drop it). Then drag any of them: the others follow the same distance the same
+          way, and they all stop together where the fin would break a rule. An end point in the
+          group stays on its line (the base, the tip or the chord). Delete removes every selected
+          point that can go. This works on any curve: the outline, the foil faces and the taper.
+        </p>
+        <p>
           <strong>Depth</strong> stretches the outline to a new height over the same base. Readouts
           show the area (the profile above the tab), depth, base length and sweep — the angle from
           the leading-edge root to the tip, measured from upright.

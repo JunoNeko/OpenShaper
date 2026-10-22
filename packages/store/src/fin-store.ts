@@ -64,7 +64,16 @@ export interface FinSelection {
   index: number;
   /** The endpoint or one of its handles. Omitted means the endpoint. */
   kind?: 'end' | 'prev' | 'next';
+  /**
+   * Other endpoints on the same curve selected with it (shift-click): dragging any of
+   * them moves them all, and Delete removes them all. Only with an endpoint selected.
+   */
+  also?: readonly number[];
 }
+
+/** The endpoints a selection holds: the selected one and any selected with it. */
+export const selectedEnds = (s: FinSelection | null): number[] =>
+  s && (s.kind ?? 'end') === 'end' ? [s.index, ...(s.also ?? [])] : [];
 
 export interface FinHistoryEntry {
   design: FinDesign;
@@ -88,19 +97,41 @@ export interface FinState {
   load: (d: FinDesign) => void;
   /** Start again from a starting fin: a position's default, or the canard (undoable). */
   newFin: (start: FinStart, hand?: FinHand) => void;
+  /**
+   * Select a point. Picking an endpoint that is already one of several selected keeps
+   * them all selected, so any of them can be grabbed to drag the group.
+   */
   select: (selection: FinSelection | null) => void;
+  /**
+   * Shift-click: add an endpoint to the selection, or take it out if it is in it. A
+   * handle, or a point on another curve, is selected on its own.
+   */
+  toggleSelect: (selection: FinSelection) => void;
 
   beginEdit: (label?: string) => void;
   endEdit: () => void;
 
   /** Drag a knot's endpoint toward `p`, clamped to the rules. False if it can't move. */
   moveControlPoint: (curve: FinCurve, index: number, p: Vec2) => boolean;
+  /**
+   * Drag several endpoints together: `lead` toward `p`, the others the same distance
+   * the same way, each pinned end kept on its line, all stopping together where a rule
+   * would break.
+   */
+  moveControlPoints: (
+    curve: FinCurve,
+    indices: readonly number[],
+    lead: number,
+    p: Vec2,
+  ) => boolean;
   /** Drag one of a knot's handles toward `p`, clamped to the rules. */
   moveTangent: (curve: FinCurve, index: number, which: 'prev' | 'next', p: Vec2) => boolean;
   addControlPoint: (curve: FinCurve, p: Vec2) => boolean;
   /** The toolbar's add button: a point halfway along the span after knot `index`. */
   addControlPointAfter: (curve: FinCurve, index: number) => boolean;
   deleteControlPoint: (curve: FinCurve, index: number) => boolean;
+  /** Delete every selected point that can be deleted, as one step. */
+  deleteSelectedPoints: () => boolean;
   setContinuous: (curve: FinCurve, index: number, continuous: boolean) => boolean;
 
   setCant: (deg: number) => boolean;
@@ -155,7 +186,9 @@ const validSelection = (
 ): FinSelection | null => {
   if (!s) return null;
   const curve = getFinCurve(d, s.curve, validFoil(d, foil));
-  return curve && s.index < curve.knots.length ? s : null;
+  if (!curve || s.index >= curve.knots.length) return null;
+  const also = s.also?.filter((i) => i < curve.knots.length);
+  return also && also.length !== s.also!.length ? { ...s, also } : s;
 };
 
 export const createFinStore = (): StoreApi<FinState> =>
@@ -234,7 +267,40 @@ export const createFinStore = (): StoreApi<FinState> =>
         }
         if (commit(newFin(position, hand), 'New fin')) set({ selection: null, activeFoil: 0 });
       },
-      select: (selection) => set({ selection }),
+      select: (selection) => {
+        const cur = get().selection;
+        const kept =
+          selection &&
+          cur?.curve === selection.curve &&
+          (selection.kind ?? 'end') === 'end' &&
+          cur.also?.includes(selection.index);
+        if (!kept) return set({ selection });
+        // Grabbing one of a group keeps the group, with the grabbed point leading.
+        const also = selectedEnds(cur).filter((i) => i !== selection.index);
+        set({ selection: { curve: selection.curve, index: selection.index, kind: 'end', also } });
+      },
+      toggleSelect: (selection) => {
+        const cur = get().selection;
+        const ends = selectedEnds(cur);
+        if (
+          !cur ||
+          cur.curve !== selection.curve ||
+          (selection.kind ?? 'end') !== 'end' ||
+          ends.length === 0
+        ) {
+          return set({ selection });
+        }
+        const i = selection.index;
+        if (ends.includes(i)) {
+          const rest = ends.filter((j) => j !== i);
+          return set({
+            selection: rest.length
+              ? { curve: cur.curve, index: rest[0]!, kind: 'end', also: rest.slice(1) }
+              : null,
+          });
+        }
+        set({ selection: { curve: cur.curve, index: i, kind: 'end', also: ends } });
+      },
 
       beginEdit: (label = 'Edit') => {
         const { design, past, editing } = get();
@@ -276,6 +342,34 @@ export const createFinStore = (): StoreApi<FinState> =>
         );
       },
 
+      moveControlPoints: (curve, indices, lead, p) => {
+        const { design, activeFoil } = get();
+        const s = design && getFinCurve(design, curve, activeFoil);
+        if (!design || !s || !s.knots[lead]) return false;
+        const ids = [...new Set(indices)].filter((i) => s.knots[i]);
+        if (ids.length <= 1) return get().moveControlPoint(curve, lead, p);
+        const from = s.knots[lead]!.end;
+        const to = constrainKnot(s, curve, lead, p);
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        if (dx === 0 && dy === 0) return false;
+        // Every point the same fraction t of the way, so they stop together.
+        const at = (t: number): FinDesign => {
+          let moved = s;
+          for (const i of ids) {
+            const e = s.knots[i]!.end;
+            moved = moveKnotEnd(
+              moved,
+              i,
+              constrainKnot(s, curve, i, vec2(e.x + dx * t, e.y + dy * t)),
+            );
+          }
+          return withFinCurve(design, curve, moved, activeFoil);
+        };
+        const next = clampEdit(design, at);
+        return next ? commit(next, 'Move control points') : false;
+      },
+
       addControlPoint: (curve, p) => {
         const { design } = get();
         const s = design && getFinCurve(design, curve, get().activeFoil);
@@ -305,6 +399,28 @@ export const createFinStore = (): StoreApi<FinState> =>
         const ok = commitChecked(
           withFinCurve(design, curve, deleteKnot(s, index), get().activeFoil),
           'Delete control point',
+        );
+        if (ok) set({ selection: null });
+        return ok;
+      },
+
+      deleteSelectedPoints: () => {
+        const { design, selection, activeFoil } = get();
+        const ends = selectedEnds(selection);
+        if (!design || !selection) return false;
+        if (ends.length <= 1) return get().deleteControlPoint(selection.curve, selection.index);
+        const s = getFinCurve(design, selection.curve, activeFoil);
+        if (!s) return false;
+        // Highest index first, so the ones still to go keep their indices.
+        let next = s;
+        for (const i of [...ends].sort((a, b) => b - a)) {
+          if (canDeleteKnot(next, i)) next = deleteKnot(next, i);
+        }
+        if (next === s) return false;
+        if (get().editing) set({ editing: false });
+        const ok = commitChecked(
+          withFinCurve(design, selection.curve, next, activeFoil),
+          'Delete control points',
         );
         if (ok) set({ selection: null });
         return ok;
