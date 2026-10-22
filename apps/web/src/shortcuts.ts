@@ -16,7 +16,7 @@
  */
 import type { View } from './view-toolkit';
 
-export type ShortcutGroup = 'File' | 'Edit' | 'View' | 'Cross-sections' | 'Fin designer';
+export type ShortcutGroup = 'File' | 'Edit' | 'View' | 'Cross-sections' | 'OpenFinShaper';
 
 export interface ShortcutMatch {
   /** Lowercased `KeyboardEvent.key`, or one of several for an either/or binding. */
@@ -147,28 +147,28 @@ export const SHORTCUTS: readonly Shortcut[] = [
     id: 'fin-nudge-forward',
     keys: '↑',
     label: 'Move the fin forward on the tab (0.5 mm)',
-    group: 'Fin designer',
+    group: 'OpenFinShaper',
     match: { keys: ['arrowup'], notInField: true },
   },
   {
     id: 'fin-nudge-back',
     keys: '↓',
     label: 'Move the fin back on the tab (0.5 mm)',
-    group: 'Fin designer',
+    group: 'OpenFinShaper',
     match: { keys: ['arrowdown'], notInField: true },
   },
   {
     id: 'fin-nudge-left',
     keys: '←',
     label: 'Slide the blade left across the tab, as seen from above (0.1 mm)',
-    group: 'Fin designer',
+    group: 'OpenFinShaper',
     match: { keys: ['arrowleft'], notInField: true },
   },
   {
     id: 'fin-nudge-right',
     keys: '→',
     label: 'Slide the blade right across the tab, as seen from above (0.1 mm)',
-    group: 'Fin designer',
+    group: 'OpenFinShaper',
     match: { keys: ['arrowright'], notInField: true },
   },
   ...VIEW_KEYS.map(

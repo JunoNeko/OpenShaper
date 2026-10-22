@@ -46,7 +46,7 @@ export default function DocsFinDesigner() {
       siblings={false}
       notice={<FeedbackNotice />}
       route="/docs/fin-designer"
-      title="Fin designer"
+      title="OpenFinShaper help"
       lede="Design a Futures-tab surf fin from scratch — outline, foil and flex — and export it for a CNC mill or a 3D printer."
       toc={[
         { id: 'start', label: 'Starting a fin' },

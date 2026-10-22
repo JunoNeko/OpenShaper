@@ -12,8 +12,8 @@ export default function FinPage() {
   return (
     <>
       <Seo
-        title="Fin designer"
-        description="OpenShaper's fin designer — draw a Futures-tab surf fin's outline, foil and flex, and export it for CNC or 3D printing."
+        title="OpenFinShaper"
+        description="OpenFinShaper — draw a Futures-tab surf fin's outline, foil and flex, and export it for CNC or 3D printing."
         path="/fin"
         noindex
       />
@@ -24,7 +24,7 @@ export default function FinPage() {
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  Loading the fin designer…
+                  Loading OpenFinShaper…
                 </div>
               }
             >

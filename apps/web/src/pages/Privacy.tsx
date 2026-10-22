@@ -51,7 +51,7 @@ export default function Privacy() {
       <Seo
         title="Privacy & analytics"
         path="/privacy"
-        description="What OpenShaper tracks, why, and how to change your choice — anonymous by default, full tracking only with your consent."
+        description="What OpenFinShaper tracks, why, and how to change your choice — anonymous by default, full tracking only with your consent."
       />
 
       <ArticleHero

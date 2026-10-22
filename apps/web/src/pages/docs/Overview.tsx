@@ -6,7 +6,7 @@ export default function DocsOverview() {
   return (
     <DocsPage
       route="/docs"
-      title="OpenShaper documentation"
+      title="Documentation"
       lede="What each part of the editor does, and how to get from an idea to a file you can cut."
       toc={[
         { id: 'start', label: 'Getting started' },

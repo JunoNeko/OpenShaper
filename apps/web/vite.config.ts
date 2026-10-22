@@ -60,8 +60,8 @@ export default defineConfig({
       scope: '/',
       manifest: {
         id: '/app',
-        name: 'OpenShaper — Surfboard Design',
-        short_name: 'OpenShaper',
+        name: 'OpenFinShaper — Surf Fin Design',
+        short_name: 'OpenFinShaper',
         description: SITE_TAGLINE,
         // Installing launches straight into the editor, but scope stays '/' so
         // the manifest linked from every prerendered page is in-scope for that

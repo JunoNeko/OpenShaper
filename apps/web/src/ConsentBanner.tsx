@@ -84,9 +84,9 @@ export function ConsentBanner() {
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-3 sm:flex-row sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          Hi — I&apos;m building OpenShaper solo, and seeing how it&apos;s really used helps me know
-          what to build next. Accepting lets me see richer usage data to guide that; Reject keeps
-          things anonymous and aggregate-only, same as today.{' '}
+          Hi — I&apos;m building OpenFinShaper solo, and seeing how it&apos;s really used helps me
+          know what to build next. Accepting lets me see richer usage data to guide that; Reject
+          keeps things anonymous and aggregate-only, same as today.{' '}
           <Link to="/privacy" className="text-foreground underline underline-offset-2">
             Learn more
           </Link>

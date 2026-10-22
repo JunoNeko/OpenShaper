@@ -776,7 +776,7 @@ export function FinApp() {
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <header className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-        <h1 className="text-sm font-semibold">Fin designer</h1>
+        <h1 className="text-sm font-semibold">OpenFinShaper</h1>
         {/* Credit where it's due: the fin designer is part of OpenShaper (GPL). */}
         <a
           className="mr-2 text-xs text-muted-foreground underline-offset-4 hover:underline"

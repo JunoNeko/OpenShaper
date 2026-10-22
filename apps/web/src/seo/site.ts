@@ -4,7 +4,7 @@
  * canonical / Open Graph / sitemap URLs are absolute and correct.
  */
 
-export const SITE_NAME = 'OpenShaper';
+export const SITE_NAME = 'OpenFinShaper';
 
 /** Production origin (no trailing slash). Override with VITE_SITE_URL at build time. */
 export const SITE_URL = (import.meta.env.VITE_SITE_URL ?? 'https://openshaper.com').replace(

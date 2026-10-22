@@ -12,12 +12,12 @@ export function FinHelpLayout() {
     <div className="marketing flex min-h-screen flex-col overflow-x-clip">
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-5">
-          <span className="text-sm font-semibold">Fin designer help</span>
+          <span className="text-sm font-semibold">OpenFinShaper help</span>
           <Link
             to="/fin"
             className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
           >
-            Back to the fin designer
+            Back to OpenFinShaper
           </Link>
         </div>
       </header>
