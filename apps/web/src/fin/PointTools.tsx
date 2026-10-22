@@ -6,7 +6,13 @@
  * are greyed out otherwise. A curve's two end points can't be deleted or made smooth:
  * they are pinned to the base, the tip or the chord.
  */
-import { canDeleteKnot, getFinCurve, type FinCurve, type FinState } from '@openshaper/store';
+import {
+  canDeleteKnot,
+  getFinCurve,
+  selectedEnds,
+  type FinCurve,
+  type FinState,
+} from '@openshaper/store';
 import { Button, Tooltip } from '@openshaper/ui';
 import { Minus, Plus } from 'lucide-react';
 import { memo } from 'react';
@@ -29,6 +35,11 @@ export const PointTools = memo(function PointTools({
   const interior = !!spline && !!sel && sel.index > 0 && sel.index < spline.knots.length - 1;
   const s = store.getState;
   const hint = sel ? undefined : 'Select a point first';
+  // Shift-click selects more than one: Delete removes them all.
+  const ends = selectedEnds(sel);
+  const many = ends.length > 1;
+  const deletable =
+    !!spline && (many ? ends : sel ? [sel.index] : []).some((i) => canDeleteKnot(spline, i));
 
   return (
     <div className="flex items-center gap-1" role="group" aria-label="Point tools">
@@ -45,16 +56,18 @@ export const PointTools = memo(function PointTools({
         </Button>
       </Tooltip>
       <Tooltip
-        label={hint ?? 'Delete the selected point'}
+        label={
+          hint ?? (many ? `Delete the ${ends.length} selected points` : 'Delete the selected point')
+        }
         shortcut={sel ? shortcutKeys('delete-point') : undefined}
       >
         <Button
           variant="outline"
           size="icon"
           className="h-8 w-8"
-          aria-label="Delete the point"
-          disabled={!sel || !spline || !canDeleteKnot(spline, sel.index)}
-          onClick={() => sel && s().deleteControlPoint(sel.curve, sel.index)}
+          aria-label={many ? 'Delete the points' : 'Delete the point'}
+          disabled={!deletable}
+          onClick={() => s().deleteSelectedPoints()}
         >
           <Minus className="h-4 w-4" />
         </Button>

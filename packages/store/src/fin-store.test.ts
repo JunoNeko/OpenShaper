@@ -383,3 +383,95 @@ describe('fin store: a slice’s cant and toe', () => {
     expect(design(s).slices[0]!.twist!.toe).toBe(1);
   });
 });
+
+describe('fin store: selecting several points', () => {
+  const sel = (s: ReturnType<typeof storeWith>) => s.getState().selection;
+
+  it('adds and removes points with shift-click', () => {
+    const s = storeWith();
+    s.getState().select({ curve: 'outline', index: 1, kind: 'end' });
+    s.getState().toggleSelect({ curve: 'outline', index: 2, kind: 'end' });
+    expect(sel(s)).toEqual({ curve: 'outline', index: 2, kind: 'end', also: [1] });
+    s.getState().toggleSelect({ curve: 'outline', index: 1, kind: 'end' });
+    expect(sel(s)).toEqual({ curve: 'outline', index: 2, kind: 'end', also: [] });
+    s.getState().toggleSelect({ curve: 'outline', index: 2, kind: 'end' });
+    expect(sel(s)).toBeNull();
+  });
+
+  it('keeps the group when one of it is grabbed, and drops it for another point', () => {
+    const s = storeWith();
+    s.getState().select({ curve: 'outline', index: 1, kind: 'end' });
+    s.getState().toggleSelect({ curve: 'outline', index: 2, kind: 'end' });
+    s.getState().select({ curve: 'outline', index: 1, kind: 'end' });
+    expect(sel(s)).toEqual({ curve: 'outline', index: 1, kind: 'end', also: [2] });
+    s.getState().select({ curve: 'outline', index: 3, kind: 'end' });
+    expect(sel(s)).toEqual({ curve: 'outline', index: 3, kind: 'end' });
+  });
+
+  it('selects a handle, or a point on another curve, on its own', () => {
+    const s = storeWith();
+    s.getState().select({ curve: 'outline', index: 1, kind: 'end' });
+    s.getState().toggleSelect({ curve: 'outline', index: 2, kind: 'next' });
+    expect(sel(s)).toEqual({ curve: 'outline', index: 2, kind: 'next' });
+    s.getState().toggleSelect({ curve: 'taper', index: 1, kind: 'end' });
+    expect(sel(s)).toEqual({ curve: 'taper', index: 1, kind: 'end' });
+  });
+
+  it('drags the selected points the same distance the same way, as one step', () => {
+    const s = storeWith();
+    const a = knotAt(s, 1);
+    const b = knotAt(s, 2);
+    s.getState().beginEdit();
+    expect(s.getState().moveControlPoints('outline', [2, 1], 2, vec2(b.x + 0.1, b.y + 0.05))).toBe(
+      true,
+    );
+    s.getState().endEdit();
+    expect(knotAt(s, 1).x).toBeCloseTo(a.x + 0.1, 12);
+    expect(knotAt(s, 1).y).toBeCloseTo(a.y + 0.05, 12);
+    expect(knotAt(s, 2).x).toBeCloseTo(b.x + 0.1, 12);
+    expect(knotAt(s, 2).y).toBeCloseTo(b.y + 0.05, 12);
+    expect(knotAt(s, 3)).toEqual(knotAt(storeWith(), 3)); // unselected: left alone
+    s.getState().undo();
+    expect(knotAt(s, 1)).toEqual(a);
+    expect(knotAt(s, 2)).toEqual(b);
+  });
+
+  it('keeps a pinned root on the base while the rest of the group moves freely', () => {
+    const s = storeWith();
+    const root = knotAt(s, 0);
+    const a = knotAt(s, 1);
+    s.getState().moveControlPoints('outline', [1, 0], 1, vec2(a.x - 0.1, a.y + 0.2));
+    expect(knotAt(s, 0)).toEqual(vec2(root.x - 0.1, 0));
+    expect(knotAt(s, 1).x).toBeCloseTo(a.x - 0.1, 12);
+    expect(knotAt(s, 1).y).toBeCloseTo(a.y + 0.2, 12);
+  });
+
+  it('stops the whole group together where a rule would break', () => {
+    const s = storeWith();
+    const root = knotAt(s, 0);
+    const a = knotAt(s, 1);
+    s.getState().moveControlPoints('outline', [0, 1], 0, vec2(root.x + 20, 0)); // far forward
+    expect(finReadouts(design(s)).frontOverhang).toBeLessThanOrEqual(FIN_MAX_FRONT_OVERHANG + 1e-9);
+    const moved = knotAt(s, 0).x - root.x;
+    expect(moved).toBeGreaterThan(0);
+    expect(moved).toBeLessThan(20);
+    expect(knotAt(s, 1).x - a.x).toBeCloseTo(moved, 12);
+    expect(validateFinDesign(design(s))).toEqual([]);
+  });
+
+  it('deletes all the selected points in one step', () => {
+    const s = storeWith();
+    const n = design(s).outline.knots.length;
+    expect(n).toBeGreaterThan(4);
+    s.getState().select({ curve: 'outline', index: 1, kind: 'end' });
+    s.getState().toggleSelect({ curve: 'outline', index: 2, kind: 'end' });
+    // The pinned roots can't go: picking one as well is ignored, not refused.
+    s.getState().toggleSelect({ curve: 'outline', index: n - 1, kind: 'end' });
+    const before = design(s);
+    expect(s.getState().deleteSelectedPoints()).toBe(true);
+    expect(design(s).outline.knots).toHaveLength(n - 2);
+    expect(sel(s)).toBeNull();
+    s.getState().undo();
+    expect(design(s)).toBe(before);
+  });
+});

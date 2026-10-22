@@ -47,7 +47,7 @@ export function useFinShortcuts(
           return true;
         case 'delete-point':
           if (!s.selection) return false;
-          s.deleteControlPoint(s.selection.curve, s.selection.index);
+          s.deleteSelectedPoints();
           return true;
         case 'cross-section-blur':
           if (!s.selection) return false;

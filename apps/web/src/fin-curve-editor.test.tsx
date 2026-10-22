@@ -82,7 +82,7 @@ describe('FinCurveEditor', () => {
     const grab = { clientX: on.clientX - 15, clientY: on.clientY + 10 }; // inside 22 px
     fireEvent.pointerDown(canvas, { ...TOUCH, ...grab });
     const pick = { layer: 'outline', index: 1, kind: 'end' };
-    expect(calls.onSelect).toHaveBeenLastCalledWith(pick);
+    expect(calls.onSelect).toHaveBeenLastCalledWith(pick, false);
     expect(calls.onDragStart).toHaveBeenCalledWith(pick);
 
     const s = view().scale;
@@ -97,6 +97,20 @@ describe('FinCurveEditor', () => {
 
     fireEvent.pointerUp(canvas, { ...TOUCH, ...grab });
     expect(calls.onDragEnd).toHaveBeenCalledOnce();
+  });
+
+  it('passes a shift-click on as extending the selection, and keeps it on a miss', () => {
+    const { canvas, calls, screenOf } = mount();
+    const on = screenOf(vec2(10, 0));
+    fireEvent.pointerDown(canvas, { ...MOUSE, ...on, shiftKey: true });
+    expect(calls.onSelect).toHaveBeenLastCalledWith(
+      { layer: 'outline', index: 1, kind: 'end' },
+      true,
+    );
+    fireEvent.pointerUp(canvas, { ...MOUSE, ...on, shiftKey: true });
+    const n = calls.onSelect.mock.calls.length;
+    fireEvent.pointerDown(canvas, { ...MOUSE, clientX: 1, clientY: pane.top + 1, shiftKey: true });
+    expect(calls.onSelect).toHaveBeenCalledTimes(n); // the miss didn't clear it
   });
 
   it('needs a mouse closer: the same miss pans the view instead', () => {

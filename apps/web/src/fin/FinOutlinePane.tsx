@@ -20,7 +20,7 @@ import type { FinState } from '@openshaper/store';
 import { memo, useCallback, useMemo } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
 import type { LengthUnit } from '../format';
-import { curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
+import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { sliceGuideHandlers, sliceGuides } from './slice-guides';
 import { useFinState } from './use-fin';
 
@@ -129,6 +129,7 @@ export const FinOutlinePane = memo(function FinOutlinePane({
       label="Fin outline"
       layers={layers}
       selection={pickFromSelection(selection, ['outline'])}
+      alsoSelected={alsoFromSelection(selection, ['outline'])}
       frameBounds={frameBounds}
       frameKey={`${position}-${base}-${frameKey}`}
       drawUnder={drawUnder}

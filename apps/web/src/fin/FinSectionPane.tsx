@@ -22,7 +22,7 @@ import { Button } from '@openshaper/ui';
 import { memo, useCallback, useMemo, useState } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
 import { fmtLen, type LengthUnit } from '../format';
-import { curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
+import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { PointTools } from './PointTools';
 import { useFinState } from './use-fin';
 
@@ -308,6 +308,7 @@ export const FinSectionPane = memo(function FinSectionPane({
         label="Foil section"
         layers={layers}
         selection={pickFromSelection(selection, ['outside', 'inside'])}
+        alsoSelected={alsoFromSelection(selection, ['outside', 'inside'])}
         yScale={SECTION_Y_SCALE}
         frameBounds={SECTION_FRAME}
         frameKey={`${design.position}-${frameKey}`}

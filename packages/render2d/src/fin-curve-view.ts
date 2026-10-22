@@ -208,6 +208,8 @@ export const drawFinCurves = (
   yScale: ViewScale,
   selection: FinCurvePick | null,
   hovered: FinCurvePick | null,
+  /** Endpoints selected along with `selection`, on its layer. */
+  alsoSelected: readonly number[] = [],
 ): void => {
   const styleOf = (l: FinCurveLayer): DrawStyle => ({
     ...defaultStyle,
@@ -236,6 +238,7 @@ export const drawFinCurves = (
       undefined,
       sel?.kind ?? 'end',
       hov,
+      sel && alsoSelected.length ? new Set(alsoSelected) : null,
     );
   }
 };

@@ -148,6 +148,58 @@ describe('dragging in the panes', () => {
   });
 });
 
+describe('selecting several points in a pane', () => {
+  beforeEach(() => act(() => finStore.getState().load(defaultFinDesign('side', 'right'))));
+
+  /** Where a point is on screen: clicked until selected, as in `grab` above. */
+  const find = (canvas: HTMLElement, index: number) => {
+    for (let y = 0; y < pane.h; y += 4) {
+      for (let x = 0; x < pane.w; x += 4) {
+        fireEvent.pointerDown(canvas, { ...MOUSE, clientX: x, clientY: y });
+        fireEvent.pointerUp(canvas, { ...MOUSE, clientX: x, clientY: y });
+        const sel = finStore.getState().selection;
+        if (sel?.curve === 'outline' && sel.index === index && (sel.kind ?? 'end') === 'end') {
+          return { clientX: x, clientY: y };
+        }
+      }
+    }
+    throw new Error(`could not find outline point ${index}`);
+  };
+
+  it(
+    'shift-clicks a second point, then drags both the same way',
+    () => {
+      render(<FinOutlinePane store={finStore} units={lengthUnitByKey('mm')} />);
+      const canvas = screen.getByRole('img', { name: 'Fin outline' });
+      const b = find(canvas, 2);
+      const a = find(canvas, 1); // selected on its own
+      const shift = { ...MOUSE, shiftKey: true };
+      fireEvent.pointerDown(canvas, { ...shift, ...b });
+      fireEvent.pointerUp(canvas, { ...shift, ...b });
+      expect(finStore.getState().selection).toMatchObject({ index: 2, also: [1] });
+      // A shift-click on empty space keeps the selection.
+      fireEvent.pointerDown(canvas, { ...shift, clientX: 1, clientY: 1 });
+      fireEvent.pointerUp(canvas, { ...shift, clientX: 1, clientY: 1 });
+      expect(finStore.getState().selection).toMatchObject({ index: 2, also: [1] });
+      const before = design().outline.knots.map((k) => k.end);
+      const pastBefore = finStore.getState().past.length;
+      // Grab the first point (no shift: the group stays) and drag it.
+      fireEvent.pointerDown(canvas, { ...MOUSE, ...a });
+      fireEvent.pointerMove(canvas, { ...MOUSE, clientX: a.clientX + 12, clientY: a.clientY - 8 });
+      fireEvent.pointerUp(canvas, { ...MOUSE, clientX: a.clientX + 12, clientY: a.clientY - 8 });
+      const after = design().outline.knots.map((k) => k.end);
+      const d1 = { x: after[1]!.x - before[1]!.x, y: after[1]!.y - before[1]!.y };
+      const d2 = { x: after[2]!.x - before[2]!.x, y: after[2]!.y - before[2]!.y };
+      expect(Math.hypot(d1.x, d1.y)).toBeGreaterThan(0);
+      expect(d2.x).toBeCloseTo(d1.x, 9);
+      expect(d2.y).toBeCloseTo(d1.y, 9);
+      expect(after[3]).toEqual(before[3]); // not selected: left alone
+      expect(finStore.getState().past).toHaveLength(pastBefore + 1); // one drag, one step
+    },
+    HEAVY,
+  );
+});
+
 describe('foil slices in the panes', () => {
   beforeEach(() =>
     act(() => {
