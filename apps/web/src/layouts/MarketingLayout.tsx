@@ -29,7 +29,7 @@ function Brand() {
     <Link to="/" className="group flex items-center gap-2.5" aria-label={`${SITE_NAME} home`}>
       <Brandmark className="h-7 w-7 shrink-0 transition-transform duration-300 group-hover:-translate-y-px group-hover:rotate-3" />
       <span className="font-display text-lg tracking-tight sm:text-xl">
-        Open<span className="text-primary">Shaper</span>
+        Open<span className="text-primary">FinShaper</span>
       </span>
     </Link>
   );
