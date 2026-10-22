@@ -1,54 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
-  <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0C1A2E" />
-      <stop offset="1" stop-color="#0A1424" />
-    </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="-6%" r="70%">
-      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.20" />
-      <stop offset="100%" stop-color="#22D3EE" stop-opacity="0" />
-    </radialGradient>
-  </defs>
-
-  <rect width="1200" height="630" fill="url(#sky)" />
-  <rect width="1200" height="630" fill="url(#glow)" />
-
-  <!-- construction grid -->
-  <g stroke="#1E3149" stroke-width="1" opacity="0.7">
-    <line x1="0" y1="157" x2="1200" y2="157" />
-    <line x1="0" y1="472" x2="1200" y2="472" />
-    <line x1="80" y1="0" x2="80" y2="630" />
-    <line x1="1120" y1="0" x2="1120" y2="630" />
-  </g>
-
-  <!-- brandmark tile -->
-  <g transform="translate(80,96)">
-    <rect width="64" height="64" rx="16" fill="#0F1C30" />
-    <rect x="1.2" y="1.2" width="61.6" height="61.6" rx="14.8" fill="none" stroke="#22D3EE" stroke-opacity="0.3" />
-    <g transform="rotate(-26 32 32)">
-      <g transform="translate(32 8.6) scale(9 46.8)">
-        <path fill="#22D3EE" d="M0 0 L0.0236 0 L0.0665 0.0001 L0.1041 0.0003 L0.1211 0.0005 L0.2943 0.0145 L0.4056 0.0357 L0.5284 0.0671 L0.6535 0.1101 L0.7718 0.1659 L0.8741 0.2357 L0.9513 0.3207 L0.9943 0.4222 L1 0.4795 L0.9862 0.5565 L0.9441 0.6314 L0.8724 0.7036 L0.7696 0.7724 L0.6344 0.8372 L0.4656 0.8972 L0.2616 0.9517 L0.0213 1 L-0.0213 1 L-0.2616 0.9517 L-0.4656 0.8972 L-0.6344 0.8372 L-0.7696 0.7724 L-0.8724 0.7036 L-0.9441 0.6314 L-0.9862 0.5565 L-1 0.4795 L-0.9943 0.4222 L-0.9513 0.3207 L-0.8741 0.2357 L-0.7718 0.1659 L-0.6535 0.1101 L-0.5284 0.0671 L-0.4056 0.0357 L-0.2943 0.0145 L-0.1211 0.0005 L-0.1041 0.0003 L-0.0665 0.0001 L-0.0236 0 Z"/>
-      </g>
-      <line x1="32" y1="11.2" x2="32" y2="54.2" stroke="#0A1424" stroke-width="1.8"/>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 1200 630" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;">
+    <rect x="0" y="0" width="1200" height="630" style="fill:url(#_Linear1);"/>
+    <rect x="0" y="0" width="1200" height="630" style="fill:url(#_Radial2);"/>
+    <g opacity="0.7">
+        <path d="M0,157L1200,157" style="fill:none;fill-rule:nonzero;stroke:rgb(30,49,73);stroke-width:1px;"/>
+        <path d="M0,472L1200,472" style="fill:none;fill-rule:nonzero;stroke:rgb(30,49,73);stroke-width:1px;"/>
+        <path d="M80,0L80,630" style="fill:none;fill-rule:nonzero;stroke:rgb(30,49,73);stroke-width:1px;"/>
+        <path d="M1120,0L1120,630" style="fill:none;fill-rule:nonzero;stroke:rgb(30,49,73);stroke-width:1px;"/>
     </g>
-  </g>
-
-  <!-- board outline motif: real shortboard planshape -->
-  <g transform="translate(80,470) scale(1.2037 1.1364) translate(-8 -60)" fill="none">
-    <line x1="8" y1="60" x2="872" y2="60" stroke="#2DD4BF" stroke-width="1.7" stroke-dasharray="3 9" opacity="0.55" />
-    <path stroke="#22D3EE" stroke-width="2.5" d="M8 60 L8 59 L8 58 L8.1 57.1 L8.2 56.2 L8.3 55.4 L8.5 54.7 L20.6 47.1 L28.6 44.7 L38.8 42.2 L51.2 39.5 L66 36.7 L83.3 34 L103.1 31.2 L125.8 28.6 L151.3 26 L179.9 23.7 L211.6 21.5 L246.6 19.7 L285.1 18.1 L327.1 17 L372.8 16.3 L422.3 16 L455.7 16.2 L488.8 16.6 L521.4 17.4 L553.5 18.5 L585.1 19.9 L615.9 21.6 L646.1 23.7 L675.4 26.1 L703.8 28.9 L731.3 32.1 L757.8 35.6 L783.1 39.5 L807.3 43.8 L830.2 48.5 L851.8 53.6 L872 59.1" />
-    <path stroke="#22D3EE" stroke-width="2.5" d="M8 60 L8 61 L8 62 L8.1 62.9 L8.2 63.8 L8.3 64.6 L8.5 65.3 L20.6 72.9 L28.6 75.3 L38.8 77.8 L51.2 80.5 L66 83.3 L83.3 86 L103.1 88.8 L125.8 91.4 L151.3 94 L179.9 96.3 L211.6 98.5 L246.6 100.3 L285.1 101.9 L327.1 103 L372.8 103.7 L422.3 104 L455.7 103.8 L488.8 103.4 L521.4 102.6 L553.5 101.5 L585.1 100.1 L615.9 98.4 L646.1 96.3 L675.4 93.9 L703.8 91.1 L731.3 87.9 L757.8 84.4 L783.1 80.5 L807.3 76.2 L830.2 71.5 L851.8 66.4 L872 60.9" />
-    <line x1="872" y1="59.1" x2="872" y2="60.9" stroke="#22D3EE" stroke-width="2.5" />
-    <g stroke="#22D3EE" stroke-width="1.3" opacity="0.4">
-      <line x1="180" y1="44" x2="180" y2="76" />
-      <line x1="360" y1="44" x2="360" y2="76" />
-      <line x1="560" y1="44" x2="560" y2="76" />
-      <line x1="740" y1="44" x2="740" y2="76" />
+    <g transform="matrix(1.2037,0,0,1.1364,70.3704,401.816)">
+        <g transform="matrix(1,0,0,1,0,0.879972)">
+            <path d="M8,60L872,60" style="fill:none;fill-rule:nonzero;stroke:rgb(45,212,191);stroke-opacity:0.55;stroke-width:1.7px;stroke-dasharray:3,9;"/>
+        </g>
+        <g transform="matrix(1,0,0,1,0,13.1996)">
+            <path d="M8.718,60.368C7.991,45.932 35.528,0.217 267.292,4.86C520.83,9.94 723.6,31.34 872,59.1" style="fill:none;fill-rule:nonzero;stroke:rgb(212,237,241);stroke-width:2.5px;"/>
+        </g>
+        <g transform="matrix(1,0,0,1,0,13.1996)">
+            <path d="M8.718,61.76C17.129,95.556 146.849,78.803 268.954,69.381C412.491,58.305 665.723,56.687 872,60.9" style="fill:none;fill-rule:nonzero;stroke:rgb(212,237,241);stroke-width:2.5px;"/>
+        </g>
     </g>
-  </g>
-
-  <!-- type -->
-  <text x="170" y="138" font-family="'Courier New', monospace" font-size="26" fill="#22D3EE" letter-spacing="9">OPEN SOURCE · SURF FIN CAD</text>
-  <text x="76" y="320" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="128" fill="#E6EDF5" letter-spacing="-4">OpenFinShaper</text>
-  <text x="80" y="392" font-family="'Helvetica Neue', Arial, sans-serif" font-size="38" fill="#8A9BB3">Free surf fin design software, right in your browser.</text>
+    <text x="170" y="138" font-family="'Courier New', monospace" font-size="26" fill="#22D3EE" letter-spacing="2.34">OPEN SOURCE · SURF FIN CAD</text>
+    <text x="76" y="320" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="128" fill="#E6EDF5" letter-spacing="-4">OpenFinShaper</text>
+    <text x="80" y="392" font-family="'Helvetica Neue', Arial, sans-serif" font-size="38" fill="#8A9BB3">Free surf fin design software, right in your browser.</text>
+    <g id="favicon.svg" transform="matrix(2,0,0,2,112.307,127.766)">
+        <g transform="matrix(1,0,0,1,-16,-16)">
+            <clipPath id="_clip3">
+                <rect x="0" y="0" width="32" height="32"/>
+            </clipPath>
+            <g clip-path="url(#_clip3)">
+                <path d="M32,8C32,3.585 28.415,0 24,0L8,0C3.585,0 0,3.585 0,8L0,24C0,28.415 3.585,32 8,32L24,32C28.415,32 32,28.415 32,24L32,8Z" style="fill:rgb(10,20,36);"/>
+                <path d="M31.4,8C31.4,3.916 28.084,0.6 24,0.6L8,0.6C3.916,0.6 0.6,3.916 0.6,8L0.6,24C0.6,28.084 3.916,31.4 8,31.4L24,31.4C28.084,31.4 31.4,28.084 31.4,24L31.4,8Z" style="fill:none;stroke:rgb(34,211,238);stroke-opacity:0.3;stroke-width:1px;"/>
+                <g>
+                    <path d="M6,8C8.316,6.48 16.527,4.968 19,10C21.473,15.032 25.71,27.103 26,27C26.29,26.897 3.684,9.52 6,8Z" style="fill:rgb(131,0,255);stroke:white;stroke-width:2px;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;"/>
+                </g>
+            </g>
+        </g>
+    </g>
+    <defs>
+        <linearGradient id="_Linear1" x1="0" y1="0" x2="1" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(3.85764e-14,630,-630,3.85764e-14,0,0)"><stop offset="0" style="stop-color:rgb(12,26,46);stop-opacity:1"/><stop offset="1" style="stop-color:rgb(10,20,36);stop-opacity:1"/></linearGradient>
+        <radialGradient id="_Radial2" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(840,0,0,840,600,-37.8)"><stop offset="0" style="stop-color:rgb(34,211,238);stop-opacity:0.2"/><stop offset="1" style="stop-color:rgb(34,211,238);stop-opacity:0"/></radialGradient>
+    </defs>
 </svg>

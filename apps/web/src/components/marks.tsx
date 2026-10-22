@@ -28,13 +28,9 @@ const OUTLINE_TOP =
 const OUTLINE_BOTTOM =
   'M2 99 L2 101.3 L2 103.5 L2.1 105.5 L2.1 107.4 L2.2 109.2 L2.4 110.9 L11.8 127.9 L18.2 133.2 L26.1 138.8 L35.8 144.8 L47.4 150.9 L60.9 157 L76.4 163.2 L94.2 169.1 L114.1 174.8 L136.5 180 L161.3 184.8 L188.7 189 L218.8 192.4 L251.7 195 L287.4 196.6 L326.2 197.2 L352.3 196.8 L378.2 195.8 L403.7 194.1 L428.8 191.7 L453.5 188.5 L477.6 184.6 L501.2 180 L524.2 174.6 L546.4 168.3 L567.9 161.3 L588.6 153.4 L608.5 144.7 L627.4 135.1 L645.3 124.7 L662.2 113.3 L678 101.1';
 
-/**
- * Real shortboard silhouette as a closed unit path: nose at v=0 (top), tail at
- * v=1 (bottom), rails at u=±1 (half-width). Scale/rotate into place. Same source
- * as the outline above.
- */
-const BOARD_SILHOUETTE =
-  'M0 0 L0 0 L0.0236 0 L0.0458 0 L0.0665 0.0001 L0.0859 0.0002 L0.1041 0.0003 L0.1211 0.0005 L0.2943 0.0145 L0.3479 0.0239 L0.4056 0.0357 L0.4661 0.05 L0.5284 0.0671 L0.5913 0.0871 L0.6535 0.1101 L0.7141 0.1363 L0.7718 0.1659 L0.8256 0.1989 L0.8741 0.2357 L0.9165 0.2762 L0.9513 0.3207 L0.9776 0.3693 L0.9943 0.4222 L1 0.4795 L0.9966 0.5182 L0.9862 0.5565 L0.9688 0.5942 L0.9441 0.6314 L0.912 0.6679 L0.8724 0.7036 L0.8249 0.7385 L0.7696 0.7724 L0.7062 0.8054 L0.6344 0.8372 L0.5543 0.8678 L0.4656 0.8972 L0.3681 0.9251 L0.2616 0.9517 L0.1461 0.9766 L0.0213 1 L-0.0213 1 L-0.1461 0.9766 L-0.2616 0.9517 L-0.3681 0.9251 L-0.4656 0.8972 L-0.5543 0.8678 L-0.6344 0.8372 L-0.7062 0.8054 L-0.7696 0.7724 L-0.8249 0.7385 L-0.8724 0.7036 L-0.912 0.6679 L-0.9441 0.6314 L-0.9688 0.5942 L-0.9862 0.5565 L-0.9966 0.5182 L-1 0.4795 L-0.9943 0.4222 L-0.9776 0.3693 L-0.9513 0.3207 L-0.9165 0.2762 L-0.8741 0.2357 L-0.8256 0.1989 L-0.7718 0.1659 L-0.7141 0.1363 L-0.6535 0.1101 L-0.5913 0.0871 L-0.5284 0.0671 L-0.4661 0.05 L-0.4056 0.0357 L-0.3479 0.0239 L-0.2943 0.0145 L-0.1211 0.0005 L-0.1041 0.0003 L-0.0859 0.0002 L-0.0665 0.0001 L-0.0458 0 L-0.0236 0 L0 0 Z';
+/** The OpenFinShaper fin, in the brandmark's 32×32 tile (public/favicon.svg). */
+const FIN_MARK =
+  'M6,8C8.316,6.48 16.527,4.968 19,10C21.473,15.032 25.71,27.103 26,27C26.29,26.897 3.684,9.52 6,8Z';
 
 /**
  * Layered ocean-swell lines — the decorative divider motif for header & footer.
@@ -72,10 +68,9 @@ export function WaveLines({ className }: MarkProps) {
 }
 
 /**
- * The OpenShaper brandmark — the real Shortboard planshape silhouette, tilted on
- * a deep-navy tile with an electric-cyan board and a navy stringer line. Square;
- * size via `className` (e.g. `h-7 w-7`). Brand colours are baked in so it renders
- * correctly on any surface.
+ * The OpenFinShaper brandmark — a purple fin with a white outline on a deep-navy
+ * tile, the same mark as public/favicon.svg. Square; size via `className` (e.g.
+ * `h-7 w-7`). Brand colours are baked in so it renders correctly on any surface.
  */
 export function Brandmark({ className }: { className?: string }) {
   return (
@@ -86,7 +81,7 @@ export function Brandmark({ className }: { className?: string }) {
       aria-label="OpenFinShaper"
       fill="none"
     >
-      <rect width="32" height="32" rx="8" fill="#0F1C30" />
+      <rect width="32" height="32" rx="8" fill="#0A1424" />
       <rect
         x="0.6"
         y="0.6"
@@ -95,16 +90,16 @@ export function Brandmark({ className }: { className?: string }) {
         rx="7.4"
         fill="none"
         stroke="#22D3EE"
-        strokeOpacity="0.28"
+        strokeOpacity="0.3"
       />
-      <g transform="rotate(-26 16 16)">
-        {/* real shortboard silhouette, nose up */}
-        <g transform="translate(16 4.3) scale(4.5 23.4)">
-          <path d={BOARD_SILHOUETTE} fill="#22D3EE" />
-        </g>
-        {/* stringer */}
-        <line x1="16" y1="5.6" x2="16" y2="27.1" stroke="#0A1424" strokeWidth="0.9" />
-      </g>
+      <path
+        d={FIN_MARK}
+        fill="#8300FF"
+        stroke="#FFFFFF"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
