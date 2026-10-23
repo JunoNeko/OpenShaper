@@ -14,6 +14,7 @@ import {
   rearClearance,
   tabProfilePoints,
   type FinBase,
+  type Spline,
 } from '@openshaper/kernel';
 import { FinCurveEditor, boundsOf, sampleSpline, type Viewport } from '@openshaper/render2d';
 import type { FinState } from '@openshaper/store';
@@ -29,8 +30,8 @@ const TAB_LINE = 'rgba(138,155,179,0.7)';
 const LIMIT = 'rgba(249,115,22,0.85)';
 
 /** Each tab's profile and its holes in the blade frame (tab top at y = 0), for drawing. */
-const tabPolygons = (base: FinBase) => {
-  const tab = finTabOutline(base);
+const tabPolygons = (base: FinBase, outline?: Spline) => {
+  const tab = finTabOutline(base, outline);
   const ring = (segs: Parameters<typeof tabProfilePoints>[0]) =>
     tabProfilePoints(segs, 0.002).map((p) => ({ x: p.x, y: p.y - tab.height }));
   return tab.parts.flatMap((part) => [ring(part.segments), ...part.holes.map(ring)]);
@@ -59,12 +60,14 @@ export const FinOutlinePane = memo(function FinOutlinePane({
   const guideHandlers = useMemo(() => sliceGuideHandlers(store, 'y'), [store]);
 
   const base = design?.base ?? 'futures-side';
-  const tab = useMemo(() => tabPolygons(base), [base]);
+  // A US box head follows the fin; every other base is fixed.
+  const follows = base === 'us-box' ? design?.outline : undefined;
+  const tab = useMemo(() => tabPolygons(base, follows), [base, follows]);
   const kind = futuresKind(base);
-  const { length: tabLen, height: tabHeight } = finTabOutline(base);
+  const { rear: tabRear, length: tabLen, height: tabHeight } = finTabOutline(base, follows);
   const frameBounds = useMemo(
-    () => ({ minX: 0, maxX: tabLen, minY: -tabHeight, maxY: 0 }),
-    [tabLen, tabHeight],
+    () => ({ minX: tabRear, maxX: tabRear + tabLen, minY: -tabHeight, maxY: 0 }),
+    [tabRear, tabLen, tabHeight],
   );
 
   const layers = useMemo(

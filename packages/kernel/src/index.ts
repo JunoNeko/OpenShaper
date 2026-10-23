@@ -50,4 +50,10 @@ export * from './fin-design/fin-placement';
 export * from './fin-design/fin-clearance';
 export * from './fin-design/naca';
 export * from './fin-design/fin-mesh';
-export { defaultCanard, defaultFinDesign, defaultTaper, flatFace } from './fin-design/fin-defaults';
+export {
+  defaultCanard,
+  defaultFinDesign,
+  defaultSingleFin,
+  defaultTaper,
+  flatFace,
+} from './fin-design/fin-defaults';

@@ -12,6 +12,8 @@ import {
   bladeSurfaceDeviation,
   cosineStations,
   defaultFinDesign,
+  defaultSingleFin,
+  finTabOutline,
   evalCurve,
   evalSurface,
   fitBladeSurface,
@@ -523,5 +525,56 @@ describe('exportFinStep: FCS 1 base', () => {
     expect(xs.some((x) => Math.abs(x - 20.5) < 1e-6)).toBe(true);
     expect(xs.some((x) => Math.abs(x - 53.5) < 1e-6)).toBe(true);
     expect(xs.some((x) => Math.abs(x - 74) < 1e-6)).toBe(true);
+  });
+});
+
+describe('exportFinStep: US box head', () => {
+  const d = defaultSingleFin();
+  const step = exportFinStep(d, { timestamp: FIXED });
+  const m = parse(step);
+  const solids = solidsOf(m);
+  const head = solids[1]!;
+
+  it('writes the blade and the head as two solids', () => {
+    expect(solids.map((s) => s.name)).toEqual(['blade', 'tab']);
+  });
+
+  it('closes the head, screw hole and all: each edge used once each way', () => {
+    const uses = new Map<number, boolean[]>();
+    for (const f of head.faces) {
+      for (const [edge, sense] of allEdgesOf(m, f))
+        uses.set(edge, [...(uses.get(edge) ?? []), sense]);
+    }
+    for (const senses of uses.values()) expect(senses.sort()).toEqual([false, true]);
+  });
+
+  it('winds every flat face counter-clockwise about its outward normal', () => {
+    for (const f of head.faces) {
+      if (m.get(refOf(f.args[2]))!.name !== 'PLANE') continue;
+      const { normal } = faceNormal(m, f);
+      expect(dotV(newell(loopPolyline(m, f)), normal)).toBeGreaterThan(0);
+    }
+  });
+
+  it('has the screw hole as a 4.5 mm cylinder, in four faces, with the scoop and rear corner', () => {
+    const cyl = head.faces.filter((f) => m.get(refOf(f.args[2]))!.name === 'CYLINDRICAL_SURFACE');
+    // Four quarters of the hole, the scoop, and the rounded rear corner.
+    expect(cyl).toHaveLength(6);
+    const radii = cyl.map((f) => {
+      const v = m.get(refOf(f.args[2]))!.args[2];
+      return isNum(v) ? v.num : NaN;
+    });
+    expect(radii.filter((r) => Math.abs(r - 2.25) < 1e-6)).toHaveLength(4);
+    // Two flat faces carry the hole: the head's top and the nose's underside.
+    const holed = head.faces.filter((f) => asList(f.args[1]).length > 1);
+    expect(holed).toHaveLength(2);
+  });
+
+  it('is in mm, as long as the head', () => {
+    const t = finTabOutline(d.base, d.outline);
+    const xs = [...step.matchAll(/CARTESIAN_POINT\('',\(([^)]*)\)\)/g)].map((x) =>
+      Number(x[1]!.split(',')[0]),
+    );
+    expect(Math.max(...xs)).toBeCloseTo((t.rear + t.length) * MM, 6);
   });
 });

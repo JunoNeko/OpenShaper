@@ -98,6 +98,7 @@ const STARTS: { label: string; start: FinStart; hand?: FinHand }[] = [
   { label: 'Quad rear, left', start: 'quad-rear', hand: 'left' },
   { label: 'Quad rear, right', start: 'quad-rear', hand: 'right' },
   { label: 'Centre', start: 'centre' },
+  { label: 'Single fin (US box)', start: 'single' },
   { label: 'Canard, left (FCS single tab)', start: 'canard', hand: 'left' },
   { label: 'Canard, right (FCS single tab)', start: 'canard', hand: 'right' },
 ];
@@ -181,6 +182,8 @@ function Nudge({
 function NudgePad({ disabled = false }: { disabled?: boolean }) {
   const s = finStore.getState;
   const hand = useFinState(finStore, (st) => st.design?.hand ?? null);
+  // A US box head moves with the fin: there is no fore/aft place on it to choose.
+  const usBox = useFinState(finStore, (st) => st.design?.base === 'us-box');
   const across = (side: 'left' | 'right') => (acrossSign(hand, side) > 0 ? 'outboard' : 'inboard');
   return (
     <div
@@ -190,18 +193,22 @@ function NudgePad({ disabled = false }: { disabled?: boolean }) {
       aria-disabled={disabled}
     >
       <span className="mr-1 text-muted-foreground">Position</span>
-      <Nudge
-        id="fin-nudge-forward"
-        label="Move the fin forward"
-        dir="↑"
-        act={() => s().nudgeFore(NUDGE_FORE_CM)}
-      />
-      <Nudge
-        id="fin-nudge-back"
-        label="Move the fin back"
-        dir="↓"
-        act={() => s().nudgeFore(-NUDGE_FORE_CM)}
-      />
+      {!usBox && (
+        <>
+          <Nudge
+            id="fin-nudge-forward"
+            label="Move the fin forward"
+            dir="↑"
+            act={() => s().nudgeFore(NUDGE_FORE_CM)}
+          />
+          <Nudge
+            id="fin-nudge-back"
+            label="Move the fin back"
+            dir="↓"
+            act={() => s().nudgeFore(-NUDGE_FORE_CM)}
+          />
+        </>
+      )}
       <Nudge
         id="fin-nudge-left"
         label={`Slide the blade left (${across('left')})`}
@@ -418,11 +425,19 @@ function PlacementTools({
         <>
           {position !== 'centre' && (
             <Tooltip
-              label={fcs ? 'Set by the FCS plug (0°, 5° or 9°)' : 'Blade lean out from the tab'}
+              label={
+                base === 'us-box'
+                  ? 'A fin in a US box has no cant'
+                  : fcs
+                    ? 'Set by the FCS plug (0°, 5° or 9°)'
+                    : 'Blade lean out from the tab'
+              }
             >
               <div>
                 <DegField
-                  label={fcs ? 'Cant (plug)' : `Cant (0–${FIN_MAX_CANT}°)`}
+                  label={
+                    base === 'us-box' ? 'Cant' : fcs ? 'Cant (plug)' : `Cant (0–${FIN_MAX_CANT}°)`
+                  }
                   value={cant}
                   disabled={fcs}
                   onCommit={(v) => s().setCant(v)}
@@ -507,8 +522,9 @@ function TaperTools({ units }: { units: LengthUnit }) {
 function Status({ units }: { units: LengthUnit }) {
   const position = useFinState(finStore, (s) => s.design?.position);
   const base = useFinState(finStore, (s) => s.design?.base);
+  const outline = useFinState(finStore, (s) => s.design?.outline);
   if (!position || !base) return null;
-  const tab = finTabOutline(base);
+  const tab = finTabOutline(base, outline);
   return (
     <div className="space-y-2 border-t border-border px-3 py-2" style={{ gridArea: 'status' }}>
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">

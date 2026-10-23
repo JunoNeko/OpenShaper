@@ -130,7 +130,7 @@ describe('the blade as a laminate core', () => {
 
   describe('wrapping the tab', () => {
     const d = side();
-    const t = finTabOutline(d.base).thickness;
+    const t = finTabOutline(d.base, d.outline).thickness;
     const out = finOutward(d.hand);
     const insideOf = (faces: readonly [number, number]) => (out > 0 ? faces[0] : faces[1]);
     const outsideOf = (faces: readonly [number, number]) => (out > 0 ? faces[1] : faces[0]);
