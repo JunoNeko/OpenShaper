@@ -65,7 +65,7 @@ export const finReadouts = (d: FinDesign): FinReadouts => {
   const le = knots[0]!.end;
   const te = knots[knots.length - 1]!.end;
   const tip = splineExtremes(d.outline, 'y').max.point;
-  const tabFront = finTabOutline(d.base).length;
+  const tabFront = finTabOutline(d.base, d.outline).length;
   return {
     area: finArea(d),
     depth: tip.y,

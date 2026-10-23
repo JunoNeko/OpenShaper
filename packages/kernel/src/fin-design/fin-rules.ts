@@ -88,7 +88,7 @@ const checkOutline = (d: FinDesign, issues: FinIssue[]): void => {
       message: 'The leading and trailing edges must each keep rising from root to tip.',
     });
   }
-  const tab = finTabOutline(d.base);
+  const tab = finTabOutline(d.base, d.outline);
   if (futuresKind(d.base)) {
     if (le.x > tab.length + FIN_MAX_FRONT_OVERHANG + EPS) {
       issues.push({
@@ -99,7 +99,8 @@ const checkOutline = (d: FinDesign, issues: FinIssue[]): void => {
     if (le.x < -EPS) {
       issues.push({ code: 'tab-rear', message: 'The fin has slid off the back of the tab.' });
     }
-  } else if (le.x < tab.length - EPS || te.x > EPS) {
+  } else if (d.base !== 'us-box' && (le.x < tab.length - EPS || te.x > EPS)) {
+    // (A US box head follows the fin, sticking out in front for the screw and behind.)
     // An FCS tab drops straight into its plug: the blade's root must cover all of it.
     issues.push({
       code: 'tab-cover',
@@ -260,9 +261,11 @@ export const validateFinDesign = (d: FinDesign): FinIssue[] => {
       code: 'cant',
       message: centre
         ? 'A centre fin has no cant.'
-        : fcs
-          ? 'On an FCS base the plug sets the cant: the fin has none.'
-          : `Cant must be 0–${FIN_MAX_CANT}°.`,
+        : d.base === 'us-box'
+          ? 'A fin in a US box has no cant.'
+          : fcs
+            ? 'On an FCS base the plug sets the cant: the fin has none.'
+            : `Cant must be 0–${FIN_MAX_CANT}°.`,
     });
   }
   if (!(Math.abs(d.toe ?? 0) <= FIN_MAX_TOE)) {

@@ -28,7 +28,7 @@ import { RAD_TO_DEG } from '../constants';
 import { knot, type Knot } from '../knot';
 import { vec2, type Vec2 } from '../vec2';
 import { splineExtremes } from './curve-shape';
-import { FCS_SINGLE_TAB } from './fin-tab';
+import { FCS_SINGLE_TAB, US_BOX_HEAD, usBoxHeadLength } from './fin-tab';
 import {
   FIN_MIN_THICKNESS,
   defaultFinBase,
@@ -243,5 +243,42 @@ export const defaultCanard = (hand: FinHand = 'left'): FinDesign => {
     section: { outside: rowsToSpline(CANARD_OUTSIDE, 1, 1), inside: flatFace() },
     slices: [],
     taper: rowsToSpline(CANARD_TAPER_MM, 1, MM_TO_CM),
+  };
+};
+
+/**
+ * The starting single fin, for a longboard's US box: an 8" (203.2 mm) deep fin with the
+ * outline of the owner's reference photo (a raked longboard fin), traced from the photo
+ * and fitted with five knots (within 2 mm of the trace everywhere, about 0.5 mm on
+ * average). Mm, the trailing-edge root at 0. A symmetric foil (the centre section), 10 mm
+ * thick at the root; no cant. The US box head follows it, so it is only moved to put the
+ * head's rear end at x = 0.
+ */
+const SINGLE_OUTLINE_MM: KnotRow[] = [
+  [[153.5942, 0.0], [153.5942, 0.0], [129.3788, 13.688], false],
+  [[-59.1595, 203.2], [50.6645, 203.2], [-82.584, 203.2], true],
+  [[-83.4112, 191.809], [-83.4112, 193.2148], [-83.4112, 185.0783], true],
+  [[15.4329, 56.2199], [15.4329, 130.0204], [15.4329, 46.788], true],
+  [[0.0, 0.0], [13.4232, 17.5843], [0.0, 0.0], false],
+];
+
+/** Root thickness of the starting single fin (cm). */
+const SINGLE_ROOT_THICKNESS = 1.0;
+
+export const defaultSingleFin = (): FinDesign => {
+  const le = SINGLE_OUTLINE_MM[0]![0][0] * MM_TO_CM;
+  const te = SINGLE_OUTLINE_MM[SINGLE_OUTLINE_MM.length - 1]![0][0] * MM_TO_CM;
+  const rear = le + US_BOX_HEAD.noseAhead - usBoxHeadLength(le, te);
+  return {
+    position: 'centre',
+    hand: null,
+    cant: 0,
+    base: 'us-box',
+    toe: 0,
+    outline: rowsToSpline(SINGLE_OUTLINE_MM, MM_TO_CM, MM_TO_CM, -rear),
+    lateralOffset: 0,
+    section: { outside: sectionFace(FOIL_SECTIONS.centre), inside: null },
+    slices: [],
+    taper: defaultTaper(SINGLE_ROOT_THICKNESS),
   };
 };

@@ -32,7 +32,7 @@ const outwardOf = (d: FinDesign): 1 | -1 => finOutward(d.hand);
 
 /** The tab's centre plane (blade-frame Y, cm) before any lateral offset. */
 const defaultTabCentreY = (d: FinDesign): number =>
-  d.section.inside === null ? 0 : (outwardOf(d) * finTabOutline(d.base).thickness) / 2;
+  d.section.inside === null ? 0 : (outwardOf(d) * finTabOutline(d.base, d.outline).thickness) / 2;
 
 /** The tab's centre plane (blade-frame Y, cm): its default, less the blade's offset. */
 export const tabCentreY = (d: FinDesign): number =>
@@ -48,7 +48,7 @@ export const tabFacesY = (
   d: FinDesign,
   laminate: FinLaminate = NO_LAMINATE,
 ): readonly [number, number] => {
-  const half = finTabOutline(d.base).thickness / 2;
+  const half = finTabOutline(d.base, d.outline).thickness / 2;
   const yc = tabCentreY(d);
   const out = outwardOf(d);
   const outside = yc + out * (half - (laminate.tab ? laminate.outside : 0));
@@ -77,7 +77,12 @@ export const lateralOffsetRange = (d: FinDesign): { min: number; max: number } =
  * tab's front and the trailing-edge root at or behind its rear.
  */
 export const leadingRootRange = (d: FinDesign): { min: number; max: number } => {
-  const tab = finTabOutline(d.base);
+  // A US box head moves with the fin: there is nothing to slide along.
+  if (d.base === 'us-box') {
+    const le = d.outline.knots[0]!.end.x;
+    return { min: le, max: le };
+  }
+  const tab = finTabOutline(d.base, d.outline);
   if (futuresKind(d.base)) return { min: 0, max: tab.length + FIN_MAX_FRONT_OVERHANG };
   const knots = d.outline.knots;
   const chord = knots[0]!.end.x - knots[knots.length - 1]!.end.x;
@@ -139,15 +144,20 @@ export const nudgeLateral = (d: FinDesign, dy: number): FinDesign => {
  * tab, its root centred over the tab; on FCS 1, aligned from the back (the trailing-edge
  * root 20.5 mm behind the rear tab), so a bigger fin overhangs at the
  * front, and a smaller one comes forward to cover the front tab; both with no cant (the plug carries it). On a Futures tab, rear-aligned (the
- * trailing-edge root on the tab's rear end), its cant kept.
+ * trailing-edge root on the tab's rear end), its cant kept. On a US box the head follows
+ * the fin, so the fin only moves to put the head's rear end at x = 0; no cant.
  */
 export const placeOnBase = (d: FinDesign, base: FinBase): FinDesign => {
   if (base === d.base) return d;
   const knots = d.outline.knots;
   const le = knots[0]!.end.x;
   const te = knots[knots.length - 1]!.end.x;
-  const tab = finTabOutline(base);
+  const tab = finTabOutline(base, d.outline);
   const fcs = !futuresKind(base);
+  if (base === 'us-box') {
+    const moved = tab.rear === 0 ? d : shiftOutline(d, -tab.rear);
+    return { ...moved, base, cant: 0 };
+  }
   const rear = baseTrailingRoot(base);
   let dx = rear === null ? tab.length / 2 - (le + te) / 2 : rear - te;
   // FCS 1: a fin too short for the usual spot comes forward just enough to cover the

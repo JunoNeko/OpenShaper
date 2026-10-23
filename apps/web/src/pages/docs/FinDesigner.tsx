@@ -2,6 +2,7 @@
 import {
   FCS_SINGLE_TAB,
   FCS1_BASE,
+  US_BOX_HEAD,
   FUTURES_TAB_HOLES,
   FIN_BASE_LABEL,
   FIN_MAX_CANT,
@@ -83,6 +84,11 @@ export default function DocsFinDesigner() {
           <Term name="Canard, left or right">
             A small fin on the FCS single tab (see <a href="#base">The base</a>), its base centred
             over the tab, with a flat inside face and no cant: the plug carries it.
+          </Term>
+          <Term name="Single fin (US box)">
+            A raked 8&quot; ({mm(20.32)}) longboard single fin on a US box head (see{' '}
+            <a href="#base">The base</a>), with a symmetric foil {mm(1)} thick at the root and no
+            cant.
           </Term>
         </Terms>
         <p>
@@ -215,6 +221,18 @@ export default function DocsFinDesigner() {
             a bigger fin overhangs further at the front; a fin too short for that comes forward just
             enough to cover the front tab. The tabs have no grub-screw hole, as on most aftermarket
             fins.
+          </Term>
+          <Term name={FIN_BASE_LABEL['us-box']}>
+            The head of a longboard&apos;s single-fin box: {mm(US_BOX_HEAD.height)} deep,{' '}
+            {mm(US_BOX_HEAD.thickness)} thick, {mm(US_BOX_HEAD.minLength)}–
+            {mm(US_BOX_HEAD.maxLength)} long. Its front is a nose half the depth, ahead of the
+            leading edge, with the {mm(US_BOX_HEAD.screwRadius * 2)} hole for the box&apos;s 8-32
+            screw drilled down through it; behind the nose a {mm(US_BOX_HEAD.scoopRadius)} radius
+            curve sweeps down to the full depth, and the lower rear corner is rounded. The head
+            follows the fin: it runs from {mm(US_BOX_HEAD.noseAhead)} ahead of the leading edge to{' '}
+            {mm(US_BOX_HEAD.rearStub)} behind the trailing edge, kept within its length range, so
+            reshaping the fin reshapes the head. As the fin slides along the box itself, there is no
+            position on the head to choose, and the fore/aft arrows are hidden. No cant.
           </Term>
         </Terms>
       </Section>

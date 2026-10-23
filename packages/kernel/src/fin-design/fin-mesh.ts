@@ -30,7 +30,7 @@ import {
 import { sectionLoop } from './blade-surface';
 import type { FinDesign } from './fin-design';
 import { finTabOutline } from './fin-tab';
-import { tabFacesY } from './fin-placement';
+import { tabCentreY, tabFacesY } from './fin-placement';
 import type { TabSegment } from './futures-tab';
 import { polygonArea, triangulate, triangulateWithHoles } from './triangulate';
 
@@ -174,9 +174,11 @@ export const tabProfilePoints = (segments: readonly TabSegment[], tolerance: num
   });
 
 const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
-  const tab = finTabOutline(d.base);
+  const tab = finTabOutline(d.base, d.outline);
   const { height: H } = tab;
   const [yLo, yHi] = tabFacesY(d, o.laminate);
+  // Bores are centred on the tab's own mid-plane, whatever a laminate takes off its faces.
+  const yc = tabCentreY(d);
   const m = builder();
   // Each tab its own closed shell (FCS 1 has two).
   for (const part of tab.parts) {
@@ -197,6 +199,28 @@ const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
       m.tri(l[a]!, l[b]!, l[c]!, { x: 0, y: -1, z: 0 });
       m.tri(h[a]!, h[b]!, h[c]!, { x: 0, y: 1, z: 0 });
     }
+    // Holes straight down (the US box screw hole): a ring where each bore leaves a flat
+    // horizontal wall, shared with the bore's own wall.
+    const bores = (part.bores ?? []).map((b) => {
+      const n = Math.max(
+        16,
+        Math.ceil((2 * Math.PI * b.radius) / (2 * Math.sqrt(2 * b.radius * o.arcTolerance))),
+      );
+      const ring = (y: number) =>
+        Array.from({ length: n }, (_, j) => {
+          const a = (2 * Math.PI * j) / n;
+          return { x: b.x + b.radius * Math.cos(a), y: yc + b.radius * Math.sin(a), z: y - H };
+        });
+      const bottom = ring(b.from);
+      const top = ring(b.to);
+      return {
+        b,
+        bottom,
+        top,
+        bottomIds: bottom.map((q) => m.add(q)),
+        topIds: top.map((q) => m.add(q)),
+      };
+    });
     // The walls round the profile and through each hole. Outward is right of travel for
     // both: the profile runs counter-clockwise, each hole clockwise.
     rings.forEach((ring, r) => {
@@ -206,10 +230,52 @@ const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
         const dx = ring[i1]!.x - ring[i]!.x;
         const dz = ring[i1]!.y - ring[i]!.y;
         const out = { x: dz, y: 0, z: -dx };
+        // A flat horizontal wall a bore passes through: the wall with the bore's ring cut out.
+        const level = r === 0 && dz === 0 ? ring[i]!.y : null;
+        const lo0 = Math.min(ring[i]!.x, ring[i1]!.x);
+        const hi0 = Math.max(ring[i]!.x, ring[i1]!.x);
+        const cut = bores.filter(
+          ({ b }) =>
+            level !== null &&
+            (b.from === level || b.to === level) &&
+            b.x - b.radius > lo0 &&
+            b.x + b.radius < hi0,
+        );
+        if (cut.length) {
+          const corners = [lo[r]![i]!, lo[r]![i1]!, hi[r]![i1]!, hi[r]![i]!];
+          const flat = (q: Vert3) => vec2(q.x, q.y);
+          const cornerPts = [
+            vec2(ring[i]!.x, yLo),
+            vec2(ring[i1]!.x, yLo),
+            vec2(ring[i1]!.x, yHi),
+            vec2(ring[i]!.x, yHi),
+          ];
+          const holes = cut.map((c) => (c.b.from === level ? c.bottom : c.top));
+          const holeIds = cut.map((c) => (c.b.from === level ? c.bottomIds : c.topIds));
+          const ids = [...corners, ...holeIds.flat()];
+          for (const [a, b2, c] of triangulateWithHoles(
+            cornerPts,
+            holes.map((h) => h.map(flat)),
+          )) {
+            m.tri(ids[a]!, ids[b2]!, ids[c]!, out);
+          }
+          continue;
+        }
         m.tri(lo[r]![i]!, lo[r]![i1]!, hi[r]![i1]!, out);
         m.tri(lo[r]![i]!, hi[r]![i1]!, hi[r]![i]!, out);
       }
     });
+    // Each bore's wall faces in, toward its axis.
+    for (const { b, bottom, bottomIds, topIds } of bores) {
+      const n = bottomIds.length;
+      for (let j = 0; j < n; j++) {
+        const j1 = (j + 1) % n;
+        const q = bottom[j]!;
+        const inward = { x: b.x - q.x, y: yc - q.y, z: 0 };
+        m.tri(bottomIds[j]!, bottomIds[j1]!, topIds[j1]!, inward);
+        m.tri(bottomIds[j]!, topIds[j1]!, topIds[j]!, inward);
+      }
+    }
   }
   return m.done();
 };

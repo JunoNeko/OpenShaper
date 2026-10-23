@@ -34,6 +34,7 @@ import {
   finTabOutline,
   knotMultiplicities,
   surfaceBoundaryCurve,
+  tabCentreY,
   tabFacesY,
   type BSplineCurve,
   type BSplineSurface,
@@ -259,7 +260,7 @@ const emitTabs = (
   factor: number,
   laminate: FinLaminate | undefined,
 ): number[] => {
-  const tab = finTabOutline(d.base);
+  const tab = finTabOutline(d.base, d.outline);
   const names =
     tab.parts.length === 1
       ? ['tab']
@@ -275,7 +276,7 @@ const emitTabPart = (
   factor: number,
   laminate: FinLaminate | undefined,
 ): number => {
-  const { height: H } = finTabOutline(d.base);
+  const { height: H } = finTabOutline(d.base, d.outline);
   const sides = tabFacesY(d, laminate);
   // Tab frame (x, y up from the tab bottom) to the fin frame: z = y − H.
   const at = (p: { x: number; y: number }, y: number): Vert3 => ({ x: p.x, y, z: p.y - H });
@@ -332,6 +333,34 @@ const emitTabPart = (
     ring.map((s) => lineEdge(at(s.from, sides[0]), at(s.from, sides[1]))),
   );
 
+  // Holes straight down (the US box screw hole), centred on the tab's own mid-plane.
+  // Each is a cylinder in four quarters, so every loop has corners to wind by.
+  const yc = tabCentreY(d);
+  const boreRings = (part.bores ?? []).map((bore) => {
+    const quarter = [0, 1, 2, 3].map((j) => (j * Math.PI) / 2);
+    const ringAt = (y: number) => {
+      const z = y - H;
+      const c = { x: bore.x, y: yc, z };
+      const pts = quarter.map((a) => ({
+        x: bore.x + bore.radius * Math.cos(a),
+        y: yc + bore.radius * Math.sin(a),
+        z,
+      }));
+      const circle = w.emit(
+        `CIRCLE('',${ref(placement(w, c, { x: 0, y: 0, z: 1 }, { x: 1, y: 0, z: 0 }))},${real(bore.radius, factor)})`,
+      );
+      // Counter-clockwise about +z, as the circle runs.
+      const edges = pts.map((p, k) => {
+        const q = pts[(k + 1) % 4]!;
+        return w.emit(`EDGE_CURVE('',${ref(vtx(p))},${ref(vtx(q))},${ref(circle)},.T.)`);
+      });
+      return { pts, edges, loop: pts.map((p, k) => ({ edge: edges[k]!, sense: true, from: p })) };
+    };
+    const bottom = ringAt(bore.from);
+    const top = ringAt(bore.to);
+    return { bore, bottom: bottom.loop, top: top.loop, b: bottom, t: top };
+  });
+
   const faces: number[] = [];
 
   // The two side faces: the profile, less the holes.
@@ -367,7 +396,23 @@ const emitTabPart = (
         const len = Math.hypot(dx, dz);
         const normal = { x: dz / len, y: 0, z: -dx / len };
         const surf = plane(w, a0, normal, { x: dx / len, y: 0, z: dz / len });
-        faces.push(faceAbout(w, surf, true, loop, normal));
+        // A flat horizontal wall a bore passes through gets the bore's ring as a hole.
+        const level = r === 0 && dz === 0 ? s.from.y : null;
+        const lo = Math.min(s.from.x, s.to.x);
+        const hi = Math.max(s.from.x, s.to.x);
+        const cut = boreRings.filter(
+          (b) =>
+            level !== null &&
+            (b.bore.from === level || b.bore.to === level) &&
+            b.bore.x - b.bore.radius > lo &&
+            b.bore.x + b.bore.radius < hi,
+        );
+        if (cut.length) {
+          const holes = cut.map((b) => (b.bore.from === level ? b.bottom : b.top));
+          faces.push(faceWithHoles(w, surf, true, loop, holes, normal));
+        } else {
+          faces.push(faceAbout(w, surf, true, loop, normal));
+        }
       } else {
         // Material is inside a ccw arc (the fillet) and outside a cw one (the slot, a
         // hole's round end), so the outward normal points away from the axis for ccw
@@ -391,6 +436,30 @@ const emitTabPart = (
       }
     });
   });
+
+  // Each bore's wall: four quarter cylinders, facing in toward the axis.
+  for (const { bore, b, t: top } of boreRings) {
+    const up = b.pts.map((p, k) => lineEdge(p, top.pts[k]!));
+    const axis = placement(
+      w,
+      { x: bore.x, y: yc, z: bore.from - H },
+      { x: 0, y: 0, z: 1 },
+      { x: 1, y: 0, z: 0 },
+    );
+    const surf = w.emit(`CYLINDRICAL_SURFACE('',${ref(axis)},${real(bore.radius, factor)})`);
+    for (let k = 0; k < 4; k++) {
+      const k1 = (k + 1) % 4;
+      const loop: LoopEdge[] = [
+        { edge: b.edges[k]!, sense: true, from: b.pts[k]! },
+        { edge: up[k1]!, sense: true, from: b.pts[k1]! },
+        { edge: top.edges[k]!, sense: false, from: top.pts[k1]! },
+        { edge: up[k]!, sense: false, from: top.pts[k]! },
+      ];
+      const m = ((k + 0.5) * Math.PI) / 2;
+      // Material is outside the cylinder: outward points at the axis.
+      faces.push(faceAbout(w, surf, false, loop, { x: -Math.cos(m), y: -Math.sin(m), z: 0 }));
+    }
+  }
 
   const shell = w.emit(`CLOSED_SHELL('',${refs(faces)})`);
   return w.emit(`MANIFOLD_SOLID_BREP(${p21(name)},${ref(shell)})`);

@@ -14,6 +14,7 @@ import {
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
   defaultCanard,
+  defaultSingleFin,
   defaultFinDesign,
   futuresKind,
   flatFace,
@@ -307,11 +308,15 @@ export const setHand = (d: FinDesign, hand: FinHand): FinDesign =>
   d.position === 'centre' || d.hand === hand ? d : { ...d, hand };
 
 /** What a new fin can start as: a position's default fin, or the canard. */
-export type FinStart = FinPosition | 'canard';
+export type FinStart = FinPosition | 'canard' | 'single';
 
 /** A fresh starting fin (the designer's New fin menu). */
 export const newFin = (start: FinStart, hand: FinHand = 'left'): FinDesign =>
-  start === 'canard' ? defaultCanard(hand) : defaultFinDesign(start, hand);
+  start === 'canard'
+    ? defaultCanard(hand)
+    : start === 'single'
+      ? defaultSingleFin()
+      : defaultFinDesign(start, hand);
 
 /**
  * Where the toolbar's add-point button puts a new point: halfway along the span after
