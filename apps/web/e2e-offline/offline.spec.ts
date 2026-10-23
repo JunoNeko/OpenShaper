@@ -169,7 +169,10 @@ test.describe('offline editor', () => {
 
     await expect(fresh).toHaveTitle(/Offline/i);
     await expect(fresh.getByRole('heading', { level: 1 })).toContainText(/You're offline/i);
-    await expect(fresh.getByRole('link', { name: /design app/i })).toHaveAttribute('href', '/app');
+    await expect(fresh.getByRole('link', { name: 'Open OpenFinShaper' })).toHaveAttribute(
+      'href',
+      '/fin',
+    );
   });
 
   test('marketing routes serve real content when online', async ({ page, context }) => {
