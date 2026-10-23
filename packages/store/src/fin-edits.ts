@@ -14,6 +14,7 @@ import {
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
   defaultCanard,
+  finHasToe,
   defaultSingleFin,
   defaultFinDesign,
   futuresKind,
@@ -233,7 +234,8 @@ export const setCant = (d: FinDesign, deg: number): FinDesign => {
 
 /** Toe correction (deg, + toe in), clamped to ±FIN_MAX_TOE. */
 export const setToe = (d: FinDesign, deg: number): FinDesign => {
-  const toe = Math.min(FIN_MAX_TOE, Math.max(-FIN_MAX_TOE, deg));
+  // A centre or US box fin has none.
+  const toe = finHasToe(d) ? Math.min(FIN_MAX_TOE, Math.max(-FIN_MAX_TOE, deg)) : 0;
   // Snap away float noise from repeated quarter-degree steps.
   const snapped = Math.round(toe * 1e6) / 1e6;
   return snapped === d.toe ? d : { ...d, toe: snapped };

@@ -228,11 +228,14 @@ export default function DocsFinDesigner() {
             {mm(US_BOX_HEAD.maxLength)} long. Its front is a nose half the depth, ahead of the
             leading edge, with the {mm(US_BOX_HEAD.screwRadius * 2)} hole for the box&apos;s 8-32
             screw drilled down through it; behind the nose a {mm(US_BOX_HEAD.scoopRadius)} radius
-            curve sweeps down to the full depth, and the lower rear corner is rounded. The head
-            follows the fin: it runs from {mm(US_BOX_HEAD.noseAhead)} ahead of the leading edge to{' '}
-            {mm(US_BOX_HEAD.rearStub)} behind the trailing edge, kept within its length range, so
-            reshaping the fin reshapes the head. As the fin slides along the box itself, there is no
-            position on the head to choose, and the fore/aft arrows are hidden. No cant.
+            curve sweeps down to the full depth, and the lower rear corner is rounded. The
+            head&apos;s front follows the fin, {mm(US_BOX_HEAD.noseAhead)} ahead of the leading edge
+            (but never under {mm(US_BOX_HEAD.minLength)} long); its rear end stays put. A fin starts
+            with its trailing edge {mm(US_BOX_HEAD.rearStub)} ahead of that rear end. The position
+            arrows are forward and back only: they slide the blade along the head, back as far as
+            the head&apos;s rear end, forward until the head is {mm(US_BOX_HEAD.maxLength)} long. A
+            symmetric fin centred on the head has no side to slide to, so there are no left and
+            right arrows. No cant, and no toe.
           </Term>
         </Terms>
       </Section>
@@ -262,7 +265,9 @@ export default function DocsFinDesigner() {
             type the angle. Plus is more toe in: the leading edge turned toward the stringer, on
             either side, so a left and right pair match. <strong>From above</strong> looks down the
             blade, with an orange line along the tab: the box&apos;s direction to judge it by. A
-            flat inside face turned this way no longer lies exactly along the tab.
+            flat inside face turned this way no longer lies exactly along the tab. A centre fin and
+            a fin in a US box sit on the stringer, so they have no toe: the toe controls are greyed
+            out.
           </Term>
         </Terms>
       </Section>

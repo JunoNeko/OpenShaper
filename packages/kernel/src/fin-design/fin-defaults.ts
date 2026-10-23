@@ -28,7 +28,7 @@ import { RAD_TO_DEG } from '../constants';
 import { knot, type Knot } from '../knot';
 import { vec2, type Vec2 } from '../vec2';
 import { splineExtremes } from './curve-shape';
-import { FCS_SINGLE_TAB, US_BOX_HEAD, usBoxHeadLength } from './fin-tab';
+import { FCS_SINGLE_TAB, US_BOX_HEAD } from './fin-tab';
 import {
   FIN_MIN_THICKNESS,
   defaultFinBase,
@@ -251,8 +251,8 @@ export const defaultCanard = (hand: FinHand = 'left'): FinDesign => {
  * outline of the owner's reference photo (a raked longboard fin), traced from the photo
  * and fitted with five knots (within 2 mm of the trace everywhere, about 0.5 mm on
  * average). Mm, the trailing-edge root at 0. A symmetric foil (the centre section), 10 mm
- * thick at the root; no cant. The US box head follows it, so it is only moved to put the
- * head's rear end at x = 0.
+ * thick at the root; no cant. Placed with its trailing-edge root 25 mm ahead of the US
+ * box head's rear end.
  */
 const SINGLE_OUTLINE_MM: KnotRow[] = [
   [[153.5942, 0.0], [153.5942, 0.0], [129.3788, 13.688], false],
@@ -266,9 +266,9 @@ const SINGLE_OUTLINE_MM: KnotRow[] = [
 const SINGLE_ROOT_THICKNESS = 1.0;
 
 export const defaultSingleFin = (): FinDesign => {
-  const le = SINGLE_OUTLINE_MM[0]![0][0] * MM_TO_CM;
   const te = SINGLE_OUTLINE_MM[SINGLE_OUTLINE_MM.length - 1]![0][0] * MM_TO_CM;
-  const rear = le + US_BOX_HEAD.noseAhead - usBoxHeadLength(le, te);
+  // The trailing-edge root the usual stub ahead of the head's rear end.
+  const rear = te - US_BOX_HEAD.rearStub;
   return {
     position: 'centre',
     hand: null,

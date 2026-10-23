@@ -12,6 +12,7 @@
 import { valueAt, type Spline } from '../bezier-spline';
 import { slopeSigns, splineExtremes } from './curve-shape';
 import {
+  finHasToe,
   FIN_MAX_CANT,
   FIN_MAX_FRONT_OVERHANG,
   FIN_MAX_TOE,
@@ -23,7 +24,7 @@ import {
 } from './fin-design';
 import { finClearanceShortfall } from './fin-clearance';
 import { lateralOffsetRange } from './fin-placement';
-import { FIN_BASES, finTabOutline, futuresKind } from './fin-tab';
+import { FIN_BASES, US_BOX_HEAD, finTabOutline, futuresKind } from './fin-tab';
 
 export type FinIssueCode =
   | 'hand'
@@ -35,6 +36,7 @@ export type FinIssueCode =
   | 'front-overhang'
   | 'tab-rear'
   | 'tab-cover'
+  | 'head-length'
   | 'rear-clearance'
   | 'tab-contact'
   | 'section-ends'
@@ -99,8 +101,18 @@ const checkOutline = (d: FinDesign, issues: FinIssue[]): void => {
     if (le.x < -EPS) {
       issues.push({ code: 'tab-rear', message: 'The fin has slid off the back of the tab.' });
     }
-  } else if (d.base !== 'us-box' && (le.x < tab.length - EPS || te.x > EPS)) {
-    // (A US box head follows the fin, sticking out in front for the screw and behind.)
+  } else if (d.base === 'us-box') {
+    // The blade slides along the head: not off its back, and the head no longer than a box takes.
+    if (te.x < -EPS) {
+      issues.push({ code: 'tab-rear', message: 'The fin has slid off the back of the head.' });
+    }
+    if (le.x + US_BOX_HEAD.noseAhead > US_BOX_HEAD.maxLength + EPS) {
+      issues.push({
+        code: 'head-length',
+        message: `A US box head is at most ${US_BOX_HEAD.maxLength * 10} mm: move the fin back, or shorten its base.`,
+      });
+    }
+  } else if (le.x < tab.length - EPS || te.x > EPS) {
     // An FCS tab drops straight into its plug: the blade's root must cover all of it.
     issues.push({
       code: 'tab-cover',
@@ -268,7 +280,13 @@ export const validateFinDesign = (d: FinDesign): FinIssue[] => {
             : `Cant must be 0–${FIN_MAX_CANT}°.`,
     });
   }
-  if (!(Math.abs(d.toe ?? 0) <= FIN_MAX_TOE)) {
+  if (!finHasToe(d) && (d.toe ?? 0) !== 0) {
+    issues.push({
+      code: 'toe',
+      message:
+        d.position === 'centre' ? 'A centre fin has no toe.' : 'A fin in a US box has no toe.',
+    });
+  } else if (!(Math.abs(d.toe ?? 0) <= FIN_MAX_TOE)) {
     issues.push({ code: 'toe', message: `Toe correction must be within ±${FIN_MAX_TOE}°.` });
   }
   if (!FIN_BASES.includes(d.base)) {

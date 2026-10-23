@@ -35,6 +35,13 @@ export type FinHand = 'left' | 'right';
  */
 export const finOutward = (hand: FinHand | null): 1 | -1 => (hand === 'right' ? -1 : 1);
 
+/**
+ * Whether the fin can take a toe correction. A centre fin sits on the stringer and a
+ * US box fin is a centre single fin, so neither has toe: theirs is always 0.
+ */
+export const finHasToe = (d: { readonly position: FinPosition; readonly base: string }): boolean =>
+  d.position !== 'centre' && d.base !== 'us-box';
+
 /** The Futures tab each position uses by default. */
 export const finTabKind = (position: FinPosition): FuturesTabKind =>
   position === 'side' ? 'side' : 'centre';

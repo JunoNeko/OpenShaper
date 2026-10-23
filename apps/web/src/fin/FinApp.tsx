@@ -182,7 +182,8 @@ function Nudge({
 function NudgePad({ disabled = false }: { disabled?: boolean }) {
   const s = finStore.getState;
   const hand = useFinState(finStore, (st) => st.design?.hand ?? null);
-  // A US box head moves with the fin: there is no fore/aft place on it to choose.
+  // On a US box the blade slides along the head; a symmetric centre fin has no side to
+  // slide to, so the arrows are fore and aft only.
   const usBox = useFinState(finStore, (st) => st.design?.base === 'us-box');
   const across = (side: 'left' | 'right') => (acrossSign(hand, side) > 0 ? 'outboard' : 'inboard');
   return (
@@ -193,34 +194,34 @@ function NudgePad({ disabled = false }: { disabled?: boolean }) {
       aria-disabled={disabled}
     >
       <span className="mr-1 text-muted-foreground">Position</span>
+      <Nudge
+        id="fin-nudge-forward"
+        label={usBox ? 'Slide the blade forward along the head' : 'Move the fin forward'}
+        dir="↑"
+        act={() => s().nudgeFore(NUDGE_FORE_CM)}
+      />
+      <Nudge
+        id="fin-nudge-back"
+        label={usBox ? 'Slide the blade back along the head' : 'Move the fin back'}
+        dir="↓"
+        act={() => s().nudgeFore(-NUDGE_FORE_CM)}
+      />
       {!usBox && (
         <>
           <Nudge
-            id="fin-nudge-forward"
-            label="Move the fin forward"
-            dir="↑"
-            act={() => s().nudgeFore(NUDGE_FORE_CM)}
+            id="fin-nudge-left"
+            label={`Slide the blade left (${across('left')})`}
+            dir="←"
+            act={() => nudgeAcross(s(), 'left')}
           />
           <Nudge
-            id="fin-nudge-back"
-            label="Move the fin back"
-            dir="↓"
-            act={() => s().nudgeFore(-NUDGE_FORE_CM)}
+            id="fin-nudge-right"
+            label={`Slide the blade right (${across('right')})`}
+            dir="→"
+            act={() => nudgeAcross(s(), 'right')}
           />
         </>
       )}
-      <Nudge
-        id="fin-nudge-left"
-        label={`Slide the blade left (${across('left')})`}
-        dir="←"
-        act={() => nudgeAcross(s(), 'left')}
-      />
-      <Nudge
-        id="fin-nudge-right"
-        label={`Slide the blade right (${across('right')})`}
-        dir="→"
-        act={() => nudgeAcross(s(), 'right')}
-      />
     </div>
   );
 }
@@ -239,36 +240,51 @@ function ToeTools({
   label,
   view,
   onView,
+  noToe,
 }: {
   toe: number;
   onSet: (deg: number) => void;
   label: string;
   view: FinPreviewView;
   onView: (v: FinPreviewView) => void;
+  /** Why this fin has no toe, greying the toe controls (the view switch still works). */
+  noToe?: string;
 }) {
   return (
     <div className="flex items-center gap-1" role="group" aria-label="Toe">
-      <Tooltip label={`Toe out ${TOE_STEP}°: turn the leading edge away from the stringer`}>
+      <Tooltip
+        label={noToe ?? `Toe out ${TOE_STEP}°: turn the leading edge away from the stringer`}
+      >
         <Button
           variant="outline"
           size="icon"
           aria-label="Toe out"
+          disabled={!!noToe}
           onClick={() => onSet(toe - TOE_STEP)}
         >
           <RotateCcw className="h-4 w-4" />
         </Button>
       </Tooltip>
-      <Tooltip label={`Toe in ${TOE_STEP}°: turn the leading edge toward the stringer`}>
+      <Tooltip label={noToe ?? `Toe in ${TOE_STEP}°: turn the leading edge toward the stringer`}>
         <Button
           variant="outline"
           size="icon"
           aria-label="Toe in"
+          disabled={!!noToe}
           onClick={() => onSet(toe + TOE_STEP)}
         >
           <RotateCw className="h-4 w-4" />
         </Button>
       </Tooltip>
-      <DegField label={label} value={toe} onCommit={onSet} />
+      {noToe ? (
+        <Tooltip label={noToe}>
+          <div>
+            <DegField label={label} value={toe} onCommit={onSet} disabled />
+          </div>
+        </Tooltip>
+      ) : (
+        <DegField label={label} value={toe} onCommit={onSet} />
+      )}
       <Button
         size="sm"
         variant={view === 'above' ? 'default' : 'outline'}
@@ -452,6 +468,13 @@ function PlacementTools({
             label={`Toe (±${FIN_MAX_TOE}°)`}
             view={view}
             onView={onView}
+            noToe={
+              position === 'centre'
+                ? 'A centre fin has no toe'
+                : base === 'us-box'
+                  ? 'A fin in a US box has no toe'
+                  : undefined
+            }
           />
         </>
       )}
