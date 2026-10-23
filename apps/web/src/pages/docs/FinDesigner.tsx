@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import {
   FCS_SINGLE_TAB,
+  FCS1_BASE,
   FUTURES_TAB_HOLES,
   FIN_BASE_LABEL,
   FIN_MAX_CANT,
@@ -203,6 +204,17 @@ export default function DocsFinDesigner() {
             it has no slot, notch, front-overhang limit or rear clearance. The plug sets the cant
             (0°, 5° or 9°), so the fin has none: the cant field is greyed out. A fin moved onto it
             starts centred over the tab, and the tab must stay wholly under the fin&apos;s base.
+          </Term>
+          <Term name={FIN_BASE_LABEL['fcs-1']}>
+            Two {mm(FCS1_BASE.tabLength)} × {mm(FCS1_BASE.height)} × {mm(FCS1_BASE.thickness)} tabs,{' '}
+            {mm(FCS1_BASE.gap)} apart, their lower corners rounded to {mm(FCS1_BASE.cornerRadius)},
+            for the two plugs of an FCS 1 fin. FCS II plugs take FCS 1 fins too. Like the single tab
+            they drop straight in, the plugs set the cant so the fin has none, and both tabs must
+            stay wholly under the fin&apos;s base. FCS fins are aligned from the back: a fin moved
+            onto it starts with its trailing edge {mm(FCS1_BASE.rearBlade)} behind the rear tab, so
+            a bigger fin overhangs further at the front; a fin too short for that comes forward just
+            enough to cover the front tab. The tabs have no grub-screw hole, as on most aftermarket
+            fins.
           </Term>
         </Terms>
       </Section>

@@ -23,7 +23,7 @@
 import { NO_LAMINATE, prepareBlade, rootThickestFaces, type FinLaminate } from './blade';
 import { clearanceShortfall, rearClearance } from './fin-clearance';
 import { FIN_MAX_FRONT_OVERHANG, finOutward, type FinDesign } from './fin-design';
-import { finTabOutline, futuresKind, type FinBase } from './fin-tab';
+import { baseTrailingRoot, finTabOutline, futuresKind, type FinBase } from './fin-tab';
 import { splineFromKnots } from '../bezier-spline';
 import { knot } from '../knot';
 import { vec2, type Vec2 } from '../vec2';
@@ -136,8 +136,10 @@ export const nudgeLateral = (d: FinDesign, dy: number): FinDesign => {
 
 /**
  * The design moved onto another base, placed as that base's fins start: on an FCS single
- * tab, its root centred over the tab and no cant (the plug carries it); on a Futures
- * tab, rear-aligned (the trailing-edge root on the tab's rear end), its cant kept.
+ * tab, its root centred over the tab; on FCS 1, aligned from the back (the trailing-edge
+ * root 20.5 mm behind the rear tab), so a bigger fin overhangs at the
+ * front, and a smaller one comes forward to cover the front tab; both with no cant (the plug carries it). On a Futures tab, rear-aligned (the
+ * trailing-edge root on the tab's rear end), its cant kept.
  */
 export const placeOnBase = (d: FinDesign, base: FinBase): FinDesign => {
   if (base === d.base) return d;
@@ -146,7 +148,11 @@ export const placeOnBase = (d: FinDesign, base: FinBase): FinDesign => {
   const te = knots[knots.length - 1]!.end.x;
   const tab = finTabOutline(base);
   const fcs = !futuresKind(base);
-  const dx = fcs ? tab.length / 2 - (le + te) / 2 : -te;
+  const rear = baseTrailingRoot(base);
+  let dx = rear === null ? tab.length / 2 - (le + te) / 2 : rear - te;
+  // FCS 1: a fin too short for the usual spot comes forward just enough to cover the
+  // front tab (one too short for both tabs can't be placed, and says so).
+  if (base === 'fcs-1' && le + dx < tab.length) dx = Math.min(tab.length - le, -te);
   const moved = dx === 0 ? d : shiftOutline(d, dx);
   return { ...moved, base, cant: fcs ? 0 : d.cant };
 };

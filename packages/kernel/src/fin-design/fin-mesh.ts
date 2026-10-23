@@ -177,37 +177,40 @@ const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
   const tab = finTabOutline(d.base);
   const { height: H } = tab;
   const [yLo, yHi] = tabFacesY(d, o.laminate);
-  const profile = tabProfilePoints(tab.segments, o.arcTolerance);
-  const holes = tab.holes.map((h) => tabProfilePoints(h, o.arcTolerance));
   const m = builder();
-  // Tab frame (x, y up from the bottom) to the fin frame: z = y − H.
-  const side = (ring: readonly Vec2[], y: number) =>
-    ring.map((p) => m.add({ x: p.x, y, z: p.y - H }));
-  const rings = [profile, ...holes];
-  const lo = rings.map((r) => side(r, yLo));
-  const hi = rings.map((r) => side(r, yHi));
-  // The two sides: the profile less its holes.
-  const flatIds = (ids: number[][]) => ids.flat();
-  const tris = triangulateWithHoles(profile, holes);
-  for (const [a, b, c] of tris) {
-    const l = flatIds(lo);
-    const h = flatIds(hi);
-    m.tri(l[a]!, l[b]!, l[c]!, { x: 0, y: -1, z: 0 });
-    m.tri(h[a]!, h[b]!, h[c]!, { x: 0, y: 1, z: 0 });
-  }
-  // The walls round the profile and through each hole. Outward is right of travel for
-  // both: the profile runs counter-clockwise, each hole clockwise.
-  rings.forEach((ring, r) => {
-    const n = ring.length;
-    for (let i = 0; i < n; i++) {
-      const i1 = (i + 1) % n;
-      const dx = ring[i1]!.x - ring[i]!.x;
-      const dz = ring[i1]!.y - ring[i]!.y;
-      const out = { x: dz, y: 0, z: -dx };
-      m.tri(lo[r]![i]!, lo[r]![i1]!, hi[r]![i1]!, out);
-      m.tri(lo[r]![i]!, hi[r]![i1]!, hi[r]![i]!, out);
+  // Each tab its own closed shell (FCS 1 has two).
+  for (const part of tab.parts) {
+    const profile = tabProfilePoints(part.segments, o.arcTolerance);
+    const holes = part.holes.map((h) => tabProfilePoints(h, o.arcTolerance));
+    // Tab frame (x, y up from the bottom) to the fin frame: z = y − H.
+    const side = (ring: readonly Vec2[], y: number) =>
+      ring.map((p) => m.add({ x: p.x, y, z: p.y - H }));
+    const rings = [profile, ...holes];
+    const lo = rings.map((r) => side(r, yLo));
+    const hi = rings.map((r) => side(r, yHi));
+    // The two sides: the profile less its holes.
+    const flatIds = (ids: number[][]) => ids.flat();
+    const tris = triangulateWithHoles(profile, holes);
+    for (const [a, b, c] of tris) {
+      const l = flatIds(lo);
+      const h = flatIds(hi);
+      m.tri(l[a]!, l[b]!, l[c]!, { x: 0, y: -1, z: 0 });
+      m.tri(h[a]!, h[b]!, h[c]!, { x: 0, y: 1, z: 0 });
     }
-  });
+    // The walls round the profile and through each hole. Outward is right of travel for
+    // both: the profile runs counter-clockwise, each hole clockwise.
+    rings.forEach((ring, r) => {
+      const n = ring.length;
+      for (let i = 0; i < n; i++) {
+        const i1 = (i + 1) % n;
+        const dx = ring[i1]!.x - ring[i]!.x;
+        const dz = ring[i1]!.y - ring[i]!.y;
+        const out = { x: dz, y: 0, z: -dx };
+        m.tri(lo[r]![i]!, lo[r]![i1]!, hi[r]![i1]!, out);
+        m.tri(lo[r]![i]!, hi[r]![i1]!, hi[r]![i]!, out);
+      }
+    });
+  }
   return m.done();
 };
 
