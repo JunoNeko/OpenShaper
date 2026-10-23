@@ -7,7 +7,7 @@ import { finReadouts } from './fin-readouts';
 import { finMesh } from './fin-mesh';
 import { leadingRootRange, nudgeFore, placeOnBase, tabCentreY } from './fin-placement';
 import { validateFinDesign } from './fin-rules';
-import { FCS_SINGLE_TAB, FIN_BASES, finTabOutline, futuresKind } from './fin-tab';
+import { FCS1_BASE, FCS_SINGLE_TAB, FIN_BASES, finTabOutline, futuresKind } from './fin-tab';
 import { FUTURES_TABS } from './futures-tab';
 
 /** Every directed edge once, and its reverse once: closed and consistently wound. */
@@ -38,15 +38,16 @@ describe('finTabOutline', () => {
   it('is a plain 20.5 × 13.5 × 6.35 mm block for the FCS single tab', () => {
     const t = finTabOutline('fcs-single');
     expect([t.length, t.height, t.thickness]).toEqual([2.05, 1.35, 0.635]);
-    expect(t.segments).toHaveLength(4);
+    expect(t.parts).toHaveLength(1);
+    expect(t.parts[0]!.segments).toHaveLength(4);
     // Closed and counter-clockwise: positive signed area, equal to length × height.
     let area = 0;
-    for (const s of t.segments) area += s.from.x * s.to.y - s.to.x * s.from.y;
+    for (const s of t.parts[0]!.segments) area += s.from.x * s.to.y - s.to.x * s.from.y;
     expect(area / 2).toBeCloseTo(FCS_SINGLE_TAB.length * FCS_SINGLE_TAB.height, 12);
   });
 
   it('names a Futures kind only for the Futures bases', () => {
-    expect(FIN_BASES.map(futuresKind)).toEqual(['side', 'centre', null]);
+    expect(FIN_BASES.map(futuresKind)).toEqual(['side', 'centre', null, null]);
   });
 });
 
@@ -135,5 +136,87 @@ describe('the starting canard', () => {
     const m = finMesh(defaultCanard('right'));
     expect(closedAndOriented(m.blade)).toBe(true);
     expect(closedAndOriented(m.tab)).toBe(true);
+  });
+});
+
+describe('the FCS 1 base', () => {
+  const t = finTabOutline('fcs-1');
+  const { tabLength: l, gap, height: H, cornerRadius: r } = FCS1_BASE;
+  const signedArea = (segs: (typeof t.parts)[number]['segments']) => {
+    // Lines exactly; each quarter-circle corner adds its bulge beyond the chord.
+    let a = 0;
+    for (const s of segs) {
+      a += (s.from.x * s.to.y - s.to.x * s.from.y) / 2;
+      if (s.kind === 'arc') a += (s.radius * s.radius * (Math.PI / 2 - 1)) / 2;
+    }
+    return a;
+  };
+
+  it('is two 20.5 × 13.5 × 6.35 mm tabs, 33 mm apart: 74 mm overall', () => {
+    expect(t.length).toBeCloseTo(7.4, 12);
+    expect([t.height, t.thickness]).toEqual([1.35, 0.635]);
+    expect(t.parts).toHaveLength(2);
+    const xs = t.parts.map((p) => p.segments.flatMap((s) => [s.from.x, s.to.x]));
+    expect([Math.min(...xs[0]!), Math.max(...xs[0]!)]).toEqual([0, l]);
+    expect([Math.min(...xs[1]!), Math.max(...xs[1]!)]).toEqual([l + gap, 2 * l + gap]);
+    for (const p of t.parts) expect(p.holes).toEqual([]);
+  });
+
+  it('rounds each tab’s two lower corners to 1.5 mm, and is closed counter-clockwise', () => {
+    for (const p of t.parts) {
+      const arcs = p.segments.filter((s) => s.kind === 'arc');
+      expect(arcs).toHaveLength(2);
+      for (const a of arcs) expect(a.radius).toBe(r);
+      // Each segment starts where the last ended.
+      p.segments.forEach((s, i) => {
+        const prev = p.segments[(i + p.segments.length - 1) % p.segments.length]!;
+        expect(s.from).toEqual(prev.to);
+      });
+      expect(signedArea(p.segments)).toBeCloseTo(l * H - 2 * r * r * (1 - Math.PI / 4), 12);
+    }
+  });
+
+  it('places a fin from the back: its trailing edge 20.5 mm behind the rear tab, no cant', () => {
+    const d = placeOnBase(defaultFinDesign('side', 'left'), 'fcs-1');
+    const knots = d.outline.knots;
+    expect(knots[knots.length - 1]!.end.x).toBeCloseTo(-FCS1_BASE.rearBlade, 12);
+    expect(d.cant).toBe(0);
+    expect(validateFinDesign(d)).toEqual([]);
+  });
+
+  it('brings a fin too short for that forward, just enough to cover the front tab', () => {
+    const d = placeOnBase(defaultFinDesign('quad-rear', 'left'), 'fcs-1');
+    expect(d.outline.knots[0]!.end.x).toBeCloseTo(t.length, 12);
+    expect(validateFinDesign(d)).toEqual([]);
+  });
+
+  it('asks for both tabs under the base of a fin too short to cover them', () => {
+    const d = placeOnBase(defaultCanard('left'), 'fcs-1');
+    expect(validateFinDesign(d).map((i) => i.message)).toContain(
+      'Both tabs must sit wholly under the fin’s base.',
+    );
+  });
+
+  it('meshes each tab as its own closed shell, spanning the base', () => {
+    const m = finMesh(placeOnBase(defaultFinDesign('side', 'left'), 'fcs-1')).tab;
+    const xs: number[] = [];
+    for (let i = 0; i < m.positions.length; i += 3) xs.push(m.positions[i]!);
+    // Positions are stored as 32-bit floats.
+    expect(Math.min(...xs)).toBeCloseTo(0, 6);
+    expect(Math.max(...xs)).toBeCloseTo(t.length, 6);
+    // Nothing in the gap between the tabs.
+    expect(xs.some((x) => x > l + 1e-6 && x < l + gap - 1e-6)).toBe(false);
+    // Closed: every edge is shared by exactly two triangles.
+    const edges = new Map<string, number>();
+    for (let i = 0; i < m.indices.length; i += 3) {
+      const tri = [m.indices[i]!, m.indices[i + 1]!, m.indices[i + 2]!];
+      for (let k = 0; k < 3; k++) {
+        const a = tri[k]!;
+        const b = tri[(k + 1) % 3]!;
+        const key = a < b ? `${a},${b}` : `${b},${a}`;
+        edges.set(key, (edges.get(key) ?? 0) + 1);
+      }
+    }
+    expect([...edges.values()].every((n) => n === 2)).toBe(true);
   });
 });

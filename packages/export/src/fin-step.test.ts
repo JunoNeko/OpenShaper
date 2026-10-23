@@ -20,6 +20,7 @@ import {
   vec2,
   futuresTabOutline,
   finTabKind,
+  placeOnBase,
   prepareBlade,
   sectionLoop,
   tabCentreY,
@@ -479,5 +480,48 @@ describe('exportFinStep: laminate core', () => {
     const spread = (v: number[]) => Math.max(...v) - Math.min(...v);
     const wrapped = exportFinStep(d, { timestamp: FIXED, laminate: { ...laminate, tab: true } });
     expect(spread(ys(step)) - spread(ys(wrapped))).toBeCloseTo(2 * laminate.outside * MM, 6);
+  });
+});
+
+describe('exportFinStep: FCS 1 base', () => {
+  const d = placeOnBase(defaultFinDesign('side', 'left'), 'fcs-1');
+  const step = exportFinStep(d, { timestamp: FIXED });
+  const m = parse(step);
+  const solids = solidsOf(m);
+
+  it('writes the blade and each tab as its own solid', () => {
+    expect(solids.map((s) => s.name)).toEqual(['blade', 'tab-rear', 'tab-front']);
+    // Each tab: two sides, then one face per profile segment (four lines, two corners).
+    expect(solids[1]!.faces).toHaveLength(8);
+    expect(solids[2]!.faces).toHaveLength(8);
+  });
+
+  it.each([1, 2])('closes tab solid %i, each edge used once each way', (k) => {
+    const uses = new Map<number, boolean[]>();
+    for (const f of solids[k]!.faces) {
+      for (const [edge, sense] of allEdgesOf(m, f))
+        uses.set(edge, [...(uses.get(edge) ?? []), sense]);
+    }
+    for (const senses of uses.values()) expect(senses.sort()).toEqual([false, true]);
+  });
+
+  it('winds every flat tab face counter-clockwise about its outward normal', () => {
+    for (const solid of solids.slice(1)) {
+      for (const f of solid.faces) {
+        if (m.get(refOf(f.args[2]))!.name !== 'PLANE') continue;
+        const { normal } = faceNormal(m, f);
+        expect(dotV(newell(loopPolyline(m, f)), normal)).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('puts the tabs 33 mm apart, 74 mm overall, in mm', () => {
+    const xs = [...step.matchAll(/CARTESIAN_POINT\('',\(([^)]*)\)\)/g)].map((x) =>
+      Number(x[1]!.split(',')[0]),
+    );
+    // Tab corners are on the tab-top plane and below; the blade is above it.
+    expect(xs.some((x) => Math.abs(x - 20.5) < 1e-6)).toBe(true);
+    expect(xs.some((x) => Math.abs(x - 53.5) < 1e-6)).toBe(true);
+    expect(xs.some((x) => Math.abs(x - 74) < 1e-6)).toBe(true);
   });
 });

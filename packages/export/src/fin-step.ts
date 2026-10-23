@@ -2,7 +2,8 @@
 /**
  * STEP export of a designed fin: step 5 of docs/design/fin-designer.md.
  *
- * Two solids in one file, touching on the tab-top plane (z = 0):
+ * The blade and each tab as solids in one file, touching on the tab-top plane (z = 0).
+ * Two solids on a one-tab base; three on FCS 1 (`tab-rear`, `tab-front`):
  *
  * ```
  * blade  MANIFOLD_SOLID_BREP, 3 faces
@@ -39,6 +40,7 @@ import {
   type BladeSurfaceModel,
   type FinDesign,
   type FinLaminate,
+  type FinTabPart,
   type TabSegment,
   type Vert3,
 } from '@openshaper/kernel';
@@ -250,18 +252,34 @@ const emitBlade = (w: Writer, m: BladeSurfaceModel): number => {
 
 // --- tab ---
 
-const emitTab = (
+/** Each of the base's tabs as a solid: `tab`, or `tab-rear` and `tab-front` on FCS 1. */
+const emitTabs = (
   w: Writer,
   d: FinDesign,
   factor: number,
   laminate: FinLaminate | undefined,
-): number => {
+): number[] => {
   const tab = finTabOutline(d.base);
-  const { height: H } = tab;
+  const names =
+    tab.parts.length === 1
+      ? ['tab']
+      : tab.parts.map((_, i) => (i === 0 ? 'tab-rear' : 'tab-front'));
+  return tab.parts.map((part, i) => emitTabPart(w, d, part, names[i]!, factor, laminate));
+};
+
+const emitTabPart = (
+  w: Writer,
+  d: FinDesign,
+  part: FinTabPart,
+  name: string,
+  factor: number,
+  laminate: FinLaminate | undefined,
+): number => {
+  const { height: H } = finTabOutline(d.base);
   const sides = tabFacesY(d, laminate);
   // Tab frame (x, y up from the tab bottom) to the fin frame: z = y − H.
   const at = (p: { x: number; y: number }, y: number): Vert3 => ({ x: p.x, y, z: p.y - H });
-  const segs = tab.segments;
+  const segs = part.segments;
 
   const vertex = new Map<string, number>();
   const vtx = (p: Vert3): number => {
@@ -303,7 +321,7 @@ const emitTab = (
 
   // The profile and each weight-saving hole: closed rings of segments, the profile
   // counter-clockwise and each hole clockwise, so material is always on the left.
-  const rings = [segs, ...tab.holes];
+  const rings = [segs, ...part.holes];
   // Ring edges on each side, and the straight edge across the tab at each vertex.
   const edgesOn = rings.map((ring) =>
     sides.map((y) =>
@@ -375,12 +393,12 @@ const emitTab = (
   });
 
   const shell = w.emit(`CLOSED_SHELL('',${refs(faces)})`);
-  return w.emit(`MANIFOLD_SOLID_BREP(${p21('tab')},${ref(shell)})`);
+  return w.emit(`MANIFOLD_SOLID_BREP(${p21(name)},${ref(shell)})`);
 };
 
 /**
  * Encode a valid fin design (see `validateFinDesign`) as a STEP part-21 file: the
- * blade and the tab as two solids. Pure: the same inputs, including `timestamp`, give
+ * blade and each tab as solids. Pure: the same inputs, including `timestamp`, give
  * byte-identical output.
  */
 export const exportFinStep = (d: FinDesign, opts: FinStepOptions = {}): string => {
@@ -397,6 +415,6 @@ export const exportFinStep = (d: FinDesign, opts: FinStepOptions = {}): string =
   const defShape = productDefinition(w, name);
   const context = unitContext(w, unit);
   const blade = emitBlade(w, model);
-  const tab = emitTab(w, d, SHEET_UNIT[unit].factor, opts.laminate);
-  return finishShape(w, defShape, context, [blade, tab]);
+  const tabs = emitTabs(w, d, SHEET_UNIT[unit].factor, opts.laminate);
+  return finishShape(w, defShape, context, [blade, ...tabs]);
 };

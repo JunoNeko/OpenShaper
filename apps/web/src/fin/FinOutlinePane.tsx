@@ -28,13 +28,12 @@ const TAB_FILL = 'rgba(138,155,179,0.18)';
 const TAB_LINE = 'rgba(138,155,179,0.7)';
 const LIMIT = 'rgba(249,115,22,0.85)';
 
-/** The tab profile in the blade frame (tab top at y = 0), for drawing. */
-/** The tab profile and its holes in the blade frame (tab top at y = 0), for drawing. */
+/** Each tab's profile and its holes in the blade frame (tab top at y = 0), for drawing. */
 const tabPolygons = (base: FinBase) => {
   const tab = finTabOutline(base);
   const ring = (segs: Parameters<typeof tabProfilePoints>[0]) =>
     tabProfilePoints(segs, 0.002).map((p) => ({ x: p.x, y: p.y - tab.height }));
-  return [ring(tab.segments), ...tab.holes.map(ring)];
+  return tab.parts.flatMap((part) => [ring(part.segments), ...part.holes.map(ring)]);
 };
 
 export const FinOutlinePane = memo(function FinOutlinePane({

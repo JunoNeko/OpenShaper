@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   defaultFinDesign,
+  placeOnBase,
   finReadouts,
   knot,
   knotLock,
@@ -161,6 +162,20 @@ describe('.fin.json versions', () => {
     expect(doc.version).toBe(2);
     expect(readFinJson(writeFinJson(d)).design.toe).toBe(-1.25);
     expect(readFinJson(writeFinJson(defaultFinDesign('side'))).design.toe).toBe(0);
+  });
+
+  it('writes an FCS 1 fin with its base, and reads it back', () => {
+    const d = placeOnBase(defaultFinDesign('side', 'left'), 'fcs-1');
+    const doc = JSON.parse(writeFinJson(d));
+    expect(doc.base).toBe('fcs-1');
+    const back = readFinJson(writeFinJson(d)).design;
+    expect(back.base).toBe('fcs-1');
+    expect(back.cant).toBe(0);
+    // Its place on the base comes back too.
+    back.outline.knots.forEach((k, i) => {
+      expect(k.end.x).toBeCloseTo(d.outline.knots[i]!.end.x, 12);
+      expect(k.end.y).toBeCloseTo(d.outline.knots[i]!.end.y, 12);
+    });
   });
 
   it('reads a file without a base as its position’s Futures tab', () => {

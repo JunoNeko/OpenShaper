@@ -101,7 +101,13 @@ const checkOutline = (d: FinDesign, issues: FinIssue[]): void => {
     }
   } else if (le.x < tab.length - EPS || te.x > EPS) {
     // An FCS tab drops straight into its plug: the blade's root must cover all of it.
-    issues.push({ code: 'tab-cover', message: 'The tab must sit wholly under the fin’s base.' });
+    issues.push({
+      code: 'tab-cover',
+      message:
+        tab.parts.length > 1
+          ? 'Both tabs must sit wholly under the fin’s base.'
+          : 'The tab must sit wholly under the fin’s base.',
+    });
   }
   // Only meaningful once the outline itself is sound.
   if (issues.every((i) => i.code !== 'outline-root' && i.code !== 'outline-rising')) {
@@ -255,7 +261,7 @@ export const validateFinDesign = (d: FinDesign): FinIssue[] => {
       message: centre
         ? 'A centre fin has no cant.'
         : fcs
-          ? 'On an FCS single tab the plug sets the cant: the fin has none.'
+          ? 'On an FCS base the plug sets the cant: the fin has none.'
           : `Cant must be 0–${FIN_MAX_CANT}°.`,
     });
   }
