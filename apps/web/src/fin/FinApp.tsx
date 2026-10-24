@@ -144,6 +144,10 @@ const STARTS: { label: string; start: FinStart; hand?: FinHand }[] = [
   { label: 'Quad rear, right', start: 'quad-rear', hand: 'right' },
   { label: 'Centre', start: 'centre' },
   { label: 'Single fin (US box)', start: 'single' },
+  { label: 'Twin fin, left', start: 'twin', hand: 'left' },
+  { label: 'Twin fin, right', start: 'twin', hand: 'right' },
+  { label: 'Keel, left', start: 'keel', hand: 'left' },
+  { label: 'Keel, right', start: 'keel', hand: 'right' },
   { label: 'Canard, left (FCS single tab)', start: 'canard', hand: 'left' },
   { label: 'Canard, right (FCS single tab)', start: 'canard', hand: 'right' },
 ];
@@ -922,8 +926,11 @@ export function FinApp() {
     });
   }, []);
   const slotOf = (view: FinView) => order.indexOf(view);
+  // A new fin re-fits every view, even one with the same position and side as the last
+  // (the twin fin and keel are side fins, like the default).
+  const [starts, setStarts] = useState(0);
   // Re-fit a view's canvas when it moves between the large pane and a small one.
-  const sizeKey = (view: FinView) => (order[0] === view ? 'large' : 'small');
+  const sizeKey = (view: FinView) => `${order[0] === view ? 'large' : 'small'}-${starts}`;
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -946,7 +953,9 @@ export function FinApp() {
             aria-label="Start a new fin"
             onChange={(e) => {
               const start = STARTS[Number(e.target.value)];
-              if (start) finStore.getState().newFin(start.start, start.hand);
+              if (!start) return;
+              finStore.getState().newFin(start.start, start.hand);
+              setStarts((n) => n + 1);
             }}
           >
             <option value="" disabled>

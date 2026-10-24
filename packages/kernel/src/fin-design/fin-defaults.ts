@@ -247,6 +247,131 @@ export const defaultCanard = (hand: FinHand = 'left'): FinDesign => {
 };
 
 /**
+ * The owner's twin fin and keel (October 2026), as they drew them: side fins on the
+ * Futures 3/4" tab, 7° cant, rear-aligned, each with a raised rear overhanging behind
+ * the tab, the shape testers found hard to draw. Knot rows as the canard's (mm); the
+ * canard's foil (flat inside), to their files' precision, and one thickness curve, 8 mm at the root to
+ * 1 mm at the tip. Left and right share the outline; the hand only turns the outside face.
+ */
+const TWIN_OUTLINE_MM: KnotRow[] = [
+  [
+    [116.99999276099496, 0.0],
+    [116.99999276099496, 0.0],
+    [102.94150296356943, 37.1820195958229],
+    false,
+  ],
+  [
+    [-27.626223628711436, 135.6281120658242],
+    [28.58240494874309, 134.55446533101522],
+    [-39.26085771159139, 135.8502231025827],
+    true,
+  ],
+  [
+    [-50.55995952150825, 115.04919106624436],
+    [-54.8009434746462, 130.1087317315255],
+    [-47.110304160886834, 102.79962215522673],
+    true,
+  ],
+  [
+    [-10.502752135511361, 55.20807021521889],
+    [-15.691718211820934, 88.8655331986564],
+    [-7.032189775215459, 32.69677943868578],
+    true,
+  ],
+  [
+    [-14.614184834761321, 4.087931710516571],
+    [-11.996403842834397, 15.73405621585357],
+    [-4.814798265666375, 1.5071639151127765],
+    false,
+  ],
+  [[0.0, 0.0], [-0.16302843952179874, 1.4458450472269888], [0.0, 0.0], false],
+];
+
+const KEEL_OUTLINE_MM: KnotRow[] = [
+  [
+    [116.99999276099496, 0.0],
+    [116.99999276099496, 0.0],
+    [93.63027760294568, 39.76544692357337],
+    false,
+  ],
+  [
+    [-42.54981796236179, 123.15102307921643],
+    [24.00580794317579, 123.74218057385363],
+    [-56.19371144052175, 123.02983588014939],
+    true,
+  ],
+  [
+    [-73.14243687963844, 112.95982102387583],
+    [-68.39159015855229, 119.7848359046655],
+    [-75.63636609658984, 109.3770693552558],
+    true,
+  ],
+  [
+    [-73.60025148741552, 99.27779307478147],
+    [-77.97509783448366, 103.4973287430475],
+    [-67.0674510667459, 92.97691249479216],
+    true,
+  ],
+  [
+    [-38.90051018773946, 64.17190700360482],
+    [-46.80119531225473, 88.00073676307527],
+    [-30.84726487056596, 39.88294868545475],
+    true,
+  ],
+  [
+    [-44.313466111162505, 16.5535202790884],
+    [-39.80619063668576, 25.001001140648164],
+    [-36.95298877982102, 5.108120243966843],
+    false,
+  ],
+  [[0.0, 0.0], [-2.3472160136134317, 0.511499809676722], [0.0, 0.0], false],
+];
+
+const TWIN_KEEL_TAPER_MM: KnotRow[] = [
+  [[0.0, 8.0], [0.0, 8.0], [0.2333333333333333, 6.666666666666668], false],
+  [
+    [0.7, 4.0],
+    [0.4666666666666666, 5.333333333333334],
+    [0.7999999999999999, 3.428571428571429],
+    true,
+  ],
+  [[1.0, 1.0], [0.9, 1.7500000000000002], [1.0, 1.0], false],
+];
+
+/** The twin fin's and keel's foil, in chords: the canard's, to the precision of their files. */
+const TWIN_KEEL_OUTSIDE: KnotRow[] = [
+  [[0.0, 0.0], [0.0, 0.0], [0.0005226006191950464, 0.05121550679768475], false],
+  [
+    [0.36508278368555663, 0.11804549737515144],
+    [0.15523219814241487, 0.11804549737515144],
+    [0.6808722573697671, 0.11804549737515144],
+    true,
+  ],
+  [[1.0, 0.0], [0.9798088571813165, 0.008321442993673442], [1.0, 0.0], false],
+];
+
+const ownerSideFin = (outline: KnotRow[], hand: FinHand): FinDesign => ({
+  position: 'side',
+  hand,
+  cant: 7,
+  base: defaultFinBase('side'),
+  toe: 0,
+  outline: rowsToSpline(outline, MM_TO_CM, MM_TO_CM),
+  lateralOffset: 0,
+  section: { outside: rowsToSpline(TWIN_KEEL_OUTSIDE, 1, 1), inside: flatFace() },
+  slices: [],
+  taper: rowsToSpline(TWIN_KEEL_TAPER_MM, 1, MM_TO_CM),
+});
+
+/** The starting twin fin: tall and raked, its rear overhanging behind the tab. */
+export const defaultTwinFin = (hand: FinHand = 'left'): FinDesign =>
+  ownerSideFin(TWIN_OUTLINE_MM, hand);
+
+/** The starting keel: long and low, its raised rear running well back behind the tab. */
+export const defaultKeel = (hand: FinHand = 'left'): FinDesign =>
+  ownerSideFin(KEEL_OUTLINE_MM, hand);
+
+/**
  * The starting single fin, for a longboard's US box: an 8" (203.2 mm) deep fin with the
  * outline of the owner's reference photo (a raked longboard fin), traced from the photo
  * and fitted with five knots (within 2 mm of the trace everywhere, about 0.5 mm on

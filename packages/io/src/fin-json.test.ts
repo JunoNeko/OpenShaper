@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   defaultFinDesign,
+  defaultKeel,
   defaultSingleFin,
+  defaultTwinFin,
   placeOnBase,
   finReadouts,
   knot,
@@ -279,6 +284,45 @@ describe('.fin.json rejects damaged files', () => {
     const d = { ...defaultFinDesign('side', 'right'), cant: 30 };
     expect(validateFinDesign(readFinJson(writeFinJson(d)).design).map((i) => i.code)).toEqual([
       'cant',
+    ]);
+  });
+});
+
+describe('the owner’s twin fin and keel', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const owner = (name: string) =>
+    readFinJson(readFileSync(resolve(here, `../../../docs/specs/fins/${name}.fin.json`), 'utf8'))
+      .design;
+
+  /** Every knot's point and handles, flat, in cm. */
+  const coords = (s: { knots: readonly { end: Vec; tangentToPrev: Vec; tangentToNext: Vec }[] }) =>
+    s.knots.flatMap((k) => [k.end, k.tangentToPrev, k.tangentToNext].flatMap((p) => [p.x, p.y]));
+  type Vec = { x: number; y: number };
+  // The file is mm and the reader divides by 10; the starting fins multiply by 0.1, which
+  // can differ in the last bit. A millionth of a millimetre is the same drawing.
+  const same = (a: number[], b: number[]) => {
+    expect(a).toHaveLength(b.length);
+    a.forEach((v, i) => expect(v).toBeCloseTo(b[i]!, 7));
+  };
+
+  it.each([
+    ['twin_fin_default', defaultTwinFin],
+    ['keel_default', defaultKeel],
+  ] as const)('starts %s exactly as the owner drew it', (name, make) => {
+    const drawn = owner(name);
+    const start = make('right');
+    same(coords(start.outline), coords(drawn.outline));
+    expect(start.outline.knots.map((k) => k.continuous)).toEqual(
+      drawn.outline.knots.map((k) => k.continuous),
+    );
+    same(coords(start.taper), coords(drawn.taper));
+    same(coords(start.section.outside), coords(drawn.section.outside));
+    same(coords(start.section.inside!), coords(drawn.section.inside!));
+    expect([start.position, start.hand, start.cant, start.base]).toEqual([
+      drawn.position,
+      drawn.hand,
+      drawn.cant,
+      drawn.base,
     ]);
   });
 });

@@ -55,7 +55,9 @@ export * from './fin-design/fin-mesh';
 export {
   defaultCanard,
   defaultFinDesign,
+  defaultKeel,
   defaultSingleFin,
+  defaultTwinFin,
   defaultTaper,
   flatFace,
 } from './fin-design/fin-defaults';

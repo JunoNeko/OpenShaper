@@ -83,6 +83,14 @@ export default function DocsFinDesigner() {
             cant.
           </Term>
           <Term name="Centre">The {mm(centre.height)} tab, upright, with a symmetric foil.</Term>
+          <Term name="Twin fin, left or right">
+            A tall, raked twin fin on the side tab, with cant, its rear running out behind the tab
+            over a raised underside. A starting point for the rear overhang twins and keels need.
+          </Term>
+          <Term name="Keel, left or right">
+            A long, low keel on the side tab, with cant, its raised rear running well back behind
+            the tab.
+          </Term>
           <Term name="Canard, left or right">
             A small fin on the FCS single tab (see <a href="#base">The base</a>), its base centred
             over the tab, with a flat inside face and no cant: the plug carries it.
