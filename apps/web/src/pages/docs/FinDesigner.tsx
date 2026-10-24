@@ -141,12 +141,14 @@ export default function DocsFinDesigner() {
             <strong>Inside</strong> boxes at the top left of the foil view say how the thickness is
             shared, the way shapers describe a foil: 70 / 30 is 70% of the thickness above the chord
             line and 30% below. Type either and the other follows; Enter builds the foil as a
-            rounded leading edge on each face, its radius that face&apos;s share of the thickness,
-            then a straight line on to the trailing edge. Each face gets a point halfway round its
-            radius and one where it meets the line, to reshape it from. The radii are true to the
-            fin: its thickness and chord at the root, or at the slice being edited. The split goes
-            from 100 / 0 down to 51 / 49: an even split is a symmetric foil, which has its own
-            button.
+            rounded leading edge on each face, as tall as that face&apos;s share of the thickness,
+            then a straight line on to the trailing edge. The radii look round in the foil view,
+            which draws thickness four times over; in the fin each is four times longer than it is
+            tall, a fine nose with the thickest point about a sixth of the way back. Each face gets
+            a point halfway round its radius and one where it meets the line, to reshape it from.
+            The sizes are true to the fin: its thickness and chord at the root, or at the slice
+            being edited. The split goes from 100 / 0 down to 51 / 49: an even split is a symmetric
+            foil, which has its own button.
           </Term>
           <Term name="Symmetric">
             The same curve on both faces — always the case on a centre fin.

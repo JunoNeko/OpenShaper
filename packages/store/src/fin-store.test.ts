@@ -6,6 +6,7 @@ import {
   defaultFinDesign,
   finReadouts,
   foilShare,
+  SPLIT_NOSE_ASPECT,
   validateFinDesign,
   vec2,
   type FinDesign,
@@ -489,7 +490,10 @@ describe('fin store: outside / inside split', () => {
     // The leading edge leaves straight up into a radius 70% of the root thickness, in chords.
     const k = sec.outside.knots;
     const radius = (0.7 * root) / r.rootChord;
-    expect(Math.hypot(k[1]!.end.x - radius, k[1]!.end.y)).toBeCloseTo(radius, 9);
+    expect(Math.hypot(k[1]!.end.x / SPLIT_NOSE_ASPECT - radius, k[1]!.end.y)).toBeCloseTo(
+      radius,
+      9,
+    );
     expect(validateFinDesign(design(s))).toEqual([]);
     expect(s.getState().past.at(-1)!.label).toBe('Foil 70 / 30');
   });
