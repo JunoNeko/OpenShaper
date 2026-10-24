@@ -82,7 +82,7 @@ user signs off before anything depends on it.
     curves can be edited, so cambered or concave-inside foils are possible.
   - **NACA presets** (`naca.ts`): NACA 4-digit (camber, camber position, thickness)
     generates both curves, which stay editable afterwards. The convex face is the
-    outside face; 00XX is symmetric. Closed trailing edge (the blade's 1 mm minimum
+    outside face; 00XX is symmetric. Closed trailing edge (the blade's minimum thickness
     blunts it), and thickness applied square to the chord rather than the camber
     line, so a cambered face never curls back past its leading edge: within 0.16%
     chord of the textbook shape for a 2412, 0.35% for a 4412. Other series can be
@@ -98,9 +98,11 @@ user signs off before anything depends on it.
   - Usually straight, then curving near the tip; that curve is how flex is controlled.
   - Example: if the taper says 8 mm at 15 mm below the tip, the section there is
     scaled to 8 mm thick.
-- **Minimum thickness 1 mm** at the leading edge, trailing edge and tip, for rider
-  safety and because some 3D printing materials can't hold a thinner wall (raised from
-  0.5 mm after user feedback, October 2026). Sections are closed shapes (rounded leading edge, blunt trailing edge), never
+- **Minimum thickness 0.5 mm** at the leading edge, trailing edge and tip while
+  designing, close to a hand-finished edge. Exports have their own minimum, 1 mm by
+  default (0.5–3 mm): some 3D printing materials can't hold a thinner wall. (Raised to
+  1 mm in the design in October 2026, then moved to the export, as it got in the way of
+  seeing the finished fin.) Sections are closed shapes (rounded leading edge, blunt trailing edge), never
   knife edges.
 - **Cant:** the lean of the blade relative to the tab, 0–20°, typed by the user. Futures
   builds cant into the fin (FCS builds it into the box).
@@ -199,7 +201,7 @@ tab    14 faces: two flat sides, then one face per profile segment: PLANE for a 
        CYLINDRICAL_SURFACE for the slot end and the R1.0 corner
 ```
 
-- **One wrapped surface, not two skins.** The 1 mm minimum makes the edges blunt,
+- **One wrapped surface, not two skins.** The minimum thickness makes the edges blunt,
   so each section is a closed loop with four corners. One surface with C0 knots at
   the corners (`uBreaks`) shares its edges with itself and the caps exactly, the way
   the board's two patches share the stringer. Corners in the outline or taper crease

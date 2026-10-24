@@ -11,7 +11,8 @@
  *   neither scales the other.
  *
  * Then two adjustments:
- * - **Minimum thickness:** nowhere thinner than {@link FIN_MIN_THICKNESS}. The foil is
+ * - **Minimum thickness:** nowhere thinner than {@link PreparedBlade.minThickness}: the
+ *   design minimum ({@link FIN_MIN_THICKNESS}), or an export's. The foil is
  *   scaled to the taper's thickness less the minimum, then the minimum is added all the
  *   way along: symmetric foils half to each face, so they stay symmetric; any other foil
  *   to the outside, so a flat inside face stays flat. The faces stay as convex as the
@@ -91,6 +92,11 @@ export interface PreparedBlade {
   readonly design: FinDesign;
   /** Laminate the blade is the core of; {@link NO_LAMINATE} for the finished fin. */
   readonly laminate: FinLaminate;
+  /**
+   * Thinnest the blade gets (cm): the design minimum, or an export's (never less).
+   * The edges and tip come up to it; the thickest point stays on the taper.
+   */
+  readonly minThickness: number;
   /** Height of the tip above the tab top (cm). */
   readonly depth: number;
   /** Chord fraction where the section shape is thickest. */
@@ -288,12 +294,17 @@ export const foilAt = (d: FinDesign, eta: number): Foil => {
  * Work out the height-independent parts of the blade. The design must pass
  * `validateFinDesign`; the result is undefined otherwise.
  */
-export const prepareBlade = (d: FinDesign, laminate: FinLaminate = NO_LAMINATE): PreparedBlade => {
+export const prepareBlade = (
+  d: FinDesign,
+  laminate: FinLaminate = NO_LAMINATE,
+  minThickness: number = FIN_MIN_THICKNESS,
+): PreparedBlade => {
   const { at, thickness } = sectionThickest(d.section);
   const cant = d.cant * DEG_TO_RAD;
   return {
     design: d,
     laminate,
+    minThickness: Math.max(FIN_MIN_THICKNESS, minThickness),
     depth: splineExtremes(d.outline, 'y').max.point.y,
     thickestAt: at,
     shapeThickness: thickness,
@@ -545,7 +556,7 @@ export const bladeRowHeights = (
  */
 export const rootThickestFaces = (b: PreparedBlade): { outside: number; inside: number } => {
   const foil = foilAt(b.design, 0);
-  const m = FIN_MIN_THICKNESS;
+  const m = b.minThickness;
   const t = thicknessAt(b, 0);
   const scale = foil.thickest.thickness > 0 ? Math.max(0, t - m) / foil.thickest.thickness : 0;
   const [o, i] = foil.shapeAt(foil.thickest.at);
@@ -703,7 +714,7 @@ export const bladeSection = (
   const foil = foilAt(b.design, b.depth > 0 ? h / b.depth : 0);
   const thickestShape =
     foil.thickest.at <= end ? foil.thickest.thickness : foil.shapeAt(end)[0] - foil.shapeAt(end)[1];
-  const m = FIN_MIN_THICKNESS;
+  const m = b.minThickness;
   const scale = thickestShape > 0 ? Math.max(0, thickness - m) / thickestShape : 0;
   const turn = toeTurn(b);
   // Cant and toe here: the fin's own, unless a slice changes them (twistAt).

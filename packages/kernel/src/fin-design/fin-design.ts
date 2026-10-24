@@ -64,10 +64,18 @@ export const FIN_MAX_CANT = 20;
 export const FIN_MAX_FRONT_OVERHANG = 0.4;
 
 /**
- * Thinnest the blade may get anywhere — edges and tip — for rider safety and so it
- * prints: some 3D printing materials can't hold a wall under 1 mm (cm).
+ * Thinnest the blade may get anywhere while designing — edges and tip (cm): 0.5 mm,
+ * close to a hand-finished edge, and enough edge for the surface to stay a closed shape
+ * (a knife edge breaks CAD imports). Exports can thicken it ({@link FIN_EXPORT_MIN_THICKNESS}).
  */
-export const FIN_MIN_THICKNESS = 0.1;
+export const FIN_MIN_THICKNESS = 0.05;
+
+/**
+ * The export's minimum thickness (cm): what STEP, STL and core exports thicken the edges
+ * and tip to, without changing the design. 1 mm by default, as some 3D printing materials
+ * can't hold a thinner wall; from the design minimum up to 3 mm.
+ */
+export const FIN_EXPORT_MIN_THICKNESS = { default: 0.1, min: FIN_MIN_THICKNESS, max: 0.3 } as const;
 
 /**
  * The horizontal foil, as two faces offset from the chord line. Frame: x = chord fraction

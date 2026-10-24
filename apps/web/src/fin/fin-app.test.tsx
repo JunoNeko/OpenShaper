@@ -429,6 +429,29 @@ describe('FinApp: export', () => {
     expect(saved.thickness).toBeCloseTo(0.02, 12);
   }, 20_000);
 
+  it('has an export minimum, 1 mm by default, kept within 0.5–3 mm and remembered', () => {
+    localStorage.removeItem('bs.fin.exportMin');
+    const { unmount } = render(<FinApp />);
+    const field = () => screen.getByLabelText('Export minimum thickness') as HTMLInputElement;
+    expect(field().value).toBe('1.0');
+    for (const [typed, shown] of [
+      ['0.2', '0.5'],
+      ['5', '3.0'],
+      ['1.5', '1.5'],
+    ] as const) {
+      fireEvent.change(field(), { target: { value: typed } });
+      fireEvent.keyDown(field(), { key: 'Enter' });
+      expect(field().value).toBe(shown);
+    }
+    expect(JSON.parse(localStorage.getItem('bs.fin.exportMin')!)).toBeCloseTo(0.15, 9);
+    unmount();
+    render(<FinApp />);
+    expect(field().value).toBe('1.5');
+    // The core export says what it won't go under.
+    fireEvent.click(screen.getByRole('button', { name: 'Export core…' }));
+    expect(screen.getByText(/never goes under the export minimum, 1\.50 mm/)).toBeTruthy();
+  });
+
   it(
     'is unavailable while the fin breaks a rule',
     () => {

@@ -77,6 +77,11 @@ export interface FinStepOptions {
   tolerance?: number;
   /** Write the blade, and the tab if it wraps it, as the core under this laminate (cm per face). */
   laminate?: FinLaminate;
+  /**
+   * Thicken the edges and tip to at least this (cm) in the file only, e.g. 0.1 for a
+   * 1 mm printable edge. Never under the design minimum, which is the default.
+   */
+  minThickness?: number;
 }
 
 const sub = (a: Vert3, b: Vert3): Vert3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
@@ -477,6 +482,7 @@ export const exportFinStep = (d: FinDesign, opts: FinStepOptions = {}): string =
   const model = fitBladeSurface(d, {
     ...(opts.tolerance === undefined ? {} : { tolerance: opts.tolerance }),
     ...(opts.laminate ? { laminate: opts.laminate } : {}),
+    ...(opts.minThickness === undefined ? {} : { minThickness: opts.minThickness }),
   });
 
   const w = writerFor(unit);

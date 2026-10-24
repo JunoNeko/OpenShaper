@@ -8,6 +8,7 @@ import {
   FIN_MAX_CANT,
   FIN_MAX_TOE,
   FIN_MAX_FRONT_OVERHANG,
+  FIN_EXPORT_MIN_THICKNESS,
   FIN_MIN_THICKNESS,
   FUTURES_TABS,
   rearClearance,
@@ -336,7 +337,9 @@ export default function DocsFinDesigner() {
             safe to bump into and something a cutter can make. The foil is shaped to the thickness
             curve less this, and this is added all the way along, so the faces stay curved right to
             edges that end at {mm(FIN_MIN_THICKNESS)}. A sharp bend in the outline — a hooked tip,
-            say — reshapes the blade only near that edge, rather than creasing it right across.
+            say — reshapes the blade only near that edge, rather than creasing it right across. This
+            is the design&apos;s minimum, close to a hand-finished edge; exports can thicken it (see{' '}
+            <a href="#export">Export min</a>).
           </Term>
           <Term name="One clean shape">
             The edges keep rising to a single tip, and the foil&apos;s faces never cross.
@@ -362,6 +365,16 @@ export default function DocsFinDesigner() {
 
       <Section id="export" title="Exporting for CNC and printing">
         <Terms>
+          <Term name="Export min">
+            The thinnest the exported fin gets, beside the Export buttons:{' '}
+            {mm(FIN_EXPORT_MIN_THICKNESS.default)} by default, from{' '}
+            {mm(FIN_EXPORT_MIN_THICKNESS.min)} to {mm(FIN_EXPORT_MIN_THICKNESS.max)}. STEP, STL and
+            core exports thicken the edges and tip to at least this in the file, the thickest point
+            staying on your thickness curve; the design itself keeps its {mm(FIN_MIN_THICKNESS)}{' '}
+            edges, so you can see the fin as it will be once sharpened. Some 3D printing materials
+            can&apos;t hold a wall under 1 mm; for a CNC file with the edges as designed, set it to{' '}
+            {mm(FIN_MIN_THICKNESS)}. Remembered on this device.
+          </Term>
           <Term name="STEP">
             For CNC. True curved surfaces, in millimetres: the blade and the tab as two solids that
             meet on the tab top. In Fusion 360 or similar, Combine / Join them into one body before
@@ -378,17 +391,17 @@ export default function DocsFinDesigner() {
             laminate&apos;s thickness per face (one ply of 200 gsm uni is about 0.20–0.25 mm; add
             plies up) and which faces it goes on: outside, inside or both. The blade is made thinner
             by that much on those faces, so with the laminate on it matches your design, and
-            exported as STEP or STL in files ending <code>-core</code>. It never goes under{' '}
-            {mm(FIN_MIN_THICKNESS)}. A laminated face is always thinned by the full laminate, edges
-            included, so a flat inside face stays flat and flush with a wrapped tab. Near the edges,
-            where the blade is already close to the minimum, the face with less laminate is left
-            thicker to make it up (the bare face if only one is laminated; half each if both are
-            equally), so the edges come out a little thicker on that side once laminated. The tab is
-            unchanged unless you tick Include the tab: then the laminate wraps over the base, where
-            the fin leaves the box (a likely snap point in PLA and similar), and the tab&apos;s
-            laminated faces are thinned by the same amount so it still fits the box. That suits a
-            flat inside face, which runs straight on into the tab; the outside usually meets the tab
-            at too sharp a step for laminate to follow.
+            exported as STEP or STL in files ending <code>-core</code>. It never goes under the
+            Export min. A laminated face is always thinned by the full laminate, edges included, so
+            a flat inside face stays flat and flush with a wrapped tab. Near the edges, where the
+            blade is already close to the minimum, the face with less laminate is left thicker to
+            make it up (the bare face if only one is laminated; half each if both are equally), so
+            the edges come out a little thicker on that side once laminated. The tab is unchanged
+            unless you tick Include the tab: then the laminate wraps over the base, where the fin
+            leaves the box (a likely snap point in PLA and similar), and the tab&apos;s laminated
+            faces are thinned by the same amount so it still fits the box. That suits a flat inside
+            face, which runs straight on into the tab; the outside usually meets the tab at too
+            sharp a step for laminate to follow.
           </Term>
         </Terms>
         <p>Export is unavailable while the fin breaks a rule; the readouts say which.</p>

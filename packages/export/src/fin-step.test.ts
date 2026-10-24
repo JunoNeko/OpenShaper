@@ -578,3 +578,20 @@ describe('exportFinStep: US box head', () => {
     expect(Math.max(...xs)).toBeCloseTo((t.rear + t.length) * MM, 6);
   });
 });
+
+describe('exportFinStep: export minimum thickness', () => {
+  const d = defaultFinDesign('side', 'left');
+
+  it('writes the blade with the edges thickened to the export minimum', () => {
+    const step = exportFinStep(d, { timestamp: FIXED, minThickness: 0.1 });
+    const m = parse(step);
+    const surf = [...m.values()].find((e) => e.name === 'B_SPLINE_SURFACE_WITH_KNOTS')!;
+    const s = decodeSurface(surf, m, 1 / MM);
+    const model = fitBladeSurface(d, { minThickness: 0.1 });
+    // It is the thickened blade, not the design's.
+    expect(
+      bladeSurfaceDeviation(prepareBlade(d, undefined, 0.1), s, model.topZ),
+    ).toBeLessThanOrEqual(BLADE_CI_TOLERANCE);
+    expect(step).not.toBe(exportFinStep(d, { timestamp: FIXED }));
+  });
+});

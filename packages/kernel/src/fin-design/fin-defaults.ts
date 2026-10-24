@@ -20,7 +20,7 @@
  *   foil (fin-placement.ts).
  * - Side and quad-rear inside faces are flat, per the owner. The sources' inside curves
  *   are not used.
- * - The taper is straight to 70% of the depth, then curves to the 1 mm minimum at the
+ * - The taper is straight to 70% of the depth, then curves to the 0.5 mm minimum at the
  *   tip, the shape the owner describes. FinFoil's own taper is flat, then rolls off.
  */
 import { splineFromKnots, type Spline } from '../bezier-spline';
@@ -209,7 +209,7 @@ const CANARD_OUTSIDE: KnotRow[] = [
 const CANARD_TAPER_MM: KnotRow[] = [
   [[0.0, 8.0], [0.0, 8.0], [0.233333, 6.66667], false],
   [[0.7, 4.0], [0.466667, 5.33333], [0.8, 3.42857], true],
-  [[1.0, 1.0], [0.952625, 2.33594], [1.0, 1.0], false],
+  [[1.0, 0.5], [0.952625, 2.33594], [1.0, 0.5], false],
 ];
 
 const MM_TO_CM = 0.1;

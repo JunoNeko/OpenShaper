@@ -2,7 +2,13 @@
 /** The blade as a core under a bagged laminate (FinLaminate in blade.ts). */
 import { describe, expect, it } from 'vitest';
 import { DEG_TO_RAD } from '../constants';
-import { bladeSection, prepareBlade, type BladeSection, type FinLaminate } from './blade';
+import {
+  NO_LAMINATE,
+  bladeSection,
+  prepareBlade,
+  type BladeSection,
+  type FinLaminate,
+} from './blade';
 import { defaultCanard, defaultFinDesign } from './fin-defaults';
 import { FIN_MIN_THICKNESS, finOutward, type FinDesign } from './fin-design';
 import { finMesh } from './fin-mesh';
@@ -167,5 +173,28 @@ describe('the blade as a laminate core', () => {
       };
       expect(ys(finMesh(d, { laminate: lam }))).toBeCloseTo(t - 2 * LAM, 6);
     });
+  });
+});
+
+describe('an export’s minimum thickness', () => {
+  const d = defaultFinDesign('side', 'left');
+  const edges = (s: BladeSection) => {
+    const last = s.outside.length - 1;
+    return [0, last].map(
+      (j) => Math.abs(s.outside[j]!.y - s.inside[j]!.y) * Math.cos(d.cant * DEG_TO_RAD),
+    );
+  };
+
+  it('designs to 0.5 mm edges, and exports can thicken them, the thickest point unchanged', () => {
+    const design = bladeSection(prepareBlade(d), 1);
+    const exported = bladeSection(prepareBlade(d, NO_LAMINATE, 0.1), 1);
+    for (const e of edges(design)) expect(e).toBeCloseTo(FIN_MIN_THICKNESS, 9);
+    for (const e of edges(exported)) expect(e).toBeCloseTo(0.1, 9);
+    const thickest = (s: BladeSection) => Math.max(...widths(s));
+    expect(thickest(exported)).toBeCloseTo(thickest(design), 4); // to the stations sampled
+  });
+
+  it('is never thinner than the design’s', () => {
+    expect(prepareBlade(d, NO_LAMINATE, 0.01).minThickness).toBe(FIN_MIN_THICKNESS);
   });
 });

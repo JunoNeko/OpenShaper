@@ -31,17 +31,23 @@ const each = async (fins: FinDesign[], write: (d: FinDesign) => void | Promise<v
  * both in mm; with `pair`, a left and a right fin, one file each. The exporters are loaded on first use, so the page doesn't carry them.
  * STEP fits its surfaces on the main thread (about a second), as the board's does.
  * With `laminate`, the blade is the core to bag that laminate onto, in `…-core` files.
+ * `minThickness` (cm) thickens the edges and tip in the files only, not the design.
  */
 export async function exportFin(
   d: FinDesign,
   format: 'step' | 'stl',
   pair = false,
   laminate?: FinLaminate,
+  minThickness?: number,
 ): Promise<void> {
   const { exportFinStep, exportFinStl } = await import('@openshaper/export');
   await each(finsToWrite(d, pair), (f) => {
     const stem = `${finFileStem(f)}${laminate ? '-core' : ''}`;
-    const opts = laminate ? { name: stem, laminate } : { name: stem };
+    const opts = {
+      name: stem,
+      ...(laminate ? { laminate } : {}),
+      ...(minThickness === undefined ? {} : { minThickness }),
+    };
     if (format === 'step') {
       download(exportFinStep(f, opts), `${stem}.step`, 'model/step');
     } else {
