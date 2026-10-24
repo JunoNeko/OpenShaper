@@ -50,6 +50,12 @@ import {
 } from 'react';
 import { DegField, LenField } from '../components/fields';
 import { CoreExportDialog } from './CoreExportDialog';
+import {
+  SECTION_DEFAULT,
+  SectionOverlay,
+  useSectionCuts,
+  type SectionState,
+} from './SectionAnalysis';
 import { fmtArea, fmtLen, lengthUnitByKey, type LengthUnit } from '../format';
 import { readStored, writeStored } from '../persisted';
 import { GITHUB_URL } from '../seo/site';
@@ -78,15 +84,42 @@ const FinPreview3D = lazy(() =>
   import('@openshaper/render3d').then((m) => ({ default: m.FinPreview3D })),
 );
 
-function Preview({ frameKey, view }: { frameKey: string; view: FinPreviewView }) {
+function Preview({
+  frameKey,
+  view,
+  section,
+  onSection,
+  onReset,
+  units,
+}: {
+  frameKey: string;
+  view: FinPreviewView;
+  section: SectionState;
+  onSection: (next: SectionState) => void;
+  onReset: () => void;
+  units: LengthUnit;
+}) {
   const design = useSettledDesign(finStore);
   const position = useFinState(finStore, (s) => s.design?.position);
   const hand = useFinState(finStore, (s) => s.design?.hand);
+  const cuts = useSectionCuts(design, section);
   return (
-    <div className="h-full overflow-hidden" aria-label="3D preview">
+    <div className="relative h-full overflow-hidden" aria-label="3D preview">
       <Suspense fallback={null}>
-        <FinPreview3D design={design} frameKey={`${position}-${hand}-${frameKey}`} view={view} />
+        <FinPreview3D
+          design={design}
+          frameKey={`${position}-${hand}-${frameKey}`}
+          view={view}
+          sections={cuts?.planes ?? null}
+        />
       </Suspense>
+      <SectionOverlay
+        state={section}
+        onChange={onSection}
+        onReset={onReset}
+        cuts={cuts}
+        units={units}
+      />
     </div>
   );
 }
@@ -784,6 +817,13 @@ function ExportButtons({ pair, units }: { pair: boolean; units: LengthUnit }) {
 export function FinApp() {
   const units = lengthUnitByKey('mm');
   const [view3d, setView3d] = useState<FinPreviewView>('side');
+  // Section analysis in the 3D view; Reset re-frames the camera to its starting view.
+  const [section, setSection] = useState<SectionState>(SECTION_DEFAULT);
+  const [resets, setResets] = useState(0);
+  const resetView = useCallback(() => {
+    setView3d('side');
+    setResets((n) => n + 1);
+  }, []);
   const [pair, setPair] = useState(() => readStored(PAIR_KEY, false, (v) => v === true));
   const changePair = useCallback((on: boolean) => {
     setPair(on);
@@ -890,7 +930,14 @@ export function FinApp() {
           onSwap={swap}
           tools={<PlacementTools view={view3d} onView={setView3d} units={units} />}
         >
-          <Preview frameKey={sizeKey('3d')} view={view3d} />
+          <Preview
+            frameKey={`${sizeKey('3d')}-${resets}`}
+            view={view3d}
+            section={section}
+            onSection={setSection}
+            onReset={resetView}
+            units={units}
+          />
         </ViewPane>
         <Status units={units} />
       </main>
