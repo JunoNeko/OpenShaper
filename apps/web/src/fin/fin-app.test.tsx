@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { defaultFinDesign, defaultSingleFin, finReadouts } from '@openshaper/kernel';
+import {
+  defaultFinDesign,
+  defaultKeel,
+  defaultSingleFin,
+  defaultTwinFin,
+  finReadouts,
+} from '@openshaper/kernel';
 import { writeFinJson } from '@openshaper/io';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -34,6 +40,20 @@ describe('FinApp', () => {
     expect(screen.queryByLabelText(/Cant/)).toBeNull(); // a centre fin has no cant
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(finStore.getState().design!.position).toBe('side');
+  });
+
+  it.each([
+    ['Twin fin, right', 'right'],
+    ['Keel, left', 'left'],
+  ] as const)('starts a %s from the picker', (label, hand) => {
+    render(<FinApp />);
+    const picker = screen.getByLabelText('Start a new fin') as HTMLSelectElement;
+    const option = [...picker.options].find((o) => o.textContent === label)!;
+    fireEvent.change(picker, { target: { value: option.value } });
+    const d = finStore.getState().design!;
+    expect([d.position, d.hand, d.cant, d.base]).toEqual(['side', hand, 7, 'futures-side']);
+    const make = label.startsWith('Twin') ? defaultTwinFin : defaultKeel;
+    expect(d.outline).toEqual(make(hand).outline);
   });
 
   it('switches the side', () => {

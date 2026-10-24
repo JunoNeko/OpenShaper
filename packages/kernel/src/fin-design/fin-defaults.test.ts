@@ -10,6 +10,8 @@ import {
   FOIL_SECTIONS,
   FOIL_SIZES,
   defaultFinDesign,
+  defaultKeel,
+  defaultTwinFin,
   type FoilPath,
 } from './fin-defaults';
 import { FIN_MIN_THICKNESS, FIN_POSITIONS, type FinPosition } from './fin-design';
@@ -132,5 +134,26 @@ describe('default sections', () => {
     const chord = path.cubics[path.cubics.length - 1]![4];
     // The shared knot between the two cubics is the source's thickest drawn point.
     expect(face.knots[1]!.end.y).toBeCloseTo(-path.cubics[0][5] / chord, 12);
+  });
+});
+
+describe('the owner’s twin fin and keel', () => {
+  it.each([
+    ['twin fin', defaultTwinFin],
+    ['keel', defaultKeel],
+  ] as const)('the %s breaks no rule, on either side', (_, make) => {
+    for (const hand of ['left', 'right'] as const) {
+      const d = make(hand);
+      expect(validateFinDesign(d)).toEqual([]);
+      expect([d.position, d.hand, d.cant, d.base]).toEqual(['side', hand, 7, 'futures-side']);
+    }
+  });
+
+  it('runs the rear out behind the tab: the trailing edge reaches back past its root', () => {
+    for (const d of [defaultTwinFin(), defaultKeel()]) {
+      const xs = d.outline.knots.map((k) => k.end.x);
+      expect(Math.min(...xs.slice(1, -1))).toBeLessThan(0); // behind the tab's rear end
+      expect(d.outline.knots.at(-1)!.end.x).toBe(0); // rear-aligned
+    }
   });
 });

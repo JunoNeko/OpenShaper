@@ -19,7 +19,9 @@ import {
   prepareBlade,
   splitFoil,
   thicknessAt,
+  defaultKeel,
   defaultSingleFin,
+  defaultTwinFin,
   defaultFinDesign,
   futuresKind,
   flatFace,
@@ -334,8 +336,8 @@ export const setFoilSplit = (
 export const setHand = (d: FinDesign, hand: FinHand): FinDesign =>
   d.position === 'centre' || d.hand === hand ? d : { ...d, hand };
 
-/** What a new fin can start as: a position's default fin, or the canard. */
-export type FinStart = FinPosition | 'canard' | 'single';
+/** What a new fin can start as: a position's default fin, or one of the owner's. */
+export type FinStart = FinPosition | 'canard' | 'single' | 'twin' | 'keel';
 
 /** A fresh starting fin (the designer's New fin menu). */
 export const newFin = (start: FinStart, hand: FinHand = 'left'): FinDesign =>
@@ -343,7 +345,11 @@ export const newFin = (start: FinStart, hand: FinHand = 'left'): FinDesign =>
     ? defaultCanard(hand)
     : start === 'single'
       ? defaultSingleFin()
-      : defaultFinDesign(start, hand);
+      : start === 'twin'
+        ? defaultTwinFin(hand)
+        : start === 'keel'
+          ? defaultKeel(hand)
+          : defaultFinDesign(start, hand);
 
 /**
  * Where the toolbar's add-point button puts a new point: halfway along the span after
