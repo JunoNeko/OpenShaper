@@ -23,7 +23,7 @@
 import { NO_LAMINATE, prepareBlade, rootThickestFaces, type FinLaminate } from './blade';
 import { clearanceShortfall, rearClearance } from './fin-clearance';
 import { FIN_MAX_FRONT_OVERHANG, finOutward, type FinDesign } from './fin-design';
-import { baseTrailingRoot, finTabOutline, futuresKind, type FinBase } from './fin-tab';
+import { US_BOX_HEAD, baseTrailingRoot, finTabOutline, futuresKind, type FinBase } from './fin-tab';
 import { splineFromKnots } from '../bezier-spline';
 import { knot } from '../knot';
 import { vec2, type Vec2 } from '../vec2';
@@ -78,9 +78,13 @@ export const lateralOffsetRange = (d: FinDesign): { min: number; max: number } =
  */
 export const leadingRootRange = (d: FinDesign): { min: number; max: number } => {
   // A US box head moves with the fin: there is nothing to slide along.
+  // US box: the blade slides along the head, whose rear end is fixed at 0 and front
+  // follows the leading edge. Back until the trailing-edge root reaches the rear end;
+  // forward until the head would be over its maximum length.
   if (d.base === 'us-box') {
-    const le = d.outline.knots[0]!.end.x;
-    return { min: le, max: le };
+    const knots = d.outline.knots;
+    const chord = knots[0]!.end.x - knots[knots.length - 1]!.end.x;
+    return { min: chord, max: Math.max(chord, US_BOX_HEAD.maxLength - US_BOX_HEAD.noseAhead) };
   }
   const tab = finTabOutline(d.base, d.outline);
   if (futuresKind(d.base)) return { min: 0, max: tab.length + FIN_MAX_FRONT_OVERHANG };
@@ -145,7 +149,8 @@ export const nudgeLateral = (d: FinDesign, dy: number): FinDesign => {
  * root 20.5 mm behind the rear tab), so a bigger fin overhangs at the
  * front, and a smaller one comes forward to cover the front tab; both with no cant (the plug carries it). On a Futures tab, rear-aligned (the
  * trailing-edge root on the tab's rear end), its cant kept. On a US box the head follows
- * the fin, so the fin only moves to put the head's rear end at x = 0; no cant.
+ * the leading edge, its rear end fixed at x = 0: the fin starts with its trailing-edge
+ * root 25 mm ahead of that rear end; no cant.
  */
 export const placeOnBase = (d: FinDesign, base: FinBase): FinDesign => {
   if (base === d.base) return d;
@@ -155,8 +160,13 @@ export const placeOnBase = (d: FinDesign, base: FinBase): FinDesign => {
   const tab = finTabOutline(base, d.outline);
   const fcs = !futuresKind(base);
   if (base === 'us-box') {
-    const moved = tab.rear === 0 ? d : shiftOutline(d, -tab.rear);
-    return { ...moved, base, cant: 0 };
+    // The trailing-edge root the usual stub ahead of the head's rear end, or back as far
+    // as it takes to keep the head within its maximum length.
+    const { rearStub, noseAhead, maxLength } = US_BOX_HEAD;
+    let shift = rearStub - te;
+    if (le + shift + noseAhead > maxLength) shift = Math.max(-te, maxLength - noseAhead - le);
+    const moved = shift === 0 ? d : shiftOutline(d, shift);
+    return { ...moved, base, cant: 0, toe: 0 };
   }
   const rear = baseTrailingRoot(base);
   let dx = rear === null ? tab.length / 2 - (le + te) / 2 : rear - te;

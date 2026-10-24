@@ -73,10 +73,11 @@ export const FCS1_BASE = {
  * 9.6 mm (3/8") thick, 160–240 mm long. At the front, a 14.1 mm nose half the depth
  * (12.5 mm) carries the 4.5 mm screw hole (8-32 clearance), drilled down through it;
  * behind the nose a 12.7 mm radius scoop curves down to the full depth. The lower rear
- * corner is rounded (radius estimated from the drawing). The head's front sits
- * `noseAhead` ahead of the leading-edge root, with the screw hole just in front of the
- * blade, and it runs back to `rearStub` behind the trailing-edge root, within the
- * length range. No cant: centre fins.
+ * corner is rounded (radius estimated from the drawing). The head's rear end is fixed
+ * at x = 0 and its front follows the fin, `noseAhead` ahead of the leading-edge root
+ * (at least `minLength` from the rear), with the screw hole just in front of the blade.
+ * So sliding the fin fore and aft slides the blade along the head; a fin starts with
+ * its trailing-edge root `rearStub` ahead of the rear end. No cant: centre fins.
  */
 export const US_BOX_HEAD = {
   height: 2.5,
@@ -164,18 +165,20 @@ const roundedBlock = (x0: number, x1: number, h: number, r: number): TabSegment[
 export const baseTrailingRoot = (base: FinBase): number | null =>
   futuresKind(base) ? 0 : base === 'fcs-1' ? -FCS1_BASE.rearBlade : null;
 
-/** The US box head's length (cm) under a fin whose root runs from `le` back to `te`. */
-export const usBoxHeadLength = (le: number, te: number): number => {
-  const { noseAhead, rearStub, minLength, maxLength } = US_BOX_HEAD;
-  return Math.min(maxLength, Math.max(minLength, le - te + noseAhead + rearStub));
-};
+/**
+ * The US box head's length (cm) under a fin whose leading-edge root is at `le`: from its
+ * rear end at 0 to the nose ahead of the leading edge, and never under the minimum. Over
+ * the maximum is a broken rule (fin-rules.ts), not clamped, so the nose stays in place.
+ */
+export const usBoxHeadLength = (le: number): number =>
+  Math.max(US_BOX_HEAD.minLength, le + US_BOX_HEAD.noseAhead);
 
-/** The US box head under a fin whose leading-edge root is at `le` and trailing at `te`. */
-const usBoxHead = (le: number, te: number): FinTabOutline => {
+/** The US box head under a fin whose leading-edge root is at `le`. */
+const usBoxHead = (le: number): FinTabOutline => {
   const h = US_BOX_HEAD;
-  const front = le + h.noseAhead;
-  const length = usBoxHeadLength(le, te);
-  const rear = front - length;
+  const length = usBoxHeadLength(le);
+  const front = length;
+  const rear = 0;
   const body = le; // where the scoop leaves the nose
   const r = h.rearRadius;
   const s = h.scoopRadius;
@@ -224,15 +227,13 @@ const usBoxHead = (le: number, te: number): FinTabOutline => {
 };
 
 /**
- * A base's tabs. A US box head follows its fin, so it needs the fin's `outline`; without
- * one it is a nominal 200 mm head from x = 0.
+ * A base's tabs. A US box head's front follows its fin, so it needs the fin's
+ * `outline`; without one it is a nominal 200 mm head from x = 0.
  */
 export const finTabOutline = (base: FinBase, outline?: Spline): FinTabOutline => {
   if (base === 'us-box') {
     const k = outline?.knots;
-    if (k && k.length >= 2) return usBoxHead(k[0]!.end.x, k[k.length - 1]!.end.x);
-    const { noseAhead, rearStub } = US_BOX_HEAD;
-    return usBoxHead(20 - noseAhead, rearStub);
+    return usBoxHead(k && k.length ? k[0]!.end.x : 20 - US_BOX_HEAD.noseAhead);
   }
   const kind = futuresKind(base);
   if (kind) {

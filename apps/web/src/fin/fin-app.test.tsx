@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { defaultFinDesign, finReadouts } from '@openshaper/kernel';
+import { defaultFinDesign, defaultSingleFin, finReadouts } from '@openshaper/kernel';
 import { writeFinJson } from '@openshaper/io';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -75,6 +75,45 @@ describe('FinApp', () => {
     expect(offset()).toBeCloseTo(start + 0.01, 12);
     fireEvent.keyDown(window, { key: 'ArrowLeft' });
     expect(offset()).toBeCloseTo(start, 12);
+  });
+
+  it('on a US box, has forward and back arrows only, sliding the blade along the head', () => {
+    act(() => finStore.getState().load(defaultSingleFin()));
+    render(<FinApp />);
+    expect(screen.queryByRole('button', { name: /Slide the blade (left|right)/ })).toBeNull();
+    const te = () => {
+      const k = finStore.getState().design!.outline.knots;
+      return k[k.length - 1]!.end.x;
+    };
+    const before = te();
+    fireEvent.click(screen.getByRole('button', { name: 'Slide the blade back along the head' }));
+    expect(te()).toBeCloseTo(before - 0.05, 9);
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(te()).toBeCloseTo(before, 9);
+    // Left and right keys do nothing here.
+    const lateral = finStore.getState().design!.lateralOffset;
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(finStore.getState().design!.lateralOffset).toBe(lateral);
+  });
+
+  it.each([
+    ['a centre fin', () => defaultFinDesign('centre')],
+    ['a US box fin', () => defaultSingleFin()],
+  ])('greys out toe for %s, and keeps the view from above', (_, make) => {
+    act(() => finStore.getState().load(make()));
+    render(<FinApp />);
+    const toe = within(screen.getByRole('group', { name: 'Toe' }));
+    expect((toe.getByRole('button', { name: 'Toe in' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((toe.getByRole('button', { name: 'Toe out' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((toe.getByRole('button', { name: 'From above' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  it('keeps toe for a side fin', () => {
+    render(<FinApp />);
+    const toe = within(screen.getByRole('group', { name: 'Toe' }));
+    expect((toe.getByRole('button', { name: 'Toe in' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('clamps the cant field to the allowed range', () => {

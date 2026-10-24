@@ -59,6 +59,9 @@ export function useFinShortcuts(
         case 'fin-nudge-left':
         case 'fin-nudge-right':
           if (s.activeFoil > 0) return false;
+          // On a US box the arrows are fore and aft only, as the buttons are.
+          if (s.design?.base === 'us-box' && (id === 'fin-nudge-left' || id === 'fin-nudge-right'))
+            return false;
           return nudge(id);
         default:
           return false;

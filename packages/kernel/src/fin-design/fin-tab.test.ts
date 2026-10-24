@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /** The fin's base: Futures tabs and the FCS single tab (fin-tab.ts). */
 import { describe, expect, it } from 'vitest';
+import { splineFromKnots } from '../bezier-spline';
+import { knot } from '../knot';
 import type { BoardMesh } from '../tessellate';
+import { vec2 } from '../vec2';
 import { defaultCanard, defaultFinDesign, defaultSingleFin } from './fin-defaults';
+import { finHasToe } from './fin-design';
 import { finReadouts } from './fin-readouts';
 import { finMesh } from './fin-mesh';
 import { leadingRootRange, nudgeFore, placeOnBase, tabCentreY } from './fin-placement';
@@ -232,26 +236,41 @@ describe('the FCS 1 base', () => {
 describe('the US box base', () => {
   const single = defaultSingleFin();
   const { noseAhead, rearStub, height, thickness, minLength, maxLength } = US_BOX_HEAD;
+  const shift = (d: typeof single, dx: number): typeof single => ({
+    ...d,
+    outline: splineFromKnots(
+      d.outline.knots.map((k) =>
+        knot(
+          vec2(k.end.x + dx, k.end.y),
+          vec2(k.tangentToPrev.x + dx, k.tangentToPrev.y),
+          vec2(k.tangentToNext.x + dx, k.tangentToNext.y),
+          k.continuous,
+        ),
+      ),
+    ),
+  });
   const ends = (d: typeof single) => {
     const k = d.outline.knots;
     return { le: k[0]!.end.x, te: k[k.length - 1]!.end.x };
   };
 
-  it('is a 25 mm deep, 9.6 mm thick head that follows the fin', () => {
+  it('is a 25 mm deep, 9.6 mm thick head whose front follows the fin', () => {
     const t = finTabOutline('us-box', single.outline);
     const { le, te } = ends(single);
     expect([t.height, t.thickness]).toEqual([height, thickness]);
     expect(t.parts).toHaveLength(1);
-    // Front: the nose ahead of the leading edge; rear: the stub behind the trailing edge.
+    // Front: the nose ahead of the leading edge; rear: fixed at 0, the usual stub behind
+    // the starting fin's trailing edge.
     expect(t.rear + t.length).toBeCloseTo(le + noseAhead, 12);
-    expect(t.rear).toBeCloseTo(te - rearStub, 12);
-    expect(t.rear).toBeCloseTo(0, 12); // the starting fin puts the head's rear at 0
+    expect(t.rear).toBe(0);
+    expect(te).toBeCloseTo(rearStub, 12);
   });
 
-  it('keeps its length within 160–240 mm', () => {
-    expect(usBoxHeadLength(5, 0)).toBe(minLength);
-    expect(usBoxHeadLength(30, 0)).toBe(maxLength);
-    expect(usBoxHeadLength(15, 0)).toBeCloseTo(15 + noseAhead + rearStub, 12);
+  it('is never under 160 mm, and over 240 mm breaks a rule', () => {
+    expect(usBoxHeadLength(5)).toBe(minLength);
+    expect(usBoxHeadLength(15)).toBeCloseTo(15 + noseAhead, 12);
+    const long = shift(single, maxLength - noseAhead - ends(single).le + 0.5);
+    expect(validateFinDesign(long).map((i) => i.code)).toEqual(['head-length']);
   });
 
   it('has the drawing’s profile: closed, counter-clockwise, scoop and rear corner', () => {
@@ -306,9 +325,25 @@ describe('the US box base', () => {
     }
   });
 
-  it('has nothing to slide along: the head moves with the fin', () => {
-    expect(nudgeFore(single, 0.5)).toBe(single);
-    expect(nudgeFore(single, -0.5)).toBe(single);
+  it('slides the blade along the head: back to its rear end, forward to 240 mm', () => {
+    const back = nudgeFore(single, -10);
+    expect(ends(back).te).toBeCloseTo(0, 12); // the trailing-edge root on the rear end
+    expect(finTabOutline('us-box', back.outline).rear).toBe(0);
+    expect(validateFinDesign(back)).toEqual([]);
+    const fwd = nudgeFore(single, 10);
+    expect(ends(fwd).le + noseAhead).toBeCloseTo(maxLength, 12);
+    expect(validateFinDesign(fwd)).toEqual([]);
+    // A small step moves both ends of the blade, and the head's front with it.
+    const step = nudgeFore(single, 0.05);
+    expect(ends(step).te - ends(single).te).toBeCloseTo(0.05, 12);
+    const t = finTabOutline('us-box', step.outline);
+    expect(t.rear + t.length).toBeCloseTo(ends(step).le + noseAhead, 12);
+  });
+
+  it('says so when the blade slides off the back of the head', () => {
+    expect(validateFinDesign(shift(single, -ends(single).te - 0.1)).map((i) => i.code)).toEqual([
+      'tab-rear',
+    ]);
   });
 
   it('meshes as one closed shell, with the screw hole through it', () => {
@@ -331,5 +366,23 @@ describe('the US box base', () => {
       const r = Math.hypot(m.positions[i]! - b!.x, m.positions[i + 1]! - yc);
       expect(r).toBeGreaterThan(b!.radius - 1e-5);
     }
+  });
+});
+
+describe('toe', () => {
+  it('is off for centre fins and fins in a US box, and on for the rest', () => {
+    expect(finHasToe(defaultFinDesign('centre'))).toBe(false);
+    expect(finHasToe(defaultSingleFin())).toBe(false);
+    expect(finHasToe(placeOnBase(defaultFinDesign('side', 'left'), 'us-box'))).toBe(false);
+    expect(finHasToe(defaultFinDesign('side', 'left'))).toBe(true);
+    expect(finHasToe(defaultFinDesign('quad-rear', 'left'))).toBe(true);
+  });
+
+  it('is a broken rule on a fin that has none', () => {
+    expect(
+      validateFinDesign({ ...defaultFinDesign('centre'), toe: 1 }).map((i) => i.message),
+    ).toEqual(['A centre fin has no toe.']);
+    const side = placeOnBase({ ...defaultFinDesign('side', 'left'), toe: 2 }, 'us-box');
+    expect(side.toe).toBe(0); // moving onto a US box clears it
   });
 });
