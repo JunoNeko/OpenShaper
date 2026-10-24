@@ -2,12 +2,12 @@
 /**
  * Export the fin's core, for a fin that is printed and then has laminate (usually
  * unidirectional carbon) vacuum-bagged onto its faces for stiffness at the base. The
- * blade is pulled in by the laminate on the chosen faces, never under the 1 mm
- * minimum (FinLaminate in kernel blade.ts), so with the laminate on it is the design.
+ * blade is pulled in by the laminate on the chosen faces, never under the export's
+ * minimum thickness (FinLaminate in kernel blade.ts), so with the laminate on it is the design.
  * The tab is unchanged unless the laminate wraps it too, over the base where the fin
  * leaves the box: then its laminated faces are thinned the same, so it still fits.
  */
-import { FIN_MIN_THICKNESS, type FinLaminate } from '@openshaper/kernel';
+import type { FinLaminate } from '@openshaper/kernel';
 import { Button, Panel, PanelBody, PanelHeader, PanelTitle } from '@openshaper/ui';
 import { useState } from 'react';
 import { Modal } from '../components/modal';
@@ -68,12 +68,15 @@ const readSettings = (v: unknown): CoreSettings => {
 export function CoreExportDialog({
   units,
   pair,
+  minThickness,
   onExport,
   onClose,
 }: {
   units: LengthUnit;
   /** R & L is on: each export writes a left and a right core. */
   pair: boolean;
+  /** The exports' minimum thickness (cm): the core never goes under it. */
+  minThickness: number;
   onExport: (format: 'step' | 'stl', laminate: FinLaminate) => void;
   onClose: () => void;
 }) {
@@ -110,9 +113,9 @@ export function CoreExportDialog({
           <p className="text-muted-foreground">
             For a printed fin with laminate bagged onto it. The blade is made thinner by the
             laminate on the faces you choose, so with the laminate on it matches your design. It
-            never goes under {withUnit(FIN_MIN_THICKNESS)}: near the edges, the face with less
-            laminate is left thicker to make it up, so a laminated face is always thinned by the
-            full amount.
+            never goes under the export minimum, {withUnit(minThickness)}: near the edges, the face
+            with less laminate is left thicker to make it up, so a laminated face is always thinned
+            by the full amount.
           </p>
           <label className="flex items-center gap-2">
             <span className="flex-1">Laminate thickness, per face</span>

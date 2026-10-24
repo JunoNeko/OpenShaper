@@ -14,7 +14,7 @@
  * v: up the blade, from the root on the tab top (z = 0) to just under the tip.
  * ```
  *
- * The 1 mm minimum thickness gives the blade blunt edges, so each section is a
+ * The minimum thickness (0.5 mm in the design) gives the blade blunt edges, so each section is a
  * closed loop with four corners: the ends of the two edge caps. Those are creases
  * (`uBreaks`): C0 there, smooth everywhere else. Corners in the outline or the taper
  * crease along v the same way (`vBreaks`).
@@ -27,7 +27,7 @@
  *
  * Sections stop {@link BladeSurfaceOptions.tipGap} below the tip, and a flat cap
  * closes the blade there. A surface pinched to a point is legal STEP but a common
- * cause of import failures. The cap is a sliver a couple of mm long and 1 mm wide;
+ * cause of import failures. The cap is a sliver a couple of mm long and the minimum thickness wide;
  * the CNC cutter rounds it.
  *
  * ## Accuracy
@@ -77,6 +77,8 @@ export interface BladeSurfaceOptions {
   readonly maxRefinements?: number;
   /** Fit the blade as the core under this laminate (blade.ts). */
   readonly laminate?: FinLaminate;
+  /** Thinnest the blade gets (cm); the design minimum by default (blade.ts). */
+  readonly minThickness?: number;
 }
 
 export const BLADE_DEFAULTS = {
@@ -317,7 +319,7 @@ export const fitBladeSurface = (
   opts: BladeSurfaceOptions = {},
 ): BladeSurfaceModel => {
   const o = { ...BLADE_DEFAULTS, ...opts };
-  const b = prepareBlade(d, o.laminate);
+  const b = prepareBlade(d, o.laminate, o.minThickness);
   const topZ = b.depth - o.tipGap;
   let rows = o.rows;
   let stations = o.stations;

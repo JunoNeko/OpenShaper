@@ -19,14 +19,20 @@ export interface FinStlOptions {
   name?: string;
   /** Write the blade, and the tab if it wraps it, as the core under this laminate (cm per face). */
   laminate?: FinLaminate;
+  /**
+   * Thicken the edges and tip to at least this (cm) in the file only, e.g. 0.1 for a
+   * 1 mm printable edge. Never under the design minimum, which is the default.
+   */
+  minThickness?: number;
 }
 
 export const exportFinStl = (d: FinDesign, opts: FinStlOptions = {}): Uint8Array => {
   const scale = SHEET_UNIT[opts.unit ?? 'mm'].factor;
-  const mesh = finMesh(
-    d,
-    opts.laminate ? { ...FIN_MESH_FINE, laminate: opts.laminate } : FIN_MESH_FINE,
-  );
+  const mesh = finMesh(d, {
+    ...FIN_MESH_FINE,
+    ...(opts.laminate ? { laminate: opts.laminate } : {}),
+    ...(opts.minThickness === undefined ? {} : { minThickness: opts.minThickness }),
+  });
   const facets: number[] = [];
   writeMesh(facets, mesh.blade, scale);
   writeMesh(facets, mesh.tab, scale);

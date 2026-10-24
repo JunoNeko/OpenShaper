@@ -28,7 +28,7 @@ import {
   prepareBlade,
 } from './blade';
 import { sectionLoop } from './blade-surface';
-import type { FinDesign } from './fin-design';
+import { FIN_MIN_THICKNESS, type FinDesign } from './fin-design';
 import { finTabOutline } from './fin-tab';
 import { tabCentreY, tabFacesY } from './fin-placement';
 import type { TabSegment } from './futures-tab';
@@ -45,6 +45,8 @@ export interface FinMeshOptions {
   readonly arcTolerance?: number;
   /** Mesh the blade as the core under this laminate (blade.ts), and the tab if it wraps it. */
   readonly laminate?: FinLaminate;
+  /** Thinnest the blade gets (cm); the design minimum by default (blade.ts). */
+  readonly minThickness?: number;
 }
 
 /** Light enough to rebuild on every edit. */
@@ -54,6 +56,7 @@ export const FIN_MESH_PREVIEW = {
   tipGap: 0.01,
   arcTolerance: 0.002,
   laminate: NO_LAMINATE,
+  minThickness: FIN_MIN_THICKNESS,
 };
 
 /** For STL: rings about 0.5 mm apart on a 100 mm fin. */
@@ -63,6 +66,7 @@ export const FIN_MESH_FINE = {
   tipGap: 0.01,
   arcTolerance: 0.0005,
   laminate: NO_LAMINATE,
+  minThickness: FIN_MIN_THICKNESS,
 };
 
 export interface FinMesh {
@@ -112,7 +116,7 @@ const cap = (
 const FEATURE_RINGS = [0.01, 0.03, 0.1];
 
 const bladeMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
-  const b = prepareBlade(d, o.laminate);
+  const b = prepareBlade(d, o.laminate, o.minThickness);
   const top = b.depth - o.tipGap;
   const st = cosineStations(o.stations);
   // Rings spaced along the edges' travel: they gather at the tip, and wherever an edge
