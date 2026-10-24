@@ -58,6 +58,7 @@ export default function DocsFinDesigner() {
         { id: 'taper', label: 'Thickness and flex' },
         { id: 'base', label: 'The base' },
         { id: 'tab', label: 'Placing the fin on its tab' },
+        { id: 'analysis', label: 'Section analysis' },
         { id: 'rules', label: 'The rules it keeps' },
         { id: 'files', label: 'Saving your work' },
         { id: 'export', label: 'Exporting for CNC and printing' },
@@ -284,6 +285,31 @@ export default function DocsFinDesigner() {
             out.
           </Term>
         </Terms>
+      </Section>
+
+      <Section id="analysis" title="Section analysis">
+        <p>
+          <strong>Analysis</strong>, at the top left of the 3D view, turns the fin see-through and
+          cuts it with a section plane, the cut drawn in yellow so it shows from any angle. Rotate,
+          pan and zoom as usual; <strong>Reset view</strong> puts the camera back where it started.
+        </p>
+        <Terms>
+          <Term name="Vertical">
+            On by default. An upright plane square to the base, moved with the slider along the
+            bottom of the view, which runs the way the fin lies in the starting view. It reads how
+            far back from the leading edge it is, the blade&apos;s height there, and its greatest
+            thickness there.
+          </Term>
+          <Term name="Horizontal">
+            A plane across the blade at a height, moved with the slider up the right edge. It shows
+            the foil at that height and reads the height, the chord and the thickness.
+          </Term>
+        </Terms>
+        <p>
+          Either plane or both can be on. Thicknesses are square to the blade, allowing for cant.
+          The sliders sit on the edges of the view rather than on the planes, so they stay in reach
+          however the fin is turned.
+        </p>
       </Section>
 
       <Section id="rules" title="The rules it keeps">

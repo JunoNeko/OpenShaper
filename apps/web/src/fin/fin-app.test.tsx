@@ -447,3 +447,67 @@ describe('FinApp: export', () => {
     HEAVY,
   );
 });
+
+describe('FinApp: section analysis in the 3D view', () => {
+  beforeEach(() => act(() => finStore.getState().load(defaultFinDesign('side', 'left'))));
+  const analysis = () => screen.getByRole('button', { name: 'Analysis' });
+
+  it('opens with the vertical plane, its slider and readout; closes again', () => {
+    render(<FinApp />);
+    expect(analysis().getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByLabelText('Vertical plane position')).toBeNull();
+    fireEvent.click(analysis());
+    expect(analysis().getAttribute('aria-pressed')).toBe('true');
+    expect((screen.getByLabelText('Vertical') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('Horizontal') as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByLabelText('Vertical plane position')).toBeTruthy();
+    expect(
+      screen.getByText(/back from the leading edge · height .* mm · thickest .* mm/),
+    ).toBeTruthy();
+    fireEvent.click(analysis());
+    expect(screen.queryByLabelText('Vertical plane position')).toBeNull();
+  });
+
+  it('adds the horizontal plane, reading the foil at its height', () => {
+    render(<FinApp />);
+    fireEvent.click(analysis());
+    fireEvent.click(screen.getByLabelText('Horizontal'));
+    const height = screen.getByLabelText('Horizontal plane height');
+    fireEvent.change(height, { target: { value: '0' } });
+    // At the root: the root chord, 101.7 mm on the starting side fin, and its 8 mm.
+    expect(
+      screen.getByText(/^0\.0 mm up · chord 101\.\d mm · thickness [78]\.\d mm$/),
+    ).toBeTruthy();
+    // Both planes can be on; either can be turned off.
+    fireEvent.click(screen.getByLabelText('Vertical'));
+    expect(screen.queryByLabelText('Vertical plane position')).toBeNull();
+    expect(screen.getByLabelText('Horizontal plane height')).toBeTruthy();
+  });
+
+  it('runs the bottom slider the way the fin lies on screen', () => {
+    render(<FinApp />);
+    fireEvent.click(analysis());
+    const slider = screen.getByLabelText('Vertical plane position');
+    const back = () =>
+      Number(
+        /^([\d.-]+) mm back/.exec(screen.getByText(/back from the leading edge/).textContent!)![1],
+      );
+    // A left fin's nose is on the left of the starting view.
+    fireEvent.change(slider, { target: { value: '20' } });
+    const nearLeft = back();
+    fireEvent.change(slider, { target: { value: '380' } });
+    expect(back()).toBeGreaterThan(nearLeft);
+  });
+
+  it('resets the camera to its starting view', () => {
+    render(<FinApp />);
+    const above = screen.getByRole('button', { name: 'From above' });
+    fireEvent.click(above);
+    expect(above.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(analysis());
+    fireEvent.click(screen.getByRole('button', { name: 'Reset view' }));
+    expect(screen.getByRole('button', { name: 'From above' }).getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+  });
+});

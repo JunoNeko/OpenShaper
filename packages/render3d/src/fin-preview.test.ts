@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultFinDesign, FUTURES_TABS, finReadouts } from '@openshaper/kernel';
 import { Vector3 } from 'three';
-import { FIN_PREVIEW_FOV, finCameraPosition, finScene } from './fin-preview';
+import { sectionPlaneCorners, FIN_PREVIEW_FOV, finCameraPosition, finScene } from './fin-preview';
 
 describe('finScene', () => {
   const d = defaultFinDesign('side', 'right');
@@ -45,5 +45,25 @@ describe('finCameraPosition', () => {
     expect(new Vector3(...finCameraPosition([0, 0, 0], 10, 1, 0.5)).length()).toBeGreaterThan(
       p.length(),
     );
+  });
+});
+
+describe('sectionPlaneCorners', () => {
+  const scene = finScene(defaultFinDesign('side', 'left'));
+
+  it('lays a horizontal plane across the fin at its height, with a margin', () => {
+    const c = sectionPlaneCorners(scene, { axis: 'z', at: 3 });
+    for (const p of c) expect(p[2]).toBe(3);
+    expect(Math.min(...c.map((p) => p[0]))).toBeLessThan(scene.min[0]);
+    expect(Math.max(...c.map((p) => p[0]))).toBeGreaterThan(scene.max[0]);
+    expect(Math.min(...c.map((p) => p[1]))).toBeLessThan(scene.min[1]);
+    expect(Math.max(...c.map((p) => p[1]))).toBeGreaterThan(scene.max[1]);
+  });
+
+  it('stands an upright plane across the fin at its point along the base', () => {
+    const c = sectionPlaneCorners(scene, { axis: 'x', at: 4 });
+    for (const p of c) expect(p[0]).toBe(4);
+    expect(Math.min(...c.map((p) => p[2]))).toBeLessThan(scene.min[2]);
+    expect(Math.max(...c.map((p) => p[2]))).toBeGreaterThan(scene.max[2]);
   });
 });

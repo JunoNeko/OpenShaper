@@ -29,6 +29,9 @@ export interface FinScene {
   /** Centre and radius of everything, for framing (cm). */
   readonly center: [number, number, number];
   readonly radius: number;
+  /** Everything's bounds (cm): what a section plane is sized to. */
+  readonly min: [number, number, number];
+  readonly max: [number, number, number];
   /**
    * The tab's centre line on the tab top, run on past both ends: the box's direction,
    * to judge a toe correction against (start and end, cm).
@@ -51,11 +54,54 @@ export const finScene = (d: FinDesign): FinScene => {
     tab,
     center: [c.x, c.y, c.z],
     radius: box.getSize(new Vector3()).length() / 2,
+    min: [box.min.x, box.min.y, box.min.z],
+    max: [box.max.x, box.max.y, box.max.z],
     tabAxis: [
       [t.min.x - reach, yc, 0.001],
       [t.max.x + reach, yc, 0.001],
     ],
   };
+};
+
+/**
+ * A section plane for the analysis view: `z` horizontal at a height, `x` upright at a
+ * point along the base (cm, fin frame), and where it cuts the fin, as segment endpoints
+ * from the kernel's `sliceMesh`.
+ */
+export interface FinSectionPlane {
+  readonly axis: 'x' | 'z';
+  readonly at: number;
+  readonly cut: readonly number[];
+}
+
+/** How far a section plane runs past the fin on each side (cm). */
+const PLANE_MARGIN = 1.5;
+
+/**
+ * The four corners of a section plane, sized to the scene with a margin: a horizontal
+ * plane across x and y at its height, an upright one across y and z at its x.
+ */
+export const sectionPlaneCorners = (
+  scene: Pick<FinScene, 'min' | 'max'>,
+  plane: Pick<FinSectionPlane, 'axis' | 'at'>,
+): [number, number, number][] => {
+  const m = PLANE_MARGIN;
+  const [x0, y0, z0] = scene.min.map((v) => v - m) as [number, number, number];
+  const [x1, y1, z1] = scene.max.map((v) => v + m) as [number, number, number];
+  const a = plane.at;
+  return plane.axis === 'z'
+    ? [
+        [x0, y0, a],
+        [x1, y0, a],
+        [x1, y1, a],
+        [x0, y1, a],
+      ]
+    : [
+        [a, y0, z0],
+        [a, y1, z0],
+        [a, y1, z1],
+        [a, y0, z1],
+      ];
 };
 
 /** Where the preview looks from: beside the fin, or from above (down the blade from the tip). */
