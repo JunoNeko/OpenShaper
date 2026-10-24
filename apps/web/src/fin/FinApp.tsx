@@ -353,11 +353,11 @@ function SliceSelect({ units }: { units: LengthUnit }) {
   const depth = finReadouts(design).depth;
   return (
     <label className="flex items-center gap-2">
-      <span className="text-muted-foreground">Slice</span>
+      <span className="text-muted-foreground">Slice (twist)</span>
       <select
         className="h-8 rounded-md border border-input bg-background px-2 text-sm"
         value={activeFoil}
-        aria-label="Slice"
+        aria-label="Slice (twist)"
         onChange={(e) => finStore.getState().setActiveFoil(Number(e.target.value))}
       >
         <option value={0}>Root (whole fin)</option>
@@ -556,13 +556,13 @@ function OutlineTools({ units }: { units: LengthUnit }) {
         onCommit={(cm) => finStore.getState().setDepth(cm)}
       />
       <PointTools store={finStore} curves={OUTLINE_CURVES} />
-      <Tooltip label="Add a foil slice: drag its line to place it, then shape its foil">
+      <Tooltip label="Add a foil slice: drag its line to place it, then shape its foil, or give the blade above it a twist (its own cant and toe) in the 3D view">
         <Button
           variant="outline"
           size="sm"
           onClick={() => finStore.getState().addSlice(nextSliceHeight(design))}
         >
-          Add slice
+          Add slice (twist)
         </Button>
       </Tooltip>
     </>

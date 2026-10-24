@@ -55,7 +55,7 @@ export default function DocsFinDesigner() {
         { id: 'start', label: 'Starting a fin' },
         { id: 'outline', label: 'The outline' },
         { id: 'foil', label: 'The foil' },
-        { id: 'slices', label: 'Foil slices' },
+        { id: 'slices', label: 'Foil slices and twist' },
         { id: 'taper', label: 'Thickness and flex' },
         { id: 'base', label: 'The base' },
         { id: 'tab', label: 'Placing the fin on its tab' },
@@ -165,13 +165,14 @@ export default function DocsFinDesigner() {
         </Terms>
       </Section>
 
-      <Section id="slices" title="Foil slices">
+      <Section id="slices" title="Foil slices and twist">
         <p>
-          One foil runs all the way up the blade unless you add slices. <strong>Add slice</strong>{' '}
-          (in the profile&apos;s toolbar) puts a dashed line across the profile; drag it up or down
-          to set its height — in the profile or the thickness view. Each slice has its own foil:
-          pick its tab in the foil view (Root, then each slice by height) and shape it with the same
-          tools, NACA presets included. A new slice starts as a copy of the foil below it.
+          One foil runs all the way up the blade unless you add slices. Slices are also how you
+          twist a fin (see below). <strong>Add slice (twist)</strong> (in the profile&apos;s
+          toolbar) puts a dashed line across the profile; drag it up or down to set its height — in
+          the profile or the thickness view. Each slice has its own foil: pick its tab in the foil
+          view (Root, then each slice by height) and shape it with the same tools, NACA presets
+          included. A new slice starts as a copy of the foil below it.
         </p>
         <p>
           Between slices the foil blends smoothly from one to the next, easing into each so no line
@@ -182,14 +183,14 @@ export default function DocsFinDesigner() {
         <p>
           A slice can also change the cant and toe above it, bending the upper blade out and
           twisting it, as some Futures designs do. Pick the slice in the 3D view&apos;s{' '}
-          <strong>Slice</strong> list (or its tab in the foil view): the position arrows grey out,
-          and <strong>Cant above slice</strong> (−20° to 20°: it may lean back past upright) and{' '}
-          <strong>Toe above slice</strong> set its change. <strong>Transition below slice</strong>{' '}
-          is how far below the slice the change starts (10 mm to begin with): below it the blade is
-          as it was, through it the change eases in with no crease, above the slice it holds. Each
-          section turns about its own thickest point. <strong>No change here</strong> takes the
-          change away. On an FCS single tab the root has no cant (the plug sets it), but a slice may
-          still add some.
+          <strong>Slice (twist)</strong> list (or its tab in the foil view): the position arrows
+          grey out, and <strong>Cant above slice</strong> (−20° to 20°: it may lean back past
+          upright) and <strong>Toe above slice</strong> set its change.{' '}
+          <strong>Transition below slice</strong> is how far below the slice the change starts (10
+          mm to begin with): below it the blade is as it was, through it the change eases in with no
+          crease, above the slice it holds. Each section turns about its own thickest point.{' '}
+          <strong>No change here</strong> takes the change away. On an FCS single tab the root has
+          no cant (the plug sets it), but a slice may still add some.
         </p>
       </Section>
 
