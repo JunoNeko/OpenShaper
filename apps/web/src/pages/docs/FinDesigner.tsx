@@ -135,7 +135,19 @@ export default function DocsFinDesigner() {
           shaped by hand. Its size follows the outline and the taper; this pane sets only its shape.
         </p>
         <Terms>
-          <Term name="Flat inside">The usual side-fin foil: the inside face is flat.</Term>
+          <Term name="Asymmetric">
+            A side fin&apos;s foil, with an inside face of its own. Choosing it starts with a flat
+            inside face, the usual side-fin foil (100 / 0). The <strong>Outside</strong> and{' '}
+            <strong>Inside</strong> boxes at the top left of the foil view say how the thickness is
+            shared, the way shapers describe a foil: 70 / 30 is 70% of the thickness above the chord
+            line and 30% below. Type either and the other follows; Enter builds the foil as a
+            rounded leading edge on each face, its radius that face&apos;s share of the thickness,
+            then a straight line on to the trailing edge. Each face gets a point halfway round its
+            radius and one where it meets the line, to reshape it from. The radii are true to the
+            fin: its thickness and chord at the root, or at the slice being edited. The split goes
+            from 100 / 0 down to 51 / 49: an even split is a symmetric foil, which has its own
+            button.
+          </Term>
           <Term name="Symmetric">
             The same curve on both faces — always the case on a centre fin.
           </Term>

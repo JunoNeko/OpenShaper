@@ -49,6 +49,7 @@ export * from './fin-design/blade-surface';
 export * from './fin-design/fin-placement';
 export * from './fin-design/fin-clearance';
 export * from './fin-design/naca';
+export * from './fin-design/split-foil';
 export * from './fin-design/fin-mesh';
 export {
   defaultCanard,

@@ -13,8 +13,12 @@ import {
   twistAt,
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
+  chordAt,
   defaultCanard,
   finHasToe,
+  prepareBlade,
+  splitFoil,
+  thicknessAt,
   defaultSingleFin,
   defaultFinDesign,
   futuresKind,
@@ -303,6 +307,27 @@ export const setInsideFace = (
   if (kind === 'flat' && d.position === 'centre') return null;
   const sec = getFoil(d, foil);
   return sec ? withFoil(d, foil, { ...sec, inside: kind === 'flat' ? flatFace() : null }) : null;
+};
+
+/**
+ * Split a foil between its faces, `outside` (a share, 0 to 1) above the chord line and
+ * the rest below, as a leading-edge radius on each face and straight lines to the
+ * trailing edge (split-foil.ts). The radii are true to the fin where this foil is: its
+ * thickness over its chord at the root, or at its slice's height. Not for centre fins,
+ * which stay symmetric.
+ */
+export const setFoilSplit = (
+  d: FinDesign,
+  outside: number,
+  foil: FinFoilIndex = 0,
+): FinDesign | null => {
+  if (d.position === 'centre' || !getFoil(d, foil)) return null;
+  const b = prepareBlade(d);
+  const h = foil === 0 ? 0 : (d.slices[foil - 1]?.height ?? 0) * b.depth;
+  const { leading, trailing } = chordAt(b, h);
+  const chord = leading - trailing;
+  if (!(chord > 0)) return null;
+  return withFoil(d, foil, splitFoil(outside, thicknessAt(b, h) / chord));
 };
 
 /** Which side a side or quad-rear fin is for; the design is otherwise unchanged. */

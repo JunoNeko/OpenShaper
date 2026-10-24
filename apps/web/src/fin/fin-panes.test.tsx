@@ -4,7 +4,7 @@
  * panes' canvases, checked in the store. Picking and drag maths are tested in
  * render2d; the store's clamping in store/fin-store.test.ts.
  */
-import { defaultFinDesign, FIN_MIN_THICKNESS } from '@openshaper/kernel';
+import { defaultFinDesign, FIN_MIN_THICKNESS, foilShare } from '@openshaper/kernel';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { lengthUnitByKey } from '../format';
@@ -65,7 +65,7 @@ describe('FinSectionTools', () => {
   it('keeps a centre fin symmetric', () => {
     act(() => finStore.getState().load(defaultFinDesign('centre')));
     render(<FinSectionTools store={finStore} units={lengthUnitByKey('mm')} />);
-    expect(screen.queryByRole('button', { name: 'Flat inside' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Asymmetric' })).toBeNull();
     expect(screen.queryByRole('option', { name: '2412' })).toBeNull(); // only 00xx offered
     fireEvent.change(screen.getByLabelText('NACA preset'), { target: { value: 'other' } });
     fireEvent.change(screen.getByLabelText('NACA 4-digit code'), { target: { value: '2412' } });
@@ -74,12 +74,79 @@ describe('FinSectionTools', () => {
     expect(design().section.inside).toBeNull();
   });
 
-  it('switches a side fin between symmetric and flat inside', () => {
+  it('switches a side fin between symmetric and asymmetric, highlighting the choice', () => {
     render(<FinSectionTools store={finStore} units={lengthUnitByKey('mm')} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Symmetric' }));
+    const sym = () => screen.getByRole('button', { name: 'Symmetric' });
+    const asym = () => screen.getByRole('button', { name: 'Asymmetric' });
+    fireEvent.click(sym());
     expect(design().section.inside).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Flat inside' }));
-    expect(design().section.inside).not.toBeNull();
+    expect(sym().getAttribute('aria-pressed')).toBe('true');
+    expect(asym().getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(asym());
+    // Starts flat inside: 100 / 0.
+    expect(foilShare(design().section)).toBe(1);
+    expect(asym().getAttribute('aria-pressed')).toBe('true');
+    // Clicking it again keeps the faces.
+    const faces = design().section;
+    fireEvent.click(asym());
+    expect(design().section).toBe(faces);
+  });
+});
+
+describe('the outside / inside split', () => {
+  beforeEach(() => act(() => finStore.getState().load(defaultFinDesign('side', 'right'))));
+  const outside = () =>
+    screen.getByLabelText('Outside share of the thickness (%)') as HTMLInputElement;
+  const inside = () =>
+    screen.getByLabelText('Inside share of the thickness (%)') as HTMLInputElement;
+
+  it('shows for an asymmetric side fin, and not for a symmetric one', () => {
+    const { unmount } = render(<FinSectionPane store={finStore} />);
+    expect(outside().value).toBe('100'); // the starting side fin is flat inside
+    expect(inside().value).toBe('0');
+    unmount();
+    act(() => finStore.getState().setInsideFace('symmetric'));
+    render(<FinSectionPane store={finStore} />);
+    expect(screen.queryByLabelText('Outside share of the thickness (%)')).toBeNull();
+  });
+
+  it('fills in the other box as you type, and builds the foil on Enter, as one undo step', () => {
+    render(<FinSectionPane store={finStore} />);
+    const before = finStore.getState().past.length;
+    fireEvent.change(outside(), { target: { value: '70' } });
+    expect(inside().value).toBe('30');
+    fireEvent.keyDown(outside(), { key: 'Enter' });
+    expect(foilShare(design().section)).toBeCloseTo(0.7, 5);
+    expect(finStore.getState().past).toHaveLength(before + 1);
+    expect(finStore.getState().past.at(-1)!.label).toBe('Foil 70 / 30');
+    expect(outside().value).toBe('70');
+    // Typing in the inside box works the same way round.
+    fireEvent.change(inside(), { target: { value: '40' } });
+    expect(outside().value).toBe('60');
+    fireEvent.keyDown(inside(), { key: 'Enter' });
+    expect(foilShare(design().section)).toBeCloseTo(0.6, 5);
+  });
+
+  it('stops at 51 / 49, leaving an even split to Symmetric, and ignores what isn’t a percentage', () => {
+    render(<FinSectionPane store={finStore} />);
+    for (const [box, value] of [
+      [outside, '50'],
+      [outside, '30'],
+      [inside, '50'],
+      [inside, '70'],
+    ] as const) {
+      fireEvent.change(box(), { target: { value } });
+      fireEvent.keyDown(box(), { key: 'Enter' });
+      expect(foilShare(design().section)).toBeCloseTo(0.51, 5);
+      expect([outside().value, inside().value]).toEqual(['51', '49']);
+    }
+    expect(design().section.inside).not.toBeNull(); // still asymmetric
+    const faces = design().section;
+    fireEvent.change(outside(), { target: { value: '120' } });
+    expect(inside().value).toBe('');
+    fireEvent.keyDown(outside(), { key: 'Enter' });
+    expect(design().section).toBe(faces);
+    expect(outside().value).toBe('51');
   });
 });
 

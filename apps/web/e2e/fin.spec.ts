@@ -55,7 +55,7 @@ test.describe('Fin designer', () => {
     await page.getByRole('button', { name: 'Show Foil section in the large pane' }).click();
     await page.getByLabel('NACA preset').selectOption('2410');
     await page.getByRole('button', { name: 'Apply' }).click();
-    await expect(page.getByText('— inside')).toBeVisible();
+    await expect(page.getByLabel('Inside share of the thickness (%)')).toBeVisible();
 
     // Nudge it forward on the tab, then undo the second nudge.
     const overhang = measurement(page, 'Front overhang');
@@ -108,7 +108,7 @@ test.describe('Fin designer', () => {
     await page.reload();
     await expect(page.getByRole('img', { name: 'Fin outline' })).toBeVisible();
     await expect(measurement(page, 'Depth')).toHaveText('110.0 mm');
-    await expect(page.getByText('— inside')).toBeVisible();
+    await expect(page.getByLabel('Inside share of the thickness (%)')).toBeVisible();
   });
 
   test('a foil slice: add, shape, export, save and reopen', async ({ page }) => {

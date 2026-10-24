@@ -47,6 +47,7 @@ import {
   setCant,
   setDepth,
   setHand,
+  setFoilSplit,
   setInsideFace,
   setRootThickness,
   setSliceTwist,
@@ -150,6 +151,11 @@ export interface FinState {
   /** Apply a NACA 4-digit preset to the section ('2412'). */
   applyNaca: (code: string) => boolean;
   setInsideFace: (kind: 'flat' | 'symmetric') => boolean;
+  /**
+   * Split the active foil's thickness: `outside` (0 to 1) above the chord line, the rest
+   * below, as leading-edge radii and straight lines to the trailing edge.
+   */
+  setFoilSplit: (outside: number) => boolean;
 
   /** Edit foil `foil` (0 the root, k the k-th slice). */
   setActiveFoil: (foil: number) => void;
@@ -479,8 +485,15 @@ export const createFinStore = (): StoreApi<FinState> =>
         return d
           ? commitChecked(
               setInsideFace(d, kind, get().activeFoil),
-              kind === 'flat' ? 'Flat inside' : 'Symmetric foil',
+              kind === 'flat' ? 'Asymmetric foil' : 'Symmetric foil',
             )
+          : false;
+      },
+      setFoilSplit: (outside) => {
+        const d = get().design;
+        const pct = Math.round(Math.min(1, Math.max(0, outside)) * 100);
+        return d
+          ? commitChecked(setFoilSplit(d, outside, get().activeFoil), `Foil ${pct} / ${100 - pct}`)
           : false;
       },
       nudgeFore: (dx) => {
