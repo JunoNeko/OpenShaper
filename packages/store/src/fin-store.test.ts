@@ -5,6 +5,7 @@ import {
   FIN_MIN_THICKNESS,
   defaultFinDesign,
   finReadouts,
+  foilShare,
   validateFinDesign,
   vec2,
   type FinDesign,
@@ -473,5 +474,29 @@ describe('fin store: selecting several points', () => {
     expect(sel(s)).toBeNull();
     s.getState().undo();
     expect(design(s)).toBe(before);
+  });
+});
+
+describe('fin store: outside / inside split', () => {
+  it('splits a side fin’s foil, true to its root, and it still builds', () => {
+    const s = storeWith(defaultFinDesign('side', 'left'));
+    expect(s.getState().setFoilSplit(0.7)).toBe(true);
+    const sec = design(s).section;
+    expect(foilShare(sec)).toBeCloseTo(0.7, 5);
+    // The outside radius is 70% of the root thickness, in chords.
+    const r = finReadouts(design(s));
+    const root = design(s).taper.knots[0]!.end.y;
+    // The leading edge leaves straight up into a radius 70% of the root thickness, in chords.
+    const k = sec.outside.knots;
+    const radius = (0.7 * root) / r.rootChord;
+    expect(Math.hypot(k[1]!.end.x - radius, k[1]!.end.y)).toBeCloseTo(radius, 9);
+    expect(validateFinDesign(design(s))).toEqual([]);
+    expect(s.getState().past.at(-1)!.label).toBe('Foil 70 / 30');
+  });
+
+  it('leaves a centre fin symmetric', () => {
+    const s = storeWith(defaultFinDesign('centre'));
+    expect(s.getState().setFoilSplit(0.7)).toBe(false);
+    expect(design(s).section.inside).toBeNull();
   });
 });

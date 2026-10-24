@@ -5,11 +5,14 @@
  * 10%-thick foil can be shaped by hand. A symmetric foil (every centre fin) has one
  * face; the other is shown mirrored, dashed. NACA 4-digit presets replace both faces,
  * which stay editable afterwards. The dashed vertical marks the thickest point, where
- * the taper's thickness applies.
+ * the taper's thickness applies. An asymmetric foil shows how its thickness is shared
+ * (outside / inside, top left); typing a share rebuilds the foil as leading-edge radii
+ * and straight lines (split-foil.ts).
  */
 import {
   finReadouts,
   foilAt,
+  foilShare,
   knot,
   parseNaca4,
   splineFromKnots,
@@ -21,6 +24,7 @@ import { getFoil, type FinState } from '@openshaper/store';
 import { Button } from '@openshaper/ui';
 import { memo, useCallback, useMemo, useState } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
+import { NumericInput } from '../components/numeric-input';
 import { fmtLen, type LengthUnit } from '../format';
 import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { PointTools } from './PointTools';
@@ -140,7 +144,8 @@ export const FinSectionTools = memo(function FinSectionTools({
 }) {
   const position = useFinState(store, (s) => s.design?.position);
   const activeFoil = useFinState(store, (s) => s.activeFoil);
-  const flat = useFinState(store, (s) =>
+  // Asymmetric: the foil has an inside face of its own (flat, split or NACA-cambered).
+  const asymmetric = useFinState(store, (s) =>
     s.design ? getFoil(s.design, s.activeFoil)?.inside !== null : false,
   );
   if (!position) return null;
@@ -161,18 +166,22 @@ export const FinSectionTools = memo(function FinSectionTools({
         <div className="flex gap-1" role="group" aria-label="Inside face">
           <Button
             size="sm"
-            variant={flat ? 'outline' : 'default'}
-            aria-pressed={!flat}
+            variant={asymmetric ? 'outline' : 'default'}
+            aria-pressed={!asymmetric}
             onClick={() => store.getState().setInsideFace('symmetric')}
           >
             Symmetric
           </Button>
           <Button
             size="sm"
-            variant="outline"
-            onClick={() => store.getState().setInsideFace('flat')}
+            variant={asymmetric ? 'default' : 'outline'}
+            aria-pressed={asymmetric}
+            onClick={() => {
+              // Already asymmetric: keep the faces (a split or a NACA camber) as they are.
+              if (!asymmetric) store.getState().setInsideFace('flat');
+            }}
           >
-            Flat inside
+            Asymmetric
           </Button>
         </div>
       )}
@@ -203,6 +212,76 @@ function FoilTabs({ store, units }: { store: StoreApi<FinState>; units: LengthUn
           {label}
         </Button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The least share of the thickness the outside face takes (%). 50 / 50 is symmetric,
+ * which has its own button; below it the tab would no longer sit under the foil.
+ */
+const MIN_OUTSIDE = 51;
+
+/** A whole percentage, 0 to 100, or null for anything else. */
+const parsePct = (text: string): number | null => {
+  const v = Number(text.trim());
+  return text.trim() !== '' && Number.isFinite(v) && v >= 0 && v <= 100 ? Math.round(v) : null;
+};
+
+/**
+ * How an asymmetric foil's thickness is shared: outside above the chord line, inside
+ * below, as shapers describe a foil (70 / 30). Typing one fills in the other; Enter or
+ * leaving the field builds the foil from it (split-foil.ts).
+ */
+function SplitFields({ store, share }: { store: StoreApi<FinState>; share: number }) {
+  const shown = Math.round(share * 100);
+  // What the user is typing in one box, and which box, until it is committed.
+  const [draft, setDraft] = useState<{ side: 'outside' | 'inside'; text: string } | null>(null);
+  const typed = draft ? parsePct(draft.text) : null;
+  const outsideNow = draft
+    ? draft.side === 'outside'
+      ? draft.text
+      : typed === null
+        ? ''
+        : String(100 - typed)
+    : String(shown);
+  const insideNow = draft
+    ? draft.side === 'inside'
+      ? draft.text
+      : typed === null
+        ? ''
+        : String(100 - typed)
+    : String(100 - shown);
+  const commit = () => {
+    if (draft && typed !== null) {
+      // At least 51 / 49: an even split is the Symmetric button's.
+      const outside = Math.max(MIN_OUTSIDE, draft.side === 'outside' ? typed : 100 - typed);
+      store.getState().setFoilSplit(outside / 100);
+    }
+    setDraft(null);
+  };
+  const field = (side: 'outside' | 'inside', label: string, color: string, value: string) => (
+    <label className="flex flex-col gap-0.5">
+      <span style={{ color }}>{label}</span>
+      <NumericInput
+        value={value}
+        onValueChange={(text) => setDraft({ side, text })}
+        onCommit={commit}
+        onEscape={() => setDraft(null)}
+        ariaLabel={`${label} share of the thickness (%)`}
+        className="h-7 w-12 px-1 text-center tabular-nums"
+      />
+    </label>
+  );
+  return (
+    <div
+      className="absolute left-2 top-1 z-10 flex items-end gap-1 text-xs"
+      role="group"
+      aria-label="Outside and inside share of the thickness"
+    >
+      {field('outside', 'Outside', OUTSIDE, outsideNow)}
+      <span className="pb-1.5 text-muted-foreground">/</span>
+      {field('inside', 'Inside', INSIDE, insideNow)}
     </div>
   );
 }
@@ -297,13 +376,17 @@ export const FinSectionPane = memo(function FinSectionPane({
   if (!design || !section) return null;
   return (
     <div className="relative h-full">
-      <span
-        className="pointer-events-none absolute left-2 top-1 z-10 flex gap-2 text-xs"
-        aria-hidden
-      >
-        <span style={{ color: OUTSIDE }}>— outside</span>
-        {section.inside && <span style={{ color: INSIDE }}>— inside</span>}
-      </span>
+      {section.inside && design.position !== 'centre' ? (
+        <SplitFields store={store} share={foilShare(section)} />
+      ) : (
+        <span
+          className="pointer-events-none absolute left-2 top-1 z-10 flex gap-2 text-xs"
+          aria-hidden
+        >
+          <span style={{ color: OUTSIDE }}>— outside</span>
+          {section.inside && <span style={{ color: INSIDE }}>— inside</span>}
+        </span>
+      )}
       <FinCurveEditor
         label="Foil section"
         layers={layers}
