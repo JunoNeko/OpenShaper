@@ -113,7 +113,7 @@ test.describe('Fin designer', () => {
 
   test('a foil slice: add, shape, export, save and reopen', async ({ page }) => {
     await openFin(page);
-    await page.getByRole('button', { name: 'Add slice' }).click();
+    await page.getByRole('button', { name: 'Add slice (twist)' }).click();
     await page.getByRole('button', { name: 'Show Foil section in the large pane' }).click();
     const tabs = page.getByRole('tablist', { name: 'Foil' });
     await expect(tabs.getByRole('tab')).toHaveText(['Root', '50.0 mm']);

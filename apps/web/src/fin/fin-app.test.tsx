@@ -190,7 +190,7 @@ describe('FinApp', () => {
   it('adds a foil slice from the profile, edits it from its tab, and removes it', () => {
     localStorage.removeItem('bs.fin.views');
     render(<FinApp />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add slice' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add slice (twist)' }));
     const d = () => finStore.getState().design!;
     expect(d().slices).toHaveLength(1);
     expect(d().slices[0]!.height).toBe(0.5); // halfway up: the biggest gap
@@ -254,11 +254,11 @@ describe('FinApp', () => {
   it('bends and twists the blade above a slice from the 3D view', () => {
     localStorage.removeItem('bs.fin.views');
     render(<FinApp />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add slice' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add slice (twist)' }));
     const d = () => finStore.getState().design!;
     const threeD = within(screen.getByRole('region', { name: '3D' }));
     // The new slice is selected: cant and toe now set its change; the arrows are off.
-    expect(threeD.getByLabelText('Slice')).toHaveProperty('value', '1');
+    expect(threeD.getByLabelText('Slice (twist)')).toHaveProperty('value', '1');
     expect(
       threeD.getByRole('group', { name: 'Position on the tab' }).getAttribute('aria-disabled'),
     ).toBe('true');
@@ -276,7 +276,7 @@ describe('FinApp', () => {
     fireEvent.click(threeD.getByRole('button', { name: 'No change here' }));
     expect(d().slices[0]!.twist).toBeUndefined();
     // Back to the root: the arrows work again.
-    fireEvent.change(threeD.getByLabelText('Slice'), { target: { value: '0' } });
+    fireEvent.change(threeD.getByLabelText('Slice (twist)'), { target: { value: '0' } });
     fireEvent.keyDown(window, { key: 'ArrowUp' });
     expect(d().outline.knots[0]!.end.x).toBeGreaterThan(le);
   });
