@@ -386,6 +386,13 @@ export interface FoilEdges {
   readonly foilLeading: Float64Array;
   readonly foilTrailing: Float64Array;
   readonly travel: Float64Array;
+  /**
+   * Where the real edges sit on the foil laid over the smoothed ones ({@link foilRange}),
+   * smoothed up the blade the same way: what the foil is drawn toward over most of the
+   * chord, so a corner in an edge doesn't crease the blade right across.
+   */
+  readonly smoothFrom: Float64Array;
+  readonly smoothTo: Float64Array;
 }
 
 const edgesCache = new WeakMap<PreparedBlade, FoilEdges>();
@@ -464,6 +471,31 @@ const smoothEdge = (
   return smoothed;
 };
 
+/** `xs` averaged over heights with Gaussian weights of width `sigma[i]` at each sample. */
+const gaussianAverage = (hs: Float64Array, xs: Float64Array, sigma: Float64Array): Float64Array => {
+  const n = hs.length;
+  const out = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const reach = 3 * sigma[i]!;
+    let sw = 0;
+    let sx = 0;
+    for (let j = i; j >= 0 && hs[i]! - hs[j]! <= reach; j--) {
+      const d = (hs[j]! - hs[i]!) / sigma[i]!;
+      const w = Math.exp(-0.5 * d * d);
+      sw += w;
+      sx += w * xs[j]!;
+    }
+    for (let j = i + 1; j < n && hs[j]! - hs[i]! <= reach; j++) {
+      const d = (hs[j]! - hs[i]!) / sigma[i]!;
+      const w = Math.exp(-0.5 * d * d);
+      sw += w;
+      sx += w * xs[j]!;
+    }
+    out[i] = sw > 0 ? sx / sw : xs[i]!;
+  }
+  return out;
+};
+
 /** Both edges up the blade, real and smoothed (see {@link FoilEdges}). Cached per blade. */
 export const foilEdges = (b: PreparedBlade): FoilEdges => {
   const hit = edgesCache.get(b);
@@ -494,7 +526,27 @@ export const foilEdges = (b: PreparedBlade): FoilEdges => {
       Math.abs(leading[i]! - leading[i - 1]!) +
       Math.abs(trailing[i]! - trailing[i - 1]!);
   }
-  const edges = { heights, leading, trailing, foilLeading, foilTrailing, travel };
+  // Where the real edges sit on the foil, then smoothed up the blade like the edges.
+  const rawFrom = new Float64Array(n + 1);
+  const rawTo = new Float64Array(n + 1);
+  for (let i = 0; i <= n; i++) {
+    const span = foilTrailing[i]! - foilLeading[i]!;
+    const c = (v: number) => Math.min(1, Math.max(0, v));
+    rawFrom[i] = span === 0 ? 0 : c((leading[i]! - foilLeading[i]!) / span);
+    rawTo[i] = span === 0 ? 1 : c((trailing[i]! - foilLeading[i]!) / span);
+  }
+  const smoothFrom = gaussianAverage(heights, rawFrom, sigma);
+  const smoothTo = gaussianAverage(heights, rawTo, sigma);
+  const edges = {
+    heights,
+    leading,
+    trailing,
+    foilLeading,
+    foilTrailing,
+    travel,
+    smoothFrom,
+    smoothTo,
+  };
   edgesCache.set(b, edges);
   return edges;
 };
@@ -600,6 +652,15 @@ export const rootThickestFaces = (b: PreparedBlade): { outside: number; inside: 
  * so edges end at the minimum rather than bulging (round 2 testing).
  */
 export const FIN_EDGE_PIN = 0.3;
+
+/**
+ * The last stretch of chord, from each edge, over which the foil is brought exactly to
+ * the real edge. Across the wider {@link FIN_EDGE_PIN} stretch it is drawn toward where
+ * the edge sits smoothed up the blade, so a corner in an edge only reaches this far
+ * across the blade: drawing straight to the real edge over the whole stretch carried
+ * each corner a third of the way across as a crease (the owner's test fin).
+ */
+export const FIN_EDGE_LAND = 0.03;
 
 /**
  * Height (cm) over which a raised rear's thick trailing edge fades out above its corner:
@@ -731,15 +792,29 @@ export const bladeSection = (
   const thickness = thicknessAt(b, h);
   const { from: c0, to: c1 } = foilRange(b, h);
   // Over the last stretch of chord at each edge, draw the foil back to its own edge, so
-  // both edges end at the minimum; only a raised rear's underside keeps its cut.
+  // both edges end at the minimum; only a raised rear's underside keeps its cut. In two
+  // steps: across the wide stretch toward where the edge sits smoothed up the blade
+  // (smooth in height, so a corner in an edge doesn't crease the blade across), then over
+  // the last few percent exactly onto the real edge.
   const keep = rearCut(b, h);
-  const pin = FIN_EDGE_PIN * (c1 - c0);
+  const e = foilEdges(b);
+  // Not clamped to the real range: a min or max here would put the corner's kink back.
+  const s0 = edgeAt(e, e.smoothFrom, h);
+  const s1 = edgeAt(e, e.smoothTo, h);
+  const pin = FIN_EDGE_PIN * (s1 - s0);
+  const land = FIN_EDGE_LAND * (c1 - c0);
+  const ramp = (t: number) => smoother(Math.min(1, Math.max(0, t)));
+  const wide = (g: number) =>
+    g - s0 * ramp((s0 + pin - g) / pin) + (1 - keep) * (1 - s1) * ramp((g - (s1 - pin)) / pin);
+  // What the wide step leaves to do at each real edge: 0 at the leading edge, and at the
+  // trailing edge 1 (or the cut, where a raised rear keeps it).
+  const short0 = wide(c0);
+  const short1 = c1 + (1 - keep) * (1 - c1) - wide(c1);
   const fractionAt = (u: number): number => {
     const g = c0 + (c1 - c0) * u;
-    if (!(pin > 0)) return g;
-    let f = g;
-    if (g < c0 + pin) f -= c0 * smoother((c0 + pin - g) / pin);
-    if (g > c1 - pin) f += (1 - keep) * (1 - c1) * smoother((g - (c1 - pin)) / pin);
+    if (!(pin > 0) || !(land > 0)) return g;
+    const f =
+      wide(g) - short0 * ramp((c0 + land - g) / land) + short1 * ramp((g - (c1 - land)) / land);
     return Math.min(1, Math.max(0, f)); // exactly 0 and 1 at the edges, not a hair past
   };
   const end = fractionAt(1);

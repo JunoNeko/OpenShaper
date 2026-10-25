@@ -9,9 +9,14 @@
  * over smoothed edges (blade.ts), which below the low point run behind the underside:
  * the foil is cut off at it, so the underside has the foil's thickness (rounds 1–2).
  */
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { splineFromKnots } from '../bezier-spline';
+import { knot } from '../knot';
 import { value } from '../bezier-curve';
-import type { Vec2 } from '../vec2';
+import { vec2, type Vec2 } from '../vec2';
 import {
   RAISED_BASE_END,
   RAISED_LOW,
@@ -27,6 +32,8 @@ import { splineExtremes } from './curve-shape';
 import type { FinDesign } from './fin-design';
 import { finReadouts } from './fin-readouts';
 import { validateFinDesign } from './fin-rules';
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 const LOW = RAISED_LOW;
 const BASE_END = RAISED_BASE_END;
@@ -289,6 +296,72 @@ describe('the corner of a raised rear that curls up into a point (the owner’s 
 
   it('fits a blade surface within tolerance', () => {
     const d = defaultKeel('right');
+    const m = fitBladeSurface(d);
+    expect(bladeSurfaceDeviation(prepareBlade(d), m.surface, m.topZ)).toBeLessThanOrEqual(
+      BLADE_CI_TOLERANCE,
+    );
+  });
+});
+
+describe('corners in an edge (the owner’s test fin, docs/specs/fins/corner_creases.fin.json)', () => {
+  /** The test fin, read straight from its file (mm → cm). */
+  const testFin = (): FinDesign => {
+    type Row = { e: [number, number]; p: [number, number]; n: [number, number]; c: boolean };
+    const file = JSON.parse(
+      readFileSync(resolve(here, '../../../../docs/specs/fins/corner_creases.fin.json'), 'utf8'),
+    ) as { outline: Row[]; section: { outside: Row[]; inside: Row[] }; taper: Row[] };
+    const spline = (rows: Row[], fx: number, fy: number) =>
+      splineFromKnots(
+        rows.map((k) =>
+          knot(
+            vec2(k.e[0] * fx, k.e[1] * fy),
+            vec2(k.p[0] * fx, k.p[1] * fy),
+            vec2(k.n[0] * fx, k.n[1] * fy),
+            k.c,
+          ),
+        ),
+      );
+    return {
+      ...defaultFinDesign('side', 'right'),
+      outline: spline(file.outline, 0.1, 0.1),
+      section: {
+        outside: spline(file.section.outside, 1, 1),
+        inside: spline(file.section.inside, 1, 1),
+      },
+      taper: spline(file.taper, 1, 0.1),
+    };
+  };
+
+  it('is a valid design with four sharp corners in its trailing edge', () => {
+    const d = testFin();
+    expect(validateFinDesign(d)).toEqual([]);
+    expect(d.outline.knots.slice(1, -1).filter((k) => !k.continuous)).toHaveLength(4);
+  });
+
+  it('keeps each corner’s crease close to the edge, not carried across the blade', () => {
+    const d = testFin();
+    const b = prepareBlade(d);
+    const t = (x: number, h: number) => {
+      const c = chordAt(b, h);
+      const s = bladeSection(b, h, [0, (x - c.leading) / (c.trailing - c.leading), 1]);
+      return Math.abs(s.outside[1]!.y - s.inside[1]!.y);
+    };
+    for (const k of d.outline.knots.slice(1, -1).filter((k) => !k.continuous)) {
+      const h = k.end.y;
+      for (const ahead of [0.5, 1]) {
+        const x = chordAt(b, h).trailing + ahead;
+        const e = 0.03;
+        // The change in slope going up through the corner's height (mm per cm).
+        const below = (t(x, h - e) - t(x, h - 2 * e)) / e;
+        const above = (t(x, h + 2 * e) - t(x, h + e)) / e;
+        // Was 1.0–2.7 with the foil drawn to the real edge across a third of the chord.
+        expect(Math.abs(above - below) * 10).toBeLessThan(0.5);
+      }
+    }
+  });
+
+  it('fits a blade surface within tolerance', () => {
+    const d = testFin();
     const m = fitBladeSurface(d);
     expect(bladeSurfaceDeviation(prepareBlade(d), m.surface, m.topZ)).toBeLessThanOrEqual(
       BLADE_CI_TOLERANCE,
