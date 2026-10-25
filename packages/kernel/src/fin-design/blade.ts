@@ -179,9 +179,22 @@ export const findRaisedRear = (outline: Spline): RaisedRear | null => {
         if (isUnderside(m.x, m.z)) lo = mid;
         else hi = mid;
       }
-      const corner = value(k[seg]!, hi);
-      if (corner.y <= 0) return null;
-      return { cornerX: corner.x, cornerZ: corner.y };
+      const turn = value(k[seg]!, hi);
+      if (turn.y <= 0) return null;
+      // An underside that curls up into a sharp point (the owner's keel) turns steep a
+      // little short of it: the point is the corner, where the edge really changes
+      // direction. Without this the point's kink lands in the trailing edge above the
+      // corner and creases the blade across at its height.
+      const knot = outline.knots[seg]!;
+      if (
+        !knot.continuous &&
+        knot.end.x < turn.x &&
+        knot.end.y > turn.y &&
+        knot.end.y - turn.y <= REAR_LEAD
+      ) {
+        return { cornerX: knot.end.x, cornerZ: knot.end.y };
+      }
+      return { cornerX: turn.x, cornerZ: turn.y };
     }
   }
   return null;
@@ -588,8 +601,15 @@ export const rootThickestFaces = (b: PreparedBlade): { outside: number; inside: 
  */
 export const FIN_EDGE_PIN = 0.3;
 
-/** Height (cm) over which a raised rear's thick trailing edge fades out above its corner. */
-const REAR_FADE = 0.3;
+/**
+ * Height (cm) over which a raised rear's thick trailing edge fades out above its corner:
+ * how fast the foil goes from running on to the underside's cut to being drawn in to
+ * the trailing edge. That change reaches a third of the chord forward, so done in 3 mm
+ * it left a ridge across the blade just above the corner (the owner's keel); over
+ * 10 mm the ridge is about four times smoother, and the trailing edge is back to the
+ * minimum 10 mm above the corner (0.84 mm 3 mm up on the keel).
+ */
+export const FIN_REAR_FADE = 1.0;
 
 /** 0 → 1 with flat ends: 6t⁵ − 15t⁴ + 10t³, curvature continuous where it joins. */
 const smoother = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10);
@@ -601,9 +621,9 @@ const smoother = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10);
  */
 const rearCut = (b: PreparedBlade, h: number): number => {
   const r = b.raisedRear;
-  if (!r || h >= r.cornerZ + REAR_FADE) return 0;
+  if (!r || h >= r.cornerZ + FIN_REAR_FADE) return 0;
   if (h <= r.cornerZ) return 1;
-  return 1 - smoother((h - r.cornerZ) / REAR_FADE);
+  return 1 - smoother((h - r.cornerZ) / FIN_REAR_FADE);
 };
 
 /**

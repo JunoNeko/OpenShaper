@@ -19,9 +19,9 @@ import {
   raisedRearDesign,
 } from '../test-support/fin-designs';
 import { FIN_MIN_THICKNESS, FIN_POSITIONS } from './fin-design';
-import { defaultFinDesign, defaultTwinFin } from './fin-defaults';
+import { defaultFinDesign, defaultKeel, defaultTwinFin } from './fin-defaults';
 import { finMesh } from './fin-mesh';
-import { bladeSection, chordAt, findRaisedRear, prepareBlade } from './blade';
+import { FIN_REAR_FADE, bladeSection, chordAt, findRaisedRear, prepareBlade } from './blade';
 import { BLADE_CI_TOLERANCE, bladeSurfaceDeviation, fitBladeSurface } from './blade-surface';
 import { splineExtremes } from './curve-shape';
 import type { FinDesign } from './fin-design';
@@ -162,7 +162,7 @@ describe('a hooked tip', () => {
   it('ends both edges at the minimum, hook and all', () => {
     // Round 2 testing: cutting the foil off at the real edge bulged the trailing edge
     // wherever it bent. Only a raised rear's underside keeps a thick edge.
-    const above = b.raisedRear!.cornerZ + 0.3;
+    const above = b.raisedRear!.cornerZ + FIN_REAR_FADE;
     for (let h = above; h < b.depth * 0.995; h += 0.1) {
       const s = bladeSection(b, h, [0, 1]);
       for (const j of [0, 1]) {
@@ -241,5 +241,57 @@ describe('a raised rear behind a steep start at the root (the owner’s twin fin
     for (const position of FIN_POSITIONS) {
       expect(findRaisedRear(defaultFinDesign(position).outline)).toBeNull();
     }
+  });
+});
+
+describe('the corner of a raised rear that curls up into a point (the owner’s keel)', () => {
+  /**
+   * The sharpest bend (per cm of height) in thickness going straight up past the corner,
+   * a short way in front of it: a ridge across the blade shows here.
+   */
+  const worstBend = (d: ReturnType<typeof defaultKeel>) => {
+    const b = prepareBlade(d);
+    const r = b.raisedRear!;
+    let worst = 0;
+    for (const ahead of [0.05, 0.1, 0.15]) {
+      const x = r.cornerX + ahead;
+      const hs: number[] = [];
+      const ts: number[] = [];
+      for (let h = Math.max(0.01, r.cornerZ - 0.5); h <= r.cornerZ + 1.5; h += 0.015) {
+        const c = chordAt(b, h);
+        if (!(x < c.leading && x > c.trailing)) continue;
+        const s = bladeSection(b, h, [0, (x - c.leading) / (c.trailing - c.leading), 1]);
+        hs.push(h);
+        ts.push(Math.abs(s.outside[1]!.y - s.inside[1]!.y));
+      }
+      for (let i = 1; i < ts.length - 1; i++) {
+        const bend =
+          (ts[i + 1]! - 2 * ts[i]! + ts[i - 1]!) / ((hs[i + 1]! - hs[i]!) * (hs[i]! - hs[i - 1]!));
+        worst = Math.max(worst, Math.abs(bend));
+      }
+    }
+    return worst;
+  };
+
+  it('puts the corner at the point, not where the underside starts to curl up', () => {
+    const d = defaultKeel('right');
+    const point = d.outline.knots.at(-2)!.end;
+    const r = prepareBlade(d).raisedRear!;
+    expect(r.cornerX).toBeCloseTo(point.x, 12);
+    expect(r.cornerZ).toBeCloseTo(point.y, 12);
+  });
+
+  it('has no ridge across the blade just above the corner', () => {
+    // It was 2.1 /cm, with the corner short of the point and a 3 mm hand-over.
+    expect(worstBend(defaultKeel('right'))).toBeLessThan(0.8);
+    expect(worstBend(defaultTwinFin('right'))).toBeLessThan(0.8);
+  });
+
+  it('fits a blade surface within tolerance', () => {
+    const d = defaultKeel('right');
+    const m = fitBladeSurface(d);
+    expect(bladeSurfaceDeviation(prepareBlade(d), m.surface, m.topZ)).toBeLessThanOrEqual(
+      BLADE_CI_TOLERANCE,
+    );
   });
 });
