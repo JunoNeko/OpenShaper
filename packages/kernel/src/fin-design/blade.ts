@@ -356,6 +356,33 @@ export const chordAt = (b: PreparedBlade, h: number): { leading: number; trailin
   return { leading: hits[0]!.point.x, trailing: hits[hits.length - 1]!.point.x };
 };
 
+/**
+ * Longest the flat cap that closes the blade under the tip may be (cm). Under a rounded
+ * top the chord closes slowly: 0.1 mm down, the keel's is still 8 mm, which a flat cap
+ * there leaves as a flat on the top edge (round 4 testing). 1 mm reads as the edge.
+ */
+export const FIN_TIP_CAP = 0.1;
+
+/**
+ * Where the blade's sections stop under the tip: `gap` below it, or higher where the
+ * chord there is longer than {@link FIN_TIP_CAP}, so the cap closing it stays short.
+ */
+export const bladeTop = (b: PreparedBlade, gap: number): number => {
+  const span = (h: number) => {
+    const c = chordAt(b, h);
+    return c.leading - c.trailing;
+  };
+  let lo = Math.max(0, b.depth - gap);
+  if (!(span(lo) > FIN_TIP_CAP)) return lo;
+  let hi = b.depth;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (span(mid) > FIN_TIP_CAP) lo = mid;
+    else hi = mid;
+  }
+  return hi;
+};
+
 /** The taper's thickness (cm) at height `h`. */
 export const thicknessAt = (b: PreparedBlade, h: number): number =>
   yAtX(b.design.taper, Math.min(1, Math.max(0, h / b.depth)));
@@ -663,6 +690,16 @@ export const FIN_EDGE_PIN = 0.3;
 export const FIN_EDGE_LAND = 0.03;
 
 /**
+ * Where the wide step carries the foil past the real edge, the land draws it back. Drawn
+ * back over too short a land, the foil ran backward there: folded over and clamped at
+ * the minimum, a bulge and then a flat at the edge, 0.07 mm deep but plain in the 3D
+ * view and in CAD under the keel's rounded top (round 4 testing). So a land is at least
+ * this many times as wide as what it draws back: the ramp's steepest slope, which keeps
+ * the foil from ever running backward. It leaves corners' lands as they were.
+ */
+const LAND_PER_DRAW_BACK = 15 / 8;
+
+/**
  * Height (cm) over which a raised rear's thick trailing edge fades out above its corner:
  * how fast the foil goes from running on to the underside's cut to being drawn in to
  * the trailing edge. That change reaches a third of the chord forward, so done in 3 mm
@@ -810,11 +847,19 @@ export const bladeSection = (
   // trailing edge 1 (or the cut, where a raised rear keeps it).
   const short0 = wide(c0);
   const short1 = c1 + (1 - keep) * (1 - c1) - wide(c1);
+  // Widened only to draw back (a negative share), blended in smoothly, never past the pin.
+  const landFor = (short: number) =>
+    Math.min(pin, Math.hypot(land, LAND_PER_DRAW_BACK * Math.max(0, -short)));
+  const land0 = landFor(short0);
+  const land1 = landFor(short1);
   const fractionAt = (u: number): number => {
     const g = c0 + (c1 - c0) * u;
     if (!(pin > 0) || !(land > 0)) return g;
+    // The edges exactly, not as the sum below comes out to a hair either side of them.
+    if (u <= 0) return 0;
+    if (u >= 1) return Math.min(1, Math.max(0, c1 + (1 - keep) * (1 - c1)));
     const f =
-      wide(g) - short0 * ramp((c0 + land - g) / land) + short1 * ramp((g - (c1 - land)) / land);
+      wide(g) - short0 * ramp((c0 + land0 - g) / land0) + short1 * ramp((g - (c1 - land1)) / land1);
     return Math.min(1, Math.max(0, f)); // exactly 0 and 1 at the edges, not a hair past
   };
   const end = fractionAt(1);

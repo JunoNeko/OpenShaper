@@ -25,10 +25,12 @@
  *
  * ## The tip
  *
- * Sections stop {@link BladeSurfaceOptions.tipGap} below the tip, and a flat cap
- * closes the blade there. A surface pinched to a point is legal STEP but a common
- * cause of import failures. The cap is a sliver a couple of mm long and the minimum thickness wide;
- * the CNC cutter rounds it.
+ * Sections stop {@link BladeSurfaceOptions.tipGap} below the tip, or higher where the
+ * chord there is longer than `FIN_TIP_CAP` (`bladeTop`), and a flat cap closes the
+ * blade there. A surface pinched to a point is legal STEP but a common cause of import
+ * failures. The cap is a sliver at most 1 mm long and the minimum thickness wide; the
+ * CNC cutter rounds it. (Under a rounded top a fixed gap left it 8 mm long on the keel,
+ * a flat in the top edge in CAD.)
  *
  * ## Accuracy
  *
@@ -53,6 +55,7 @@ import {
 import type { Vert3 } from '../loft';
 import {
   bladeSection,
+  bladeTop,
   bladeRowHeights,
   outlineFeatureHeights,
   bladeTravel,
@@ -71,7 +74,7 @@ export interface BladeSurfaceOptions {
   readonly stations?: number;
   /** How closely the surface must follow the blade (cm). */
   readonly tolerance?: number;
-  /** How far below the tip the sections stop (cm). */
+  /** How far below the tip the sections stop at most (cm); see `bladeTop`. */
   readonly tipGap?: number;
   /** Refinement passes after the first. */
   readonly maxRefinements?: number;
@@ -207,12 +210,15 @@ const withEdgeCornerRows = (
   const heights = [...new Set([...at.heights, ...extra.filter((h) => h > 0 && h < top)])].sort(
     (p, q) => p - q,
   );
-  // Drop rows closer than the tightest offset to a neighbour, but never a crease.
+  // Drop rows closer than the tightest offset to a neighbour, but never a crease, and
+  // never the top: a row that crowds it gives way instead.
   const kept: number[] = [];
   for (const h of heights) {
     const last = kept[kept.length - 1];
     if (last === undefined || h - last >= CORNER_ROWS[0]! * 0.99 || creases.includes(h)) {
       kept.push(h);
+    } else if (h === top) {
+      kept[creases.includes(last) ? kept.length : kept.length - 1] = h;
     }
   }
   return { heights: kept, breaks: creases.map((z) => kept.indexOf(z)) };
@@ -320,7 +326,7 @@ export const fitBladeSurface = (
 ): BladeSurfaceModel => {
   const o = { ...BLADE_DEFAULTS, ...opts };
   const b = prepareBlade(d, o.laminate, o.minThickness);
-  const topZ = b.depth - o.tipGap;
+  const topZ = bladeTop(b, o.tipGap);
   let rows = o.rows;
   let stations = o.stations;
   let best: BladeSurfaceModel | null = null;

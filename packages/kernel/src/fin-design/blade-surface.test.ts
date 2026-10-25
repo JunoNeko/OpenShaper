@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
-import { knotMultiplicities } from '../bspline-surface';
-import { prepareBlade } from './blade';
+import { evalSurface, knotMultiplicities } from '../bspline-surface';
+import { FIN_TIP_CAP, bladeTop, chordAt, prepareBlade } from './blade';
 import {
   BLADE_CI_TOLERANCE,
   BLADE_DEFAULTS,
   bladeSurfaceDeviation,
   fitBladeSurface,
 } from './blade-surface';
-import { defaultFinDesign } from './fin-defaults';
+import { defaultFinDesign, defaultKeel, defaultTwinFin } from './fin-defaults';
+import { finMesh } from './fin-mesh';
 import { FIN_POSITIONS, type FinDesign } from './fin-design';
 
 const designs: [string, FinDesign][] = [
@@ -43,7 +44,7 @@ describe.each(designs)('fitBladeSurface(%s)', (_, d) => {
       expect(Math.abs(row[0]!.z)).toBeLessThan(1e-12);
       expect(Math.abs(row[row.length - 1]!.z - m.topZ)).toBeLessThan(1e-12);
     }
-    expect(m.topZ).toBeCloseTo(prepareBlade(d).depth - BLADE_DEFAULTS.tipGap, 12);
+    expect(m.topZ).toBeCloseTo(bladeTop(prepareBlade(d), BLADE_DEFAULTS.tipGap), 12);
   });
 
   it('creases at the four section corners and nowhere else around', () => {
@@ -67,5 +68,49 @@ describe('bladeSurfaceDeviation', () => {
     const d = defaultFinDesign('side');
     const m = fitBladeSurface(d, { rows: 4, stations: 4, maxRefinements: 0 });
     expect(m.deviation).toBeGreaterThan(10 * BLADE_DEFAULTS.tolerance);
+  });
+});
+
+describe("the cap under the tip (round 4 testing: a flat on the keel's top edge)", () => {
+  const chord = (b: ReturnType<typeof prepareBlade>, h: number) => {
+    const c = chordAt(b, h);
+    return c.leading - c.trailing;
+  };
+  const gap = BLADE_DEFAULTS.tipGap;
+
+  it.each([
+    ['keel', defaultKeel()],
+    ['twin', defaultTwinFin()],
+    ['side', defaultFinDesign('side', 'right')],
+  ] as const)('is at most FIN_TIP_CAP long, and never lower than the gap: %s', (_, d) => {
+    const b = prepareBlade(d);
+    const top = bladeTop(b, gap);
+    expect(top).toBeGreaterThanOrEqual(b.depth - gap);
+    expect(top).toBeLessThan(b.depth);
+    expect(chord(b, top)).toBeLessThanOrEqual(FIN_TIP_CAP + 1e-9);
+    // Raised only as far as it takes.
+    if (top > b.depth - gap) expect(chord(b, top)).toBeCloseTo(FIN_TIP_CAP, 6);
+  });
+
+  it('closes the keel and twin with a short cap in the STEP surface and the mesh', () => {
+    for (const d of [defaultKeel(), defaultTwinFin()]) {
+      const b = prepareBlade(d);
+      // What a cap at the old fixed gap would have been: several mm of flat.
+      expect(chord(b, b.depth - gap)).toBeGreaterThan(0.5);
+      const m = fitBladeSurface(d);
+      const xs = Array.from({ length: 401 }, (_, i) => evalSurface(m.surface, i / 400, 1).x);
+      expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(FIN_TIP_CAP + 1e-3);
+      for (const row of m.surface.ctrl) {
+        expect(Math.abs(row[row.length - 1]!.z - m.topZ)).toBeLessThan(1e-12);
+      }
+      const mesh = finMesh(d).blade;
+      const p = mesh.positions;
+      let zMax = -Infinity;
+      for (let i = 2; i < p.length; i += 3) zMax = Math.max(zMax, p[i]!);
+      const top: number[] = [];
+      for (let i = 0; i < p.length; i += 3) if (p[i + 2] === zMax) top.push(p[i]!);
+      expect(zMax).toBeCloseTo(bladeTop(b, gap), 5); // float32 positions
+      expect(Math.max(...top) - Math.min(...top)).toBeLessThanOrEqual(FIN_TIP_CAP + 1e-5);
+    }
   });
 });
