@@ -19,7 +19,7 @@ import {
   raisedRearDesign,
 } from '../test-support/fin-designs';
 import { FIN_MIN_THICKNESS, FIN_POSITIONS } from './fin-design';
-import { defaultFinDesign } from './fin-defaults';
+import { defaultFinDesign, defaultTwinFin } from './fin-defaults';
 import { finMesh } from './fin-mesh';
 import { bladeSection, chordAt, findRaisedRear, prepareBlade } from './blade';
 import { BLADE_CI_TOLERANCE, bladeSurfaceDeviation, fitBladeSurface } from './blade-surface';
@@ -204,6 +204,42 @@ describe('a hooked tip', () => {
         const bend = Math.abs(ys[i - 1]! - 2 * ys[i]! + ys[i + 1]!) / (step * step);
         expect(bend).toBeLessThan(4);
       }
+    }
+  });
+});
+
+describe('a raised rear behind a steep start at the root (the owner’s twin fin)', () => {
+  const d = defaultTwinFin('right');
+  const b = prepareBlade(d);
+
+  it('is found, though the outline leaves the root steeply for its first millimetre', () => {
+    // The root's handle points nearly straight up: the underside starts just above it.
+    const k = d.outline.knots.at(-1)!;
+    expect(Math.abs(k.tangentToPrev.y / (k.tangentToPrev.x - k.end.x))).toBeGreaterThan(1);
+    expect(b.raisedRear).not.toBeNull();
+    expect(b.raisedRear!.cornerX).toBeCloseTo(d.outline.knots.at(-2)!.end.x, 9);
+    expect(b.raisedRear!.cornerZ).toBeCloseTo(d.outline.knots.at(-2)!.end.y, 9);
+  });
+
+  it('keeps the foil’s thickness along the underside, not a minimum-thickness flap', () => {
+    const atTe = (h: number) => {
+      const s = bladeSection(b, h);
+      const j = s.stations.length - 1;
+      return Math.abs(s.outside[j]!.y - s.inside[j]!.y);
+    };
+    expect(atTe(0.05)).toBeGreaterThan(3 * FIN_MIN_THICKNESS);
+    expect(atTe(0.2)).toBeGreaterThan(2 * FIN_MIN_THICKNESS);
+  });
+
+  it('fits a blade surface within tolerance', () => {
+    const m = fitBladeSurface(d);
+    expect(bladeSurfaceDeviation(b, m.surface, m.topZ)).toBeLessThanOrEqual(BLADE_CI_TOLERANCE);
+  });
+
+  it('still isn’t found where the trailing edge rises from the root for longer', () => {
+    // The default fins: steep from the root all the way up.
+    for (const position of FIN_POSITIONS) {
+      expect(findRaisedRear(defaultFinDesign(position).outline)).toBeNull();
     }
   });
 });

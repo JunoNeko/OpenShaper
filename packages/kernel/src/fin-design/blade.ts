@@ -115,7 +115,8 @@ export interface PreparedBlade {
 
 /**
  * The underside of a raised rear: the end of the outline, walking back from the
- * trailing-edge root, while it runs backward and rises at under 45°. Steeper than that
+ * trailing-edge root, while it runs backward and rises at under 45° (after a steep
+ * lead-in of up to {@link REAR_LEAD} off the root, if it has one). Steeper than that
  * it is the trailing edge. Where it ends (`corner`) the trailing edge proper starts.
  * Below the corner the trailing edge keeps the foil's thickness (see
  * {@link bladeSection}); everywhere else it is the minimum.
@@ -127,6 +128,14 @@ export interface RaisedRear {
 
 /** Samples per segment when walking the underside. */
 const REAR_SAMPLES = 64;
+
+/**
+ * How high (cm) the outline may rise steeply off the trailing-edge root before its
+ * underside starts: a root handle pulled up (the owner's twin fin) leaves the root
+ * steeply for a millimetre or two, then turns back along the underside. Steep for
+ * longer than this, it is a trailing edge rising from the root: no raised rear.
+ */
+const REAR_LEAD = 0.3;
 
 const isUnderside = (dx: number, dz: number): boolean => dx < 0 && dz >= 0 && dz < -dx;
 
@@ -150,7 +159,11 @@ export const findRaisedRear = (outline: Spline): RaisedRear | null => {
         lastGood = { seg, t };
         continue;
       }
-      if (!lastGood) return null; // steep from the root: no raised rear
+      if (!lastGood) {
+        // Steep at the root: allowed for a short lead-in, then it's a plain trailing edge.
+        if (value(k[seg]!, t).y > REAR_LEAD) return null;
+        continue;
+      }
       // The corner is between the last sample that was underside and this one.
       let lo = lastGood.seg === seg ? lastGood.t : 0; // underside side (higher t)
       let hi = t; // trailing-edge side
