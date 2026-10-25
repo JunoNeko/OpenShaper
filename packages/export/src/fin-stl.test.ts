@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   FIN_MESH_FINE,
   FUTURES_TABS,
+  bladeTop,
   defaultFinDesign,
   finMesh,
-  finReadouts,
+  prepareBlade,
   type FinDesign,
 } from '@openshaper/kernel';
 import { exportFinStl } from './fin-stl';
@@ -82,7 +83,7 @@ describe.each([
     const tab = FUTURES_TABS[d.position === 'side' ? 'side' : 'centre'];
     expect(hi[0]! - Math.min(lo[0]!, 0)).toBeGreaterThan(tab.length * 10 - 1e-3);
     expect(lo[2]).toBeCloseTo(-tab.height * 10, 3); // the tab bottom
-    expect(hi[2]).toBeCloseTo((finReadouts(d).depth - 0.01) * 10, 2); // just under the tip
+    expect(hi[2]).toBeCloseTo(bladeTop(prepareBlade(d), 0.01) * 10, 2); // just under the tip
   });
 
   it('is closed and wound outward (positive volume)', () => {

@@ -7,7 +7,7 @@
  * The blade is meshed straight from the design's sections, not from the STEP surface:
  * rings of {@link sectionLoop} stacked up the blade, joined by quads, with the root
  * and tip rings capped flat. Sections stop {@link FinMeshOptions.tipGap} under the
- * tip, as the STEP blade does. The tab is its profile (arcs sampled to
+ * tip, or higher under a rounded top (`bladeTop`), as the STEP blade does. The tab is its profile (arcs sampled to
  * {@link FinMeshOptions.arcTolerance}) extruded across its thickness.
  *
  * Closed by construction: neighbouring triangles share vertex indices, so every edge
@@ -20,6 +20,7 @@ import { vec2, type Vec2 } from '../vec2';
 import type { Vert3 } from '../loft';
 import {
   bladeRowHeights,
+  bladeTop,
   bladeSection,
   cosineStations,
   type FinLaminate,
@@ -39,7 +40,7 @@ export interface FinMeshOptions {
   readonly rows?: number;
   /** Chord stations per face in each ring. */
   readonly stations?: number;
-  /** How far below the tip the rings stop (cm). */
+  /** How far below the tip the rings stop at most (cm); see `bladeTop`. */
   readonly tipGap?: number;
   /** Largest gap between a tab arc and its chords (cm). */
   readonly arcTolerance?: number;
@@ -117,7 +118,7 @@ const FEATURE_RINGS = [0.01, 0.03, 0.1];
 
 const bladeMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
   const b = prepareBlade(d, o.laminate, o.minThickness);
-  const top = b.depth - o.tipGap;
+  const top = bladeTop(b, o.tipGap);
   const st = cosineStations(o.stations);
   // Rings spaced along the edges' travel: they gather at the tip, and wherever an edge
   // runs nearly level (a raised rear's underside, a hooked tip).

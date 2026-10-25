@@ -8,7 +8,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   BLADE_CI_TOLERANCE,
+  BLADE_DEFAULTS,
   bladeSection,
+  bladeTop,
   bladeSurfaceDeviation,
   cosineStations,
   defaultFinDesign,
@@ -336,7 +338,7 @@ describe.each(designs)('exportFinStep(%s)', (_, d) => {
       const profile = polygon(tab.segments);
       const holes = tab.holes.map(polygon);
       const inBlade = (p: Vert3) => {
-        if (p.z <= 0 || p.z >= b.depth - 0.01) return false;
+        if (p.z <= 0 || p.z >= bladeTop(b, BLADE_DEFAULTS.tipGap)) return false;
         return insidePoly(p, sectionLoop(bladeSection(b, p.z, cosineStations(400))));
       };
       const inTab = (p: Vert3) =>

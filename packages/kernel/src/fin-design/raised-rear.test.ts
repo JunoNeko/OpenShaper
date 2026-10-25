@@ -367,4 +367,33 @@ describe('corners in an edge (the owner’s test fin, docs/specs/fins/corner_cre
       BLADE_CI_TOLERANCE,
     );
   });
+
+  // Round 4 testing: under the keel's rounded top the foil folded over at each edge, a
+  // bulge and then a flat at the minimum, 0.07 mm deep (0.05 mm at this fin's corners).
+  it.each([
+    ['test fin', testFin],
+    ['keel', defaultKeel],
+    ['twin', defaultTwinFin],
+    ['side', () => defaultFinDesign('side', 'right')],
+  ] as const)('never folds the foil over at an edge: %s', (_, make) => {
+    const d = make();
+    const b = prepareBlade(d);
+    const st = Array.from({ length: 401 }, (_, i) => i / 400);
+    const corners = d.outline.knots
+      .slice(1, -1)
+      .filter((k) => !k.continuous)
+      .flatMap((k) => Array.from({ length: 31 }, (_, i) => k.end.y + (i - 15) * 0.02));
+    const top = [3, 2, 1, 0.5, 0.3, 0.2, 0.1, 0.05, 0.02].map((mm) => b.depth - mm / 10);
+    const along = Array.from({ length: 99 }, (_, i) => (b.depth * (i + 1)) / 100);
+    for (const h of [...corners, ...top, ...along].filter((h) => h > 0 && h < b.depth)) {
+      const s = bladeSection(b, h, st);
+      const t = st.map((_, i) => Math.abs(s.outside[i]!.y - s.inside[i]!.y));
+      // Walking in from either edge over the last 6% of chord, it only thickens.
+      for (const run of [t.slice(0, 25), t.slice(376).reverse()]) {
+        for (let i = 1; i < run.length; i++) {
+          expect(run[i]!).toBeGreaterThanOrEqual(run[i - 1]! - 1e-9);
+        }
+      }
+    }
+  });
 });
