@@ -29,7 +29,7 @@ import { finMesh } from './fin-mesh';
 import { FIN_REAR_FADE, bladeSection, chordAt, findRaisedRear, prepareBlade } from './blade';
 import { BLADE_CI_TOLERANCE, bladeSurfaceDeviation, fitBladeSurface } from './blade-surface';
 import { splineExtremes } from './curve-shape';
-import type { FinDesign } from './fin-design';
+import type { FinDesign, FinTwist } from './fin-design';
 import { finReadouts } from './fin-readouts';
 import { validateFinDesign } from './fin-rules';
 
@@ -248,6 +248,81 @@ describe('a raised rear behind a steep start at the root (the owner’s twin fin
     for (const position of FIN_POSITIONS) {
       expect(findRaisedRear(defaultFinDesign(position).outline)).toBeNull();
     }
+  });
+});
+
+describe('a raised rear behind a tall steep start (the owner’s A4C, docs/specs/fins/a4c_raised_rear.fin.json)', () => {
+  /** The owner's fin, read straight from its file (mm → cm), slices and twist included. */
+  const a4c = (): FinDesign => {
+    type Row = { e: [number, number]; p: [number, number]; n: [number, number]; c: boolean };
+    type Section = { outside: Row[]; inside: Row[] | null };
+    const file = JSON.parse(
+      readFileSync(resolve(here, '../../../../docs/specs/fins/a4c_raised_rear.fin.json'), 'utf8'),
+    ) as {
+      hand: 'left' | 'right';
+      outline: Row[];
+      section: Section;
+      slices: { height: number; section: Section; twist?: FinTwist }[];
+      taper: Row[];
+    };
+    const spline = (rows: Row[], fx: number, fy: number) =>
+      splineFromKnots(
+        rows.map((k) =>
+          knot(
+            vec2(k.e[0] * fx, k.e[1] * fy),
+            vec2(k.p[0] * fx, k.p[1] * fy),
+            vec2(k.n[0] * fx, k.n[1] * fy),
+            k.c,
+          ),
+        ),
+      );
+    const section = (sec: Section) => ({
+      outside: spline(sec.outside, 1, 1),
+      inside: sec.inside ? spline(sec.inside, 1, 1) : null,
+    });
+    return {
+      ...defaultFinDesign('side', file.hand),
+      outline: spline(file.outline, 0.1, 0.1),
+      section: section(file.section),
+      slices: file.slices.map((sl) => ({
+        height: sl.height,
+        section: section(sl.section),
+        ...(sl.twist ? { twist: sl.twist } : {}),
+      })),
+      taper: spline(file.taper, 1, 0.1),
+    };
+  };
+  const d = a4c();
+  const b = prepareBlade(d);
+  const atTe = (h: number) => {
+    const s = bladeSection(b, h);
+    const j = s.stations.length - 1;
+    return Math.abs(s.outside[j]!.y - s.inside[j]!.y);
+  };
+
+  it('is a valid design, slices and twist included', () => {
+    expect(validateFinDesign(d)).toEqual([]);
+    expect(d.slices).toHaveLength(3);
+  });
+
+  it('is found, though the outline rises steeply off the root for 7 mm first', () => {
+    // Was null: only a 3 mm lead-in was allowed. The underside then runs 30 mm back.
+    expect(b.raisedRear).not.toBeNull();
+    expect(b.raisedRear!.cornerZ).toBeGreaterThan(1.5);
+    expect(b.raisedRear!.cornerZ).toBeLessThan(d.outline.knots.at(-2)!.end.y);
+  });
+
+  it('keeps the foil’s thickness at the base of the trailing edge, not pinched to the minimum', () => {
+    // Was the minimum (0.5 mm) behind 5.6 mm of foil just ahead of it.
+    expect(atTe(0.05)).toBeGreaterThan(10 * FIN_MIN_THICKNESS);
+    expect(atTe(0.6)).toBeGreaterThan(8 * FIN_MIN_THICKNESS);
+    // Thinning up the underside toward the corner.
+    expect(atTe(1.2)).toBeLessThan(atTe(0.6));
+  });
+
+  it('fits a blade surface within tolerance', () => {
+    const m = fitBladeSurface(d);
+    expect(bladeSurfaceDeviation(b, m.surface, m.topZ)).toBeLessThanOrEqual(BLADE_CI_TOLERANCE);
   });
 });
 
