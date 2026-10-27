@@ -178,15 +178,17 @@ export default function DocsFinDesigner() {
           One foil runs all the way up the blade unless you add slices. Slices are also how you
           twist a fin (see below). <strong>Add slice (twist)</strong> (in the profile&apos;s
           toolbar) puts a dashed line across the profile; drag it up or down to set its height — in
-          the profile or the thickness view. Each slice has its own foil: pick its tab in the foil
-          view (Root, then each slice by height) and shape it with the same tools, NACA presets
+          the profile or the thickness view. A slice can be dragged past another: it waits just
+          short of it, then hops to the other side. Each slice has its own foil: pick its tab in the
+          foil view (Root, then each slice by height) and shape it with the same tools, NACA presets
           included. A new slice starts as a copy of the foil below it.
         </p>
         <p>
           Between slices the foil blends smoothly from one to the next, easing into each so no line
           forms at a slice; above the top slice it stays as that slice. The thickness still comes
-          from the thickness curve. <strong>Remove slice</strong> takes the selected slice away.
-          Slices keep at least 2% of the depth from each other and from the root and tip.
+          from the thickness curve. <strong>Remove slice</strong>, next to Add slice, takes the
+          selected slice away: click a slice&apos;s line (or its foil tab) to select it. Slices keep
+          at least 2% of the depth from each other and from the root and tip.
         </p>
         <p>
           A slice can also change the cant and toe above it, bending the upper blade out and
@@ -196,9 +198,10 @@ export default function DocsFinDesigner() {
           upright) and <strong>Toe above slice</strong> set its change.{' '}
           <strong>Transition below slice</strong> is how far below the slice the change starts (10
           mm to begin with): below it the blade is as it was, through it the change eases in with no
-          crease, above the slice it holds. Each section turns about its own thickest point.{' '}
-          <strong>No change here</strong> takes the change away. On an FCS single tab the root has
-          no cant (the plug sets it), but a slice may still add some.
+          crease, above the slice it holds. It stays greyed out on a slice that only changes the
+          foil, until you give that slice a cant or toe. Each section turns about its own thickest
+          point. <strong>No change here</strong> takes the change away. On an FCS single tab the
+          root has no cant (the plug sets it), but a slice may still add some.
         </p>
       </Section>
 

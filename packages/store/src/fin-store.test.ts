@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FIN_MAX_FRONT_OVERHANG,
   FIN_MIN_THICKNESS,
+  FIN_SLICE_MIN_GAP,
   defaultFinDesign,
   finReadouts,
   foilShare,
@@ -309,19 +310,56 @@ describe('fin store: foil slices', () => {
     expect(design(s).section).toBe(root);
   });
 
-  it('moves a slice, keeping it in order, as one undo step per drag', () => {
+  it('moves a slice past another, keeping it selected, as one undo step per drag', () => {
     const s = storeWith();
     s.getState().addSlice(0.3);
     s.getState().addSlice(0.7);
+    s.getState().setActiveFoil(1);
     s.getState().beginEdit('Move foil slice');
     s.getState().moveSlice(1, 0.5);
-    s.getState().moveSlice(1, 0.9); // past the slice above: stops short of it
+    // Up to the slice above: waits just short of it.
+    s.getState().moveSlice(1, 0.695);
+    expect(design(s).slices.map((sl) => sl.height)).toEqual([0.7 - FIN_SLICE_MIN_GAP, 0.7]);
+    // Past it: hops over, and is now the second slice, still selected.
+    s.getState().moveSlice(1, 0.705);
+    expect(design(s).slices.map((sl) => sl.height)).toEqual([0.7, 0.7 + FIN_SLICE_MIN_GAP]);
+    expect(s.getState().activeFoil).toBe(2);
+    s.getState().moveSlice(2, 0.9);
     s.getState().endEdit();
-    const [a, b] = design(s).slices;
-    expect(a!.height).toBeLessThan(b!.height);
+    expect(design(s).slices.map((sl) => sl.height)).toEqual([0.7, 0.9]);
     expect(validateFinDesign(design(s))).toEqual([]);
     s.getState().undo();
-    expect(design(s).slices[0]!.height).toBe(0.3);
+    expect(design(s).slices.map((sl) => sl.height)).toEqual([0.3, 0.7]);
+  });
+
+  it('keeps a moved slice clear of the root and tip', () => {
+    const s = storeWith();
+    s.getState().addSlice(0.5);
+    s.getState().moveSlice(1, 1.2);
+    expect(design(s).slices[0]!.height).toBe(1 - FIN_SLICE_MIN_GAP);
+    s.getState().moveSlice(1, -0.3);
+    expect(design(s).slices[0]!.height).toBe(FIN_SLICE_MIN_GAP);
+  });
+
+  it("takes a slice's foil and twist with it past another, cutting the transition to fit", () => {
+    const s = storeWith();
+    s.getState().addSlice(0.3);
+    s.getState().applyNaca('0008');
+    s.getState().setSliceTwist(1, { cant: 12, transition: 0.3 });
+    s.getState().addSlice(0.7);
+    const moving = design(s).slices[0]!;
+    s.getState().setActiveFoil(1);
+    expect(s.getState().moveSlice(1, 0.9)).toBe(true);
+    const [a, b] = design(s).slices;
+    expect(a!.height).toBe(0.7);
+    expect(b!.section).toBe(moving.section);
+    expect(b!.twist).toEqual(moving.twist);
+    // Down near the root its transition no longer fits under it: cut to fit.
+    s.getState().moveSlice(2, 0.1);
+    const low = design(s).slices[0]!;
+    expect(low.height).toBe(0.1);
+    expect(low.twist!.transition).toBe(0.1);
+    expect(validateFinDesign(design(s))).toEqual([]);
   });
 
   it('removes a slice and goes back to the root; an undo restores it', () => {

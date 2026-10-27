@@ -410,18 +410,29 @@ function SliceTwistTools({
         view={view}
         onView={onView}
       />
-      {sl.twist && (
-        <>
+      {/* Always shown, so it doesn't seem to vanish (owner feedback): a slice that only
+          changes the foil has no cant or toe change to blend in, so it waits for one. */}
+      <Tooltip
+        label={
+          sl.twist
+            ? 'How far below the slice its cant and toe blend in'
+            : 'Set a cant or toe above this slice first: then this is how far below it they blend in'
+        }
+      >
+        <div>
           <LenField
             label="Transition below slice"
-            valueCm={sl.twist.transition * depth}
+            valueCm={now.transition * depth}
             units={units}
+            disabled={!sl.twist}
             onCommit={(cm) => set({ transition: depth > 0 ? cm / depth : 0 })}
           />
-          <Button size="sm" variant="outline" onClick={() => set(null)}>
-            No change here
-          </Button>
-        </>
+        </div>
+      </Tooltip>
+      {sl.twist && (
+        <Button size="sm" variant="outline" onClick={() => set(null)}>
+          No change here
+        </Button>
       )}
     </>
   );
@@ -569,7 +580,27 @@ function OutlineTools({ units }: { units: LengthUnit }) {
           Add slice (twist)
         </Button>
       </Tooltip>
+      {design.slices.length > 0 && <RemoveSlice />}
     </>
+  );
+}
+
+/** Beside Add slice (owner feedback: it was only in the foil view). */
+function RemoveSlice() {
+  const foil = useFinState(finStore, (s) =>
+    s.design && s.activeFoil <= s.design.slices.length ? s.activeFoil : 0,
+  );
+  return (
+    <Tooltip label="Remove the selected slice (click its line to select it)">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={foil === 0}
+        onClick={() => finStore.getState().removeSlice(foil)}
+      >
+        Remove slice
+      </Button>
+    </Tooltip>
   );
 }
 

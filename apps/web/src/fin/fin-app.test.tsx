@@ -225,10 +225,16 @@ describe('FinApp', () => {
     expect(d().section.inside).not.toBeNull(); // the root kept its flat inside
     fireEvent.click(tabs.getByRole('tab', { name: 'Root' }));
     expect(finStore.getState().activeFoil).toBe(0);
-    fireEvent.click(tabs.getByRole('tab', { name: '50.0 mm' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove slice' }));
+    // Remove slice sits beside Add slice in the profile's toolbar, not in the foil view's.
+    expect(screen.queryByRole('button', { name: 'Remove slice' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show Profile in the large pane' }));
+    const remove = () => screen.getByRole('button', { name: 'Remove slice' }) as HTMLButtonElement;
+    expect(remove().disabled).toBe(true); // the root is selected: no slice to remove
+    act(() => finStore.getState().setActiveFoil(1));
+    expect(remove().disabled).toBe(false);
+    fireEvent.click(remove());
     expect(d().slices).toHaveLength(0);
-    expect(screen.queryByRole('tablist', { name: 'Foil' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove slice' })).toBeNull(); // none left
     localStorage.removeItem('bs.fin.views');
   });
 
@@ -282,10 +288,15 @@ describe('FinApp', () => {
     expect(
       threeD.getByRole('group', { name: 'Position on the tab' }).getAttribute('aria-disabled'),
     ).toBe('true');
+    // No change yet: the transition is shown, greyed out, until there is one to blend in.
+    const transition = () => threeD.getByLabelText(/^Transition below slice/) as HTMLInputElement;
+    expect(transition().disabled).toBe(true);
+    expect(threeD.queryByRole('button', { name: 'No change here' })).toBeNull();
     const cant = threeD.getByLabelText(/^Cant above slice/);
     fireEvent.change(cant, { target: { value: '12' } });
     fireEvent.keyDown(cant, { key: 'Enter' });
     expect(d().slices[0]!.twist).toEqual({ cant: 12, toe: 0, transition: 0.1 }); // 10 mm zone
+    expect(transition().disabled).toBe(false);
     fireEvent.click(threeD.getByRole('button', { name: 'Toe out' }));
     expect(d().slices[0]!.twist!.toe).toBe(-0.25);
     expect(d().toe).toBe(0); // the whole fin's toe is untouched
@@ -295,6 +306,7 @@ describe('FinApp', () => {
     expect(d().outline.knots[0]!.end.x).toBe(le);
     fireEvent.click(threeD.getByRole('button', { name: 'No change here' }));
     expect(d().slices[0]!.twist).toBeUndefined();
+    expect(transition().disabled).toBe(true); // still there, greyed out again
     // Back to the root: the arrows work again.
     fireEvent.change(threeD.getByLabelText('Slice (twist)'), { target: { value: '0' } });
     fireEvent.keyDown(window, { key: 'ArrowUp' });

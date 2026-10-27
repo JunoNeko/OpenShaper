@@ -164,8 +164,9 @@ export interface FinState {
   /** Remove slice `foil` (1-based); the root becomes the active foil. */
   removeSlice: (foil: number) => boolean;
   /**
-   * Move slice `foil` to `height`, kept in order. Wrap a drag in beginEdit / endEdit so
-   * its moves are one undo step.
+   * Move slice `foil` to `height`, past other slices if need be (kept in order, so it may
+   * become another index: it stays the active foil). Wrap a drag in beginEdit / endEdit
+   * so its moves are one undo step.
    */
   moveSlice: (foil: number, height: number) => boolean;
   /** Arrow buttons: move the fin along the tab (cm, + toward the nose). */
@@ -528,7 +529,12 @@ export const createFinStore = (): StoreApi<FinState> =>
       },
       moveSlice: (foil, height) => {
         const d = get().design;
-        return d ? commitChecked(moveSlice(d, foil, height), 'Move foil slice') : false;
+        if (!d) return false;
+        const r = moveSlice(d, foil, height);
+        if (!commitChecked(r.design, 'Move foil slice')) return false;
+        // Passing another slice changes its place in the order: keep it selected.
+        if (r.foil !== get().activeFoil) set({ activeFoil: r.foil });
+        return true;
       },
 
       undo: () => {

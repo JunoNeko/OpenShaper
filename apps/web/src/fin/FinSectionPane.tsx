@@ -143,7 +143,6 @@ export const FinSectionTools = memo(function FinSectionTools({
   units: LengthUnit;
 }) {
   const position = useFinState(store, (s) => s.design?.position);
-  const activeFoil = useFinState(store, (s) => s.activeFoil);
   // Asymmetric: the foil has an inside face of its own (flat, split or NACA-cambered).
   const asymmetric = useFinState(store, (s) =>
     s.design ? getFoil(s.design, s.activeFoil)?.inside !== null : false,
@@ -153,15 +152,6 @@ export const FinSectionTools = memo(function FinSectionTools({
   return (
     <>
       <FoilTabs store={store} units={units} />
-      {activeFoil > 0 && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => store.getState().removeSlice(activeFoil)}
-        >
-          Remove slice
-        </Button>
-      )}
       {!centre && (
         <div className="flex gap-1" role="group" aria-label="Inside face">
           <Button
