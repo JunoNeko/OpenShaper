@@ -48,8 +48,10 @@ export const sliceGuideHandlers = (store: StoreApi<FinState>, axis: 'x' | 'y') =
   return {
     onGuideSelect: (id: string) => s().setActiveFoil(Number(id)),
     onGuideDragStart: () => s().beginEdit('Move foil slice'),
-    onGuideDrag: (id: string, at: number) => {
-      s().moveSlice(Number(id), toHeight(at));
+    // The dragged slice is the active one (selected as the drag starts), followed by
+    // index rather than the guide's id: passing another slice renumbers it.
+    onGuideDrag: (_id: string, at: number) => {
+      s().moveSlice(s().activeFoil, toHeight(at));
     },
     onGuideDragEnd: () => s().endEdit(),
   };

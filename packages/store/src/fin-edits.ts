@@ -162,18 +162,50 @@ export const removeSlice = (d: FinDesign, foil: FinFoilIndex): FinDesign =>
     : { ...d, slices: d.slices.filter((_, i) => i !== foil - 1) };
 
 /**
- * Slice `foil` moved to `height`, clamped between its neighbours (and the root and
- * tip) by {@link FIN_SLICE_MIN_GAP}, so slices keep their order.
+ * Slice `foil` moved to `height`. It may pass the other slices (owner feedback: a new
+ * slice couldn't be dragged past an old one), but keeps {@link FIN_SLICE_MIN_GAP} from
+ * them and from the root and tip: dragged up to a neighbour it waits just short of it,
+ * and hops to the far side once the drag is past the neighbour. Slices are kept in
+ * order up the blade, so its index may change: returns the design and its new index.
+ * A twist's transition zone is cut to fit under the slice's new height.
  */
-export const moveSlice = (d: FinDesign, foil: FinFoilIndex, height: number): FinDesign => {
+export const moveSlice = (
+  d: FinDesign,
+  foil: FinFoilIndex,
+  height: number,
+): { design: FinDesign; foil: FinFoilIndex } => {
   const i = foil - 1;
   const sl = d.slices[i];
-  if (!sl) return d;
-  const lo = (i === 0 ? 0 : d.slices[i - 1]!.height) + FIN_SLICE_MIN_GAP;
-  const hi = (i === d.slices.length - 1 ? 1 : d.slices[i + 1]!.height) - FIN_SLICE_MIN_GAP;
-  const h = Math.min(hi, Math.max(lo, height));
-  if (h === sl.height) return d;
-  return { ...d, slices: d.slices.map((x, j) => (j === i ? { ...x, height: h } : x)) };
+  if (!sl) return { design: d, foil };
+  const others = d.slices.filter((_, j) => j !== i);
+  const gap = FIN_SLICE_MIN_GAP;
+  const eps = 1e-12;
+  const fits = (h: number) =>
+    h >= gap - eps &&
+    h <= 1 - gap + eps &&
+    others.every((o) => Math.abs(h - o.height) >= gap - eps);
+  // The nearest place that fits: the height itself, or just clear of a slice, root or tip.
+  const candidates = [
+    height,
+    gap,
+    1 - gap,
+    ...others.flatMap((o) => [o.height - gap, o.height + gap]),
+  ];
+  let h = sl.height;
+  let best = Infinity;
+  for (const c of candidates) {
+    if (fits(c) && Math.abs(c - height) < best) {
+      best = Math.abs(c - height);
+      h = c;
+    }
+  }
+  if (h === sl.height) return { design: d, foil };
+  const twist = sl.twist && { ...sl.twist, transition: Math.min(sl.twist.transition, h) };
+  const moved = twist ? { ...sl, height: h, twist } : { ...sl, height: h };
+  const at = others.findIndex((o) => o.height > h);
+  const pos = at === -1 ? others.length : at;
+  const slices = [...others.slice(0, pos), moved, ...others.slice(pos)];
+  return { design: { ...d, slices }, foil: pos + 1 };
 };
 
 /**

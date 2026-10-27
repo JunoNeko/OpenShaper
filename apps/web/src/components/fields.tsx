@@ -20,11 +20,14 @@ export function LenField({
   valueCm,
   units,
   onCommit,
+  disabled,
 }: {
   label: string;
   valueCm: number;
   units: LengthUnit;
   onCommit: (cm: number) => void;
+  /** Shown but not editable (a value that doesn't apply yet). */
+  disabled?: boolean;
 }) {
   const shown = cmToUnitNumber(valueCm, units).toFixed(unitDecimals(units));
   const [text, setText] = useSyncedText(shown);
@@ -37,6 +40,7 @@ export function LenField({
     <label className="flex items-center gap-2">
       <span className="flex-1 text-muted-foreground">{label}</span>
       <NumericInput
+        disabled={disabled}
         value={text}
         onValueChange={setText}
         onCommit={commit}
