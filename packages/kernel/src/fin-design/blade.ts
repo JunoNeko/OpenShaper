@@ -116,8 +116,8 @@ export interface PreparedBlade {
 /**
  * The underside of a raised rear: the end of the outline, walking back from the
  * trailing-edge root, while it runs backward and rises at under 45° (after a steep
- * lead-in of up to {@link REAR_LEAD} off the root, if it has one). Steeper than that
- * it is the trailing edge. Where it ends (`corner`) the trailing edge proper starts.
+ * lead-in off the root, if it has one: see {@link REAR_LEAD}). Steeper than that it is
+ * the trailing edge. Where it ends (`corner`) the trailing edge proper starts.
  * Below the corner the trailing edge keeps the foil's thickness (see
  * {@link bladeSection}); everywhere else it is the minimum.
  */
@@ -130,10 +130,12 @@ export interface RaisedRear {
 const REAR_SAMPLES = 64;
 
 /**
- * How high (cm) the outline may rise steeply off the trailing-edge root before its
- * underside starts: a root handle pulled up (the owner's twin fin) leaves the root
- * steeply for a millimetre or two, then turns back along the underside. Steep for
- * longer than this, it is a trailing edge rising from the root: no raised rear.
+ * How high (cm) the outline may always rise steeply off the trailing-edge root before
+ * its underside starts: a root handle pulled up (the owner's twin fin) leaves the root
+ * steeply for a millimetre or two, then turns back along the underside. A taller
+ * lead-in still counts if the underside then runs back further than the lead-in rose
+ * (the owner's A4C: 6.9 mm up, then 30 mm back); otherwise it is a trailing edge rising
+ * from the root, like a side fin's that only sweeps back shallowly near the tip.
  */
 const REAR_LEAD = 0.3;
 
@@ -150,28 +152,31 @@ export const findRaisedRear = (outline: Spline): RaisedRear | null => {
     return { x: -xDeriv(k[seg]!, tt), z: -yDeriv(k[seg]!, tt) };
   };
   let lastGood: { seg: number; t: number } | null = null;
+  // Where the underside starts: the top of the steep lead-in, if there is one.
+  let start: { x: number; y: number } | null = null;
+  const corner = (x: number, z: number): RaisedRear | null =>
+    z > 0 && start && (start.y <= REAR_LEAD || start.x - x > start.y)
+      ? { cornerX: x, cornerZ: z }
+      : null;
   for (let seg = k.length - 1; seg >= 0; seg--) {
     for (let j = REAR_SAMPLES; j >= 0; j--) {
       const t = j / REAR_SAMPLES;
       if (seg < top.segment || (seg === top.segment && t <= top.t)) return null; // to the tip
       const d = dir(seg, t);
       if (isUnderside(d.x, d.z)) {
+        if (!lastGood) start = value(k[seg]!, t);
         lastGood = { seg, t };
         continue;
       }
-      if (!lastGood) {
-        // Steep at the root: allowed for a short lead-in, then it's a plain trailing edge.
-        if (value(k[seg]!, t).y > REAR_LEAD) return null;
-        continue;
-      }
+      // Steep at the root: a lead-in, judged once the underside's length is known.
+      if (!lastGood) continue;
       // The corner is between the last sample that was underside and this one.
       let lo = lastGood.seg === seg ? lastGood.t : 0; // underside side (higher t)
       let hi = t; // trailing-edge side
       if (lastGood.seg !== seg) {
         // The previous sample was the start of the segment after: the corner is the knot.
-        const corner = value(k[seg]!, 1);
-        if (corner.y <= 0) return null;
-        return { cornerX: corner.x, cornerZ: corner.y };
+        const at = value(k[seg]!, 1);
+        return corner(at.x, at.y);
       }
       for (let i = 0; i < 50; i++) {
         const mid = (lo + hi) / 2;
@@ -180,7 +185,6 @@ export const findRaisedRear = (outline: Spline): RaisedRear | null => {
         else hi = mid;
       }
       const turn = value(k[seg]!, hi);
-      if (turn.y <= 0) return null;
       // An underside that curls up into a sharp point (the owner's keel) turns steep a
       // little short of it: the point is the corner, where the edge really changes
       // direction. Without this the point's kink lands in the trailing edge above the
@@ -192,9 +196,9 @@ export const findRaisedRear = (outline: Spline): RaisedRear | null => {
         knot.end.y > turn.y &&
         knot.end.y - turn.y <= REAR_LEAD
       ) {
-        return { cornerX: knot.end.x, cornerZ: knot.end.y };
+        return corner(knot.end.x, knot.end.y);
       }
-      return { cornerX: turn.x, cornerZ: turn.y };
+      return corner(turn.x, turn.y);
     }
   }
   return null;
