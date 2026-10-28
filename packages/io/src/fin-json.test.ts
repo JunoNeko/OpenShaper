@@ -170,6 +170,26 @@ describe('.fin.json versions', () => {
     expect(readFinJson(writeFinJson(defaultFinDesign('side'))).design.toe).toBe(0);
   });
 
+  it('keeps the panel through a save, in mm, and leaves it out when none is set', () => {
+    const d = { ...defaultFinDesign('side', 'left'), panel: { thickness: 0.9525, angle: -2.5 } };
+    const doc = JSON.parse(writeFinJson(d)) as { version: number; panel: unknown };
+    expect(doc.version).toBe(2);
+    expect(doc.panel).toEqual({ thickness: 9.525, angle: -2.5 });
+    const back = readFinJson(writeFinJson(d)).design.panel!;
+    expect(back.thickness).toBeCloseTo(0.9525, 12);
+    expect(back.angle).toBe(-2.5);
+    const none = JSON.parse(writeFinJson(defaultFinDesign('side', 'left'))) as object;
+    expect('panel' in none).toBe(false);
+    expect(readFinJson(writeFinJson(defaultFinDesign('side'))).design.panel).toBeUndefined();
+  });
+
+  it('rejects a damaged panel', () => {
+    const doc = JSON.parse(writeFinJson(defaultFinDesign('side', 'left')));
+    expect(() =>
+      readFinJson(JSON.stringify({ ...doc, version: 2, panel: { thickness: 9 } })),
+    ).toThrow(/panel/);
+  });
+
   it('writes an FCS 1 fin with its base, and reads it back', () => {
     const d = placeOnBase(defaultFinDesign('side', 'left'), 'fcs-1');
     const doc = JSON.parse(writeFinJson(d));

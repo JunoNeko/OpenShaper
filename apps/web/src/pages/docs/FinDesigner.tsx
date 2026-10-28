@@ -376,6 +376,31 @@ export default function DocsFinDesigner() {
         </p>
       </Section>
 
+      <Section id="panel" title="Fitting in a panel">
+        <p>
+          Fins are machined from panels (G10 and the like), so the panel&apos;s thickness limits the
+          whole fin: blade and base together. Set the panel&apos;s thickness in{' '}
+          <a href="#settings">File settings</a> and the app checks the fin as it will be exported
+          (at the export minimum), seen from above.
+        </p>
+        <p>
+          The status line says what panel the fin needs, base included, and warns in orange when
+          that&apos;s more than the panel: a warning only, the fin still exports. In the foil view,{' '}
+          <strong>Panel</strong> shows the panel&apos;s two faces as dashed lines (green when it
+          fits, orange when not) over a faint outline of the whole fin seen from above, laid over
+          the foil you&apos;re editing. The foil view is drawn four times taller than true, so the
+          faces look steeper than they are.
+        </p>
+        <p>
+          A cambered foil, its inside face curved, can need a thinner panel turned a little in it:{' '}
+          <strong>Angle</strong> turns the fin in the panel, seen from above (±45°), and{' '}
+          <strong>Fit to panel</strong> finds the angle that needs the thinnest panel. A foil with a
+          flat inside face already fits best lying straight. The angle is only a check, saved with
+          the fin: the fin and its STEP and STL files don&apos;t change. Cant tilts the blade out of
+          the panel, so a canted fin needs a much thicker panel seen from above.
+        </p>
+      </Section>
+
       <Section id="settings" title="File settings">
         <p>
           The gear button at the right of the top bar opens File settings. Changes apply straight
@@ -392,6 +417,10 @@ export default function DocsFinDesigner() {
             1/2 or 1 inch. Zoomed far out, a fixed grid draws every second or fourth line rather
             than a solid block, still on multiples of its size. Changing the units sets it back to
             Auto.
+          </Term>
+          <Term name="Panel">
+            The thickness of the panel the fin is machined from, saved with the fin (empty for none;
+            see <a href="#panel">Fitting in a panel</a>), and whether the foil view shows it.
           </Term>
           <Term name="Export">
             The minimum thickness for exports (see <a href="#export">Export min</a>).

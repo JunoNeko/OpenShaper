@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
- * File settings (owner request): units, the profile view's grid, the exports' minimum
- * thickness and the core export's laminate, in one place instead of scattered across
- * the header. Every change applies at once and is remembered in this browser.
+ * File settings (owner request): units, the profile view's grid, the panel the fin is
+ * cut from, the exports' minimum thickness and the core export's laminate, in one place
+ * instead of scattered across the header. Every change applies at once; the panel is
+ * saved with the fin, the rest is remembered in this browser.
  */
-import { FIN_EXPORT_MIN_THICKNESS } from '@openshaper/kernel';
+import { FIN_EXPORT_MIN_THICKNESS, FIN_PANEL_THICKNESS } from '@openshaper/kernel';
 import { Button, Panel, PanelBody, PanelHeader, PanelTitle } from '@openshaper/ui';
 import { useState, type ReactNode } from 'react';
 import { Modal } from '../components/modal';
@@ -18,6 +19,8 @@ import {
   type LengthUnit,
 } from '../format';
 import { useSyncedText } from '../use-numeric-field';
+import { finStore } from './fin-store';
+import { useFinState } from './use-fin';
 import {
   LAMINATE_MAX,
   LAMINATE_MIN,
@@ -76,6 +79,49 @@ function ClampedLength({
   );
 }
 
+/**
+ * The panel's thickness, saved with the fin. Empty means none: no panel check. Common
+ * G10 panels are 1/4", 5/16", 3/8" and 1/2".
+ */
+function PanelThickness({ units }: { units: LengthUnit }) {
+  const thickness = useFinState(finStore, (s) => s.design?.panel?.thickness ?? null);
+  const shown =
+    thickness === null ? '' : cmToUnitNumber(thickness, units).toFixed(unitDecimals(units) + 1);
+  const [text, setText] = useSyncedText(shown);
+  const commit = () => {
+    if (text.trim() === '') {
+      finStore.getState().setPanelThickness(null);
+      return;
+    }
+    const cm = parseTypedLen(text, units);
+    if (cm === null) setText(shown);
+    else if (!finStore.getState().setPanelThickness(cm)) setText(shown);
+  };
+  const { min, max } = FIN_PANEL_THICKNESS;
+  return (
+    <>
+      <label className="flex items-center gap-2">
+        <span className="flex-1">Panel thickness</span>
+        <NumericInput
+          value={text}
+          onValueChange={setText}
+          onCommit={commit}
+          onEscape={() => setText(shown)}
+          ariaLabel="Panel thickness"
+          placeholder="none"
+          className="w-20 tabular-nums"
+        />
+        <span className="w-6 text-xs text-muted-foreground">{unitSuffix(units)}</span>
+      </label>
+      <p className="text-xs text-muted-foreground">
+        The panel this fin is machined from ({fmtThick(min, units)}–{fmtThick(max, units)}; empty
+        for none). Base and blade must both fit in it: the foil view shows its faces and the status
+        line says if the fin is too thick. Saved with this fin.
+      </p>
+    </>
+  );
+}
+
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
   <fieldset className="space-y-2">
     <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -123,7 +169,8 @@ export function FinSettingsDialog({
         </PanelHeader>
         <PanelBody className="space-y-5 text-sm">
           <p className="text-xs text-muted-foreground">
-            Changes apply straight away and are remembered in this browser.
+            Changes apply straight away. The panel is saved with the fin; the rest is remembered in
+            this browser.
           </p>
           <Section title="Units">
             <div className="flex items-center gap-4" role="radiogroup" aria-label="Units">
@@ -182,6 +229,18 @@ export function FinSettingsDialog({
                   </option>
                 ))}
               </select>
+            </label>
+          </Section>
+
+          <Section title="Panel">
+            <PanelThickness units={units} />
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={settings.showPanel}
+                onChange={(e) => onChange({ showPanel: e.target.checked })}
+              />
+              Show the panel in the foil view
             </label>
           </Section>
 

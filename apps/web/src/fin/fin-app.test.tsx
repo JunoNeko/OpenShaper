@@ -5,6 +5,7 @@ import {
   defaultSingleFin,
   defaultTwinFin,
   finReadouts,
+  placeOnBase,
 } from '@openshaper/kernel';
 import { writeFinJson } from '@openshaper/io';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -73,6 +74,68 @@ describe('FinApp', () => {
     expect([...grid().options].map((o) => o.text).slice(1)).toEqual(['1/8"', '1/4"', '1/2"', '1"']);
     localStorage.removeItem('bs.fin.settings');
   });
+
+  it(
+    'checks the fin against a panel set in File settings, and fits it to the panel',
+    () => {
+      localStorage.removeItem('bs.fin.settings');
+      localStorage.removeItem('bs.fin.views');
+      act(() =>
+        finStore.getState().load(placeOnBase(defaultFinDesign('side', 'left'), 'fcs-single')),
+      );
+      // A cambered foil, its inside face curved: turning it in the panel helps.
+      act(() => {
+        finStore.getState().applyNaca('2412');
+      });
+      render(<FinApp />);
+      fireEvent.click(screen.getByRole('button', { name: 'Show Foil section in the large pane' }));
+      expect(screen.queryByRole('group', { name: 'Panel' })).toBeNull(); // no panel yet
+      fireEvent.click(screen.getByRole('button', { name: 'File settings' }));
+      const dialog = within(screen.getByRole('dialog', { name: 'File settings' }));
+      const panel = dialog.getByLabelText('Panel thickness');
+      fireEvent.change(panel, { target: { value: '9.525' } });
+      fireEvent.keyDown(panel, { key: 'Enter' });
+      expect(finStore.getState().design!.panel!.thickness).toBeCloseTo(0.9525, 12);
+      expect(finStore.getState().design!.panel!.angle).toBe(0);
+      fireEvent.click(dialog.getByRole('button', { name: 'Done' }));
+      expect(
+        screen.getByText(/^Fits the 9\.5 mm panel: needs 8\.\d mm, base included\.$/),
+      ).toBeTruthy();
+      // Too thin a panel: a warning, but the fin still exports.
+      act(() => {
+        finStore.getState().setPanelThickness(0.635);
+      });
+      expect(screen.getByTestId('panel-warning').textContent).toMatch(
+        /Too thick for the 6\.4 mm panel/,
+      );
+      expect(
+        (screen.getByRole('button', { name: 'Export STEP' }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+      // Fit to panel turns the fin, undoably; the angle field follows.
+      const tools = within(screen.getByRole('group', { name: 'Panel' }));
+      fireEvent.click(tools.getByRole('button', { name: 'Fit to panel' }));
+      expect(finStore.getState().past.at(-1)!.label).toBe('Fit to panel');
+      const angle = finStore.getState().design!.panel!.angle;
+      expect(angle).toBeLessThan(-0.5);
+      expect((tools.getByLabelText(/^Angle/) as HTMLInputElement).value).toBe(angle.toFixed(1));
+      // Hiding the panel keeps the button to show it again.
+      fireEvent.click(tools.getByRole('button', { name: 'Panel' }));
+      expect(tools.queryByRole('button', { name: 'Fit to panel' })).toBeNull();
+      expect(JSON.parse(localStorage.getItem('bs.fin.settings')!).showPanel).toBe(false);
+      // Emptying the field clears the panel.
+      fireEvent.click(screen.getByRole('button', { name: 'File settings' }));
+      const field = within(screen.getByRole('dialog', { name: 'File settings' })).getByLabelText(
+        'Panel thickness',
+      );
+      fireEvent.change(field, { target: { value: '' } });
+      fireEvent.keyDown(field, { key: 'Enter' });
+      expect(finStore.getState().design!.panel).toBeUndefined();
+      expect(screen.queryByTestId('panel-warning')).toBeNull();
+      localStorage.removeItem('bs.fin.settings');
+      localStorage.removeItem('bs.fin.views');
+    },
+    HEAVY,
+  );
 
   it('sets the core export’s laminate from File settings', () => {
     localStorage.removeItem('bs.fin.core');

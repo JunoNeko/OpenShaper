@@ -127,6 +127,27 @@ export const FIN_MIN_SLICE_CANT = -20;
  */
 export const FIN_SLICE_MIN_GAP = 0.02;
 
+/**
+ * The panel a fin is machined from (panel-fit.ts): its thickness, and the angle the fin
+ * is turned to in it, seen from above. Only a check: it doesn't change the fin or its
+ * exports.
+ */
+export interface FinPanel {
+  /** Panel thickness (cm). */
+  readonly thickness: number;
+  /**
+   * The fin turned in the panel about an upright axis (deg, counter-clockwise seen from
+   * above), within ±{@link FIN_PANEL_MAX_ANGLE}. 0: the panel's faces run along the tab.
+   */
+  readonly angle: number;
+}
+
+/** The furthest a fin may be turned in its panel (deg). */
+export const FIN_PANEL_MAX_ANGLE = 45;
+
+/** Panel thicknesses accepted (cm): 3 to 30 mm. */
+export const FIN_PANEL_THICKNESS = { min: 0.3, max: 3 } as const;
+
 export interface FinDesign {
   readonly position: FinPosition;
   /** `left` or `right` for side and quad-rear fins; `null` for a centre fin. */
@@ -177,4 +198,6 @@ export interface FinDesign {
    * the height keeps the taper valid when the outline's depth changes.
    */
   readonly taper: Spline;
+  /** The panel it's cut from, if the user has set one (File settings). */
+  readonly panel?: FinPanel;
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FIN_MAX_FRONT_OVERHANG,
   FIN_MIN_THICKNESS,
+  FIN_PANEL_MAX_ANGLE,
   FIN_SLICE_MIN_GAP,
   defaultFinDesign,
   finReadouts,
@@ -360,6 +361,23 @@ describe('fin store: foil slices', () => {
     expect(low.height).toBe(0.1);
     expect(low.twist!.transition).toBe(0.1);
     expect(validateFinDesign(design(s))).toEqual([]);
+  });
+
+  it('sets the panel and turns the fin in it, undoably, within limits', () => {
+    const s = storeWith();
+    expect(s.getState().setPanelAngle(5)).toBe(false); // no panel yet
+    expect(s.getState().setPanelThickness(0.9525)).toBe(true);
+    expect(design(s).panel).toEqual({ thickness: 0.9525, angle: 0 });
+    s.getState().setPanelAngle(-3.456);
+    expect(design(s).panel!.angle).toBe(-3.46); // to a hundredth of a degree
+    s.getState().setPanelAngle(80);
+    expect(design(s).panel!.angle).toBe(FIN_PANEL_MAX_ANGLE);
+    s.getState().setPanelThickness(10); // clamped to 30 mm, keeping the angle
+    expect(design(s).panel).toEqual({ thickness: 3, angle: FIN_PANEL_MAX_ANGLE });
+    s.getState().setPanelThickness(null);
+    expect(design(s).panel).toBeUndefined();
+    s.getState().undo();
+    expect(design(s).panel!.thickness).toBe(3);
   });
 
   it('removes a slice and goes back to the root; an undo restores it', () => {

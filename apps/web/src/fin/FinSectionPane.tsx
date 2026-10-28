@@ -10,6 +10,7 @@
  * and straight lines (split-foil.ts).
  */
 import {
+  FIN_EXPORT_MIN_THICKNESS,
   finReadouts,
   foilAt,
   foilShare,
@@ -21,14 +22,17 @@ import {
 } from '@openshaper/kernel';
 import { FinCurveEditor, type FinCurveLayer } from '@openshaper/render2d';
 import { getFoil, type FinState } from '@openshaper/store';
-import { Button } from '@openshaper/ui';
+import { Button, Tooltip } from '@openshaper/ui';
 import { memo, useCallback, useMemo, useState } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
+import { DegField } from '../components/fields';
 import { NumericInput } from '../components/numeric-input';
 import { fmtLen, type LengthUnit } from '../format';
 import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { PointTools } from './PointTools';
 import { useFinState } from './use-fin';
+import { bestAngleOf, panelOverlay, usePanelFit } from './use-panel-fit';
+import { useSettledDesign } from './use-settled-design';
 
 /** Drawn this many times taller than true. */
 export const SECTION_Y_SCALE = 4;
@@ -44,6 +48,11 @@ const SECTION_CURVES = ['outside', 'inside'] as const;
 const OUTSIDE = '#22D3EE';
 const INSIDE = '#A78BFA';
 const GUIDE = 'rgba(138,155,179,0.7)';
+/** The panel's faces: green when the fin fits, orange (as the other limits) when not. */
+const PANEL_FIT = 'rgba(34,197,94,0.9)';
+const PANEL_OVER = 'rgba(249,115,22,0.95)';
+const PANEL_HULL_FILL = 'rgba(138,155,179,0.08)';
+const PANEL_HULL_LINE = 'rgba(138,155,179,0.45)';
 
 const mirrored = (s: Spline): Spline =>
   splineFromKnots(
@@ -132,15 +141,81 @@ function NacaPicker({ store, centre }: { store: StoreApi<FinState>; centre: bool
 }
 
 /**
+ * The panel's controls, once the fin has one (File settings): show its faces, turn the
+ * fin in it, or let the app find the angle that needs the thinnest panel.
+ */
+function PanelTools({
+  store,
+  show,
+  onShow,
+  minThickness,
+}: {
+  store: StoreApi<FinState>;
+  show: boolean;
+  onShow: (on: boolean) => void;
+  minThickness: number;
+}) {
+  const angle = useFinState(store, (s) => s.design?.panel?.angle);
+  if (angle === undefined) return null;
+  return (
+    <div className="flex items-center gap-1" role="group" aria-label="Panel">
+      <Tooltip label="Show the panel's faces, and the fin seen from above">
+        <Button
+          size="sm"
+          variant={show ? 'default' : 'outline'}
+          aria-pressed={show}
+          onClick={() => onShow(!show)}
+        >
+          Panel
+        </Button>
+      </Tooltip>
+      {show && (
+        <>
+          <Tooltip label="The fin turned in the panel, seen from above (±45°). The fin itself doesn't change, nor its exports">
+            <div className="w-36 text-sm">
+              <DegField
+                label="Angle"
+                value={angle}
+                onCommit={(v) => store.getState().setPanelAngle(v)}
+              />
+            </div>
+          </Tooltip>
+          <Tooltip label="Turn the fin to the angle that needs the thinnest panel">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const d = store.getState().design;
+                if (d) store.getState().setPanelAngle(bestAngleOf(d, minThickness), 'Fit to panel');
+              }}
+            >
+              Fit to panel
+            </Button>
+          </Tooltip>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
  * The section's controls, for the large pane's toolbar: the inside-face choice (side
- * and quad-rear fins) and the NACA presets.
+ * and quad-rear fins), the NACA presets, and the panel's.
  */
 export const FinSectionTools = memo(function FinSectionTools({
   store,
   units,
+  showPanel = true,
+  onShowPanel,
+  minThickness = FIN_EXPORT_MIN_THICKNESS.default,
 }: {
   store: StoreApi<FinState>;
   units: LengthUnit;
+  /** Draw the panel (File settings). */
+  showPanel?: boolean;
+  onShowPanel?: (on: boolean) => void;
+  /** The exports' minimum thickness (cm): the panel holds the fin as exported. */
+  minThickness?: number;
 }) {
   const position = useFinState(store, (s) => s.design?.position);
   // Asymmetric: the foil has an inside face of its own (flat, split or NACA-cambered).
@@ -177,6 +252,14 @@ export const FinSectionTools = memo(function FinSectionTools({
       )}
       <NacaPicker store={store} centre={centre} />
       <PointTools store={store} curves={SECTION_CURVES} />
+      {onShowPanel && (
+        <PanelTools
+          store={store}
+          show={showPanel}
+          onShow={onShowPanel}
+          minThickness={minThickness}
+        />
+      )}
     </>
   );
 });
@@ -280,13 +363,26 @@ function SplitFields({ store, share }: { store: StoreApi<FinState>; share: numbe
 export const FinSectionPane = memo(function FinSectionPane({
   store,
   frameKey = '',
+  showPanel = false,
+  minThickness = FIN_EXPORT_MIN_THICKNESS.default,
 }: {
   store: StoreApi<FinState>;
   frameKey?: string;
+  /** Draw the panel's faces and the fin from above, when the fin has a panel. */
+  showPanel?: boolean;
+  /** The exports' minimum thickness (cm): the panel holds the fin as exported. */
+  minThickness?: number;
 }) {
   const design = useFinState(store, (s) => s.design);
   const selection = useFinState(store, (s) => s.selection);
   const activeFoil = useFinState(store, (s) => s.activeFoil);
+  const settled = useSettledDesign(store);
+  const fit = usePanelFit(store, minThickness);
+  const overlay = useMemo(
+    () =>
+      showPanel && fit && settled ? panelOverlay(settled, activeFoil, fit, minThickness) : null,
+    [showPanel, fit, settled, activeFoil, minThickness],
+  );
   const handlers = useMemo(() => curveEditorHandlers(store), [store]);
   const section = design ? (getFoil(design, activeFoil) ?? undefined) : undefined;
 
@@ -333,6 +429,27 @@ export const FinSectionPane = memo(function FinSectionPane({
         ctx.lineTo(sb.x, sb.y);
         ctx.stroke();
       };
+      if (overlay) {
+        // The fin from above, faint, then the panel's faces: dashed, orange if it won't fit.
+        ctx.save();
+        ctx.beginPath();
+        overlay.hull.forEach((p, i) => {
+          const sp = toScreen(p);
+          if (i === 0) ctx.moveTo(sp.x, sp.y);
+          else ctx.lineTo(sp.x, sp.y);
+        });
+        ctx.closePath();
+        ctx.fillStyle = PANEL_HULL_FILL;
+        ctx.fill();
+        ctx.strokeStyle = PANEL_HULL_LINE;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.strokeStyle = overlay.fits ? PANEL_FIT : PANEL_OVER;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([7, 5]);
+        for (const [a, b] of overlay.faces) line(a, b);
+        ctx.restore();
+      }
       ctx.save();
       ctx.strokeStyle = GUIDE;
       ctx.fillStyle = GUIDE;
@@ -360,7 +477,7 @@ export const FinSectionPane = memo(function FinSectionPane({
       if (thickestAt !== null) label('thickest', thickestAt, 32, 'center');
       ctx.restore();
     },
-    [thickestAt],
+    [thickestAt, overlay],
   );
 
   if (!design || !section) return null;

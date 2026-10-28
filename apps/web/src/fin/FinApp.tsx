@@ -55,7 +55,8 @@ import {
   useSectionCuts,
   type SectionState,
 } from './SectionAnalysis';
-import { fmtArea, fmtLen, type LengthUnit } from '../format';
+import { fmtArea, fmtLen, fmtThick, type LengthUnit } from '../format';
+import { usePanelFit } from './use-panel-fit';
 import { readStored, writeStored } from '../persisted';
 import { FinSettingsDialog } from './FinSettingsDialog';
 import {
@@ -617,7 +618,29 @@ function TaperTools({ units }: { units: LengthUnit }) {
 }
 
 /** Readouts and broken rules, always in view. */
-function Status({ units }: { units: LengthUnit }) {
+/**
+ * The panel check (File settings): what panel the fin needs at its angle, and a warning
+ * when that's more than the panel. A warning, not a broken rule: the fin can still be
+ * exported, for a thicker panel or a different machine.
+ */
+function PanelStatus({ units, minThickness }: { units: LengthUnit; minThickness: number }) {
+  const fit = usePanelFit(finStore, minThickness);
+  if (!fit) return null;
+  const angle = fit.panel.angle ? ` at ${fit.panel.angle.toFixed(1)}°` : '';
+  return fit.fits ? (
+    <p className="text-xs text-muted-foreground">
+      Fits the {fmtThick(fit.panel.thickness, units)} panel{angle}: needs{' '}
+      {fmtThick(fit.width, units)}, base included.
+    </p>
+  ) : (
+    <p className="text-xs text-orange-400" data-testid="panel-warning">
+      Too thick for the {fmtThick(fit.panel.thickness, units)} panel{angle}: base and blade need{' '}
+      {fmtThick(fit.width, units)}. Try Fit to panel in the foil view, a thinner foil or less cant.
+    </p>
+  );
+}
+
+function Status({ units, minThickness }: { units: LengthUnit; minThickness: number }) {
   const position = useFinState(finStore, (s) => s.design?.position);
   const base = useFinState(finStore, (s) => s.design?.base);
   const outline = useFinState(finStore, (s) => s.design?.outline);
@@ -632,6 +655,7 @@ function Status({ units }: { units: LengthUnit }) {
         </span>
         <Readouts units={units} />
       </div>
+      <PanelStatus units={units} minThickness={minThickness} />
       <Issues />
     </div>
   );
@@ -899,6 +923,10 @@ export function FinApp() {
     });
   }, []);
   const units = useMemo(() => finLengthUnit(settings), [settings]);
+  const showPanel = useCallback(
+    (on: boolean) => changeSettings({ showPanel: on }),
+    [changeSettings],
+  );
   const [view3d, setView3d] = useState<FinPreviewView>('side');
   // Section analysis in the 3D view; Reset re-frames the camera to its starting view.
   const [section, setSection] = useState<SectionState>(SECTION_DEFAULT);
@@ -1006,9 +1034,22 @@ export function FinApp() {
           view="foil"
           slot={slotOf('foil')}
           onSwap={swap}
-          tools={<FinSectionTools store={finStore} units={units} />}
+          tools={
+            <FinSectionTools
+              store={finStore}
+              units={units}
+              showPanel={settings.showPanel}
+              onShowPanel={showPanel}
+              minThickness={settings.exportMin}
+            />
+          }
         >
-          <FinSectionPane store={finStore} frameKey={sizeKey('foil')} />
+          <FinSectionPane
+            store={finStore}
+            frameKey={sizeKey('foil')}
+            showPanel={settings.showPanel}
+            minThickness={settings.exportMin}
+          />
         </ViewPane>
         <ViewPane
           view="taper"
@@ -1033,7 +1074,7 @@ export function FinApp() {
             units={units}
           />
         </ViewPane>
-        <Status units={units} />
+        <Status units={units} minThickness={settings.exportMin} />
       </main>
     </div>
   );
