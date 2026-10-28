@@ -13,7 +13,7 @@ import { FinCurveEditor, type ViewMap } from '@openshaper/render2d';
 import type { FinState } from '@openshaper/store';
 import { memo, useCallback, useMemo } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
-import { fmtLen, type LengthUnit } from '../format';
+import { fmtThick, type LengthUnit } from '../format';
 import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { sliceGuideHandlers, sliceGuides } from './slice-guides';
 import { useFinState } from './use-fin';
@@ -99,7 +99,7 @@ export const FinTaperPane = memo(function FinTaperPane({
       label('thickness →', { x: 0, y: root * 0.55 }, 0, 16, 'center');
       ctx.fillStyle = LIMIT;
       label(
-        `${fmtLen(FIN_MIN_THICKNESS, units)} min`,
+        `${fmtThick(FIN_MIN_THICKNESS, units)} min`,
         { x: 1.02, y: FIN_MIN_THICKNESS },
         0,
         -6,

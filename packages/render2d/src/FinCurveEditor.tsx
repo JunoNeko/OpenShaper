@@ -95,6 +95,8 @@ export interface FinCurveEditorProps {
   onGuideDragEnd?: () => void;
   /** Reports the view whenever it changes (tests, overlays). */
   onViewport?: (vp: Viewport) => void;
+  /** A fixed grid spacing (data units); the grid fits the zoom if unset. */
+  gridStep?: number;
   /** Accessible name for the canvas. */
   label: string;
   background?: string;
@@ -124,6 +126,7 @@ export function FinCurveEditor({
   onGuideDrag,
   onGuideDragEnd,
   onViewport,
+  gridStep,
   label,
   background,
 }: FinCurveEditorProps) {
@@ -181,14 +184,26 @@ export function FinCurveEditor({
     c.height = Math.round(size.h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     clear(ctx, size.w, size.h, background);
-    drawGrid(ctx, vp, size.w, size.h);
+    drawGrid(ctx, vp, size.w, size.h, undefined, gridStep);
     drawUnder?.(ctx, vp, (p) => {
       const s = toView(p, yScale);
       return { x: vp.originX + s.x * vp.scale, y: vp.originY - s.y * vp.scale };
     });
     if (guides) drawGuides(ctx, guides, vp, yScale);
     drawFinCurves(ctx, layers, vp, yScale, selection, hovered, alsoSelected);
-  }, [vp, size, layers, selection, alsoSelected, hovered, yScale, drawUnder, background, guides]);
+  }, [
+    vp,
+    size,
+    layers,
+    selection,
+    alsoSelected,
+    hovered,
+    yScale,
+    drawUnder,
+    background,
+    guides,
+    gridStep,
+  ]);
 
   const local = (e: { clientX: number; clientY: number }): ScreenPoint => {
     const r = canvas.current!.getBoundingClientRect();

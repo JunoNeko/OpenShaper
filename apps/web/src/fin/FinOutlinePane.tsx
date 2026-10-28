@@ -42,12 +42,15 @@ export const FinOutlinePane = memo(function FinOutlinePane({
   units,
   onViewport,
   frameKey = '',
+  gridStep,
 }: {
   store: StoreApi<FinState>;
   units: LengthUnit;
   onViewport?: (vp: Viewport) => void;
   /** Change it to re-fit the view (the pane moving large or small). */
   frameKey?: string;
+  /** The grid's spacing (cm, File settings); fits the zoom if unset. */
+  gridStep?: number;
 }) {
   const design = useFinState(store, (s) => s.design);
   const selection = useFinState(store, (s) => s.selection);
@@ -128,6 +131,7 @@ export const FinOutlinePane = memo(function FinOutlinePane({
   const handlers = useMemo(() => curveEditorHandlers(store), [store]);
   return (
     <FinCurveEditor
+      gridStep={gridStep}
       label="Fin outline"
       layers={layers}
       selection={pickFromSelection(selection, ['outline'])}

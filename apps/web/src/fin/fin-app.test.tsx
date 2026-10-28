@@ -33,6 +33,68 @@ describe('FinApp', () => {
     expect(measurements().getByText('49.8°')).toBeTruthy(); // the default sweep
   });
 
+  it('shows lengths in inches to the chosen fraction from File settings, remembered', () => {
+    localStorage.removeItem('bs.fin.settings');
+    const { unmount } = render(<FinApp />);
+    const depth = () => measurements().getByText('Depth').nextElementSibling!.textContent;
+    expect(depth()).toMatch(/ mm$/);
+    fireEvent.click(screen.getByRole('button', { name: 'File settings' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'File settings' }));
+    fireEvent.click(dialog.getByRole('radio', { name: 'Inches' }));
+    expect(depth()).toMatch(/"$/);
+    expect(measurements().getByText(/in²$/)).toBeTruthy();
+    // To the nearest half inch: nothing finer than a half shows.
+    fireEvent.change(dialog.getByLabelText('Inch fraction'), { target: { value: '2' } });
+    expect(depth()).toMatch(/^\d+( 1\/2)?"$/);
+    // Fields take inches: the profile's depth field shows its value in inches.
+    fireEvent.click(dialog.getByRole('button', { name: 'Done' }));
+    unmount();
+    render(<FinApp />);
+    expect(depth()).toMatch(/^\d+( 1\/2)?"$/);
+    localStorage.removeItem('bs.fin.settings');
+  });
+
+  it('offers the grid sizes for the unit, and back to Auto when the unit changes', () => {
+    localStorage.removeItem('bs.fin.settings');
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'File settings' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'File settings' }));
+    const grid = () => dialog.getByLabelText('Grid size') as HTMLSelectElement;
+    expect([...grid().options].map((o) => o.text)).toEqual([
+      'Auto (follows zoom)',
+      '1 mm',
+      '5 mm',
+      '10 mm',
+    ]);
+    fireEvent.change(grid(), { target: { value: '1' } }); // 5 mm
+    expect(JSON.parse(localStorage.getItem('bs.fin.settings')!).grid).toBe(0.5);
+    fireEvent.click(dialog.getByRole('radio', { name: 'Inches' }));
+    expect(grid().selectedOptions[0]!.text).toBe('Auto (follows zoom)');
+    expect([...grid().options].map((o) => o.text).slice(1)).toEqual(['1/8"', '1/4"', '1/2"', '1"']);
+    localStorage.removeItem('bs.fin.settings');
+  });
+
+  it('sets the core export’s laminate from File settings', () => {
+    localStorage.removeItem('bs.fin.core');
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'File settings' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'File settings' }));
+    const ply = dialog.getByLabelText('Laminate thickness, per face');
+    fireEvent.change(ply, { target: { value: '0.4' } });
+    fireEvent.keyDown(ply, { key: 'Enter' });
+    fireEvent.click(dialog.getByRole('radio', { name: 'Outside' }));
+    fireEvent.click(dialog.getByRole('checkbox', { name: 'Include the tab' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Done' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export core…' }));
+    const core = within(screen.getByRole('dialog', { name: 'Export core for laminating' }));
+    expect((core.getByLabelText('Laminate thickness') as HTMLInputElement).value).toBe('0.40');
+    expect((core.getByRole('radio', { name: 'Outside' }) as HTMLInputElement).checked).toBe(true);
+    expect(
+      (core.getByRole('checkbox', { name: 'Include the tab' }) as HTMLInputElement).checked,
+    ).toBe(true);
+    localStorage.removeItem('bs.fin.core');
+  });
+
   it('starts a new fin from the picker, undoably', () => {
     render(<FinApp />);
     fireEvent.change(screen.getByLabelText('Start a new fin'), { target: { value: '4' } }); // Centre
@@ -461,10 +523,12 @@ describe('FinApp: export', () => {
     expect(saved.thickness).toBeCloseTo(0.02, 12);
   }, 20_000);
 
-  it('has an export minimum, 1 mm by default, kept within 0.5–3 mm and remembered', () => {
+  it('has an export minimum in File settings, 1 mm by default, kept within 0.5–3 mm and remembered', () => {
     localStorage.removeItem('bs.fin.exportMin');
+    localStorage.removeItem('bs.fin.settings');
     const { unmount } = render(<FinApp />);
-    const field = () => screen.getByLabelText('Export minimum thickness') as HTMLInputElement;
+    fireEvent.click(screen.getByRole('button', { name: 'File settings' }));
+    const field = () => screen.getByLabelText('Minimum thickness') as HTMLInputElement;
     expect(field().value).toBe('1.0');
     for (const [typed, shown] of [
       ['0.2', '0.5'],
@@ -475,13 +539,22 @@ describe('FinApp: export', () => {
       fireEvent.keyDown(field(), { key: 'Enter' });
       expect(field().value).toBe(shown);
     }
-    expect(JSON.parse(localStorage.getItem('bs.fin.exportMin')!)).toBeCloseTo(0.15, 9);
+    expect(JSON.parse(localStorage.getItem('bs.fin.settings')!).exportMin).toBeCloseTo(0.15, 9);
     unmount();
     render(<FinApp />);
-    expect(field().value).toBe('1.5');
     // The core export says what it won't go under.
     fireEvent.click(screen.getByRole('button', { name: 'Export core…' }));
     expect(screen.getByText(/never goes under the export minimum, 1\.50 mm/)).toBeTruthy();
+    localStorage.removeItem('bs.fin.settings');
+  });
+
+  it('keeps an export minimum remembered before File settings existed', () => {
+    localStorage.removeItem('bs.fin.settings');
+    localStorage.setItem('bs.fin.exportMin', '0.2');
+    render(<FinApp />);
+    fireEvent.click(screen.getByRole('button', { name: 'File settings' }));
+    expect((screen.getByLabelText('Minimum thickness') as HTMLInputElement).value).toBe('2.0');
+    localStorage.removeItem('bs.fin.exportMin');
   });
 
   it(

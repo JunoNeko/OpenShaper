@@ -39,7 +39,7 @@ export const DEFAULT_CORE: CoreSettings = { thickness: 0.02, sides: 'both', tab:
 export const LAMINATE_MIN = 0.005;
 export const LAMINATE_MAX = 0.2;
 
-const SIDES: { value: LaminateSides; label: string }[] = [
+export const LAMINATE_SIDES: { value: LaminateSides; label: string }[] = [
   { value: 'outside', label: 'Outside' },
   { value: 'inside', label: 'Inside' },
   { value: 'both', label: 'Both' },
@@ -61,8 +61,15 @@ const readSettings = (v: unknown): CoreSettings => {
     typeof s.thickness === 'number' &&
     s.thickness >= LAMINATE_MIN &&
     s.thickness <= LAMINATE_MAX &&
-    SIDES.some((o) => o.value === s.sides);
+    LAMINATE_SIDES.some((o) => o.value === s.sides);
   return valid ? { thickness: s.thickness!, sides: s.sides!, tab: s.tab === true } : DEFAULT_CORE;
+};
+
+/** The core settings last used (or set in File settings), or the defaults. */
+export const readCoreSettings = (): CoreSettings =>
+  readStored(CORE_KEY, DEFAULT_CORE, readSettings);
+export const writeCoreSettings = (s: CoreSettings): void => {
+  writeStored(CORE_KEY, s);
 };
 
 export function CoreExportDialog({
@@ -80,7 +87,7 @@ export function CoreExportDialog({
   onExport: (format: 'step' | 'stl', laminate: FinLaminate) => void;
   onClose: () => void;
 }) {
-  const [initial] = useState(() => readStored(CORE_KEY, DEFAULT_CORE, readSettings));
+  const [initial] = useState(readCoreSettings);
   // A ply is a fraction of a millimetre: show one more decimal than other lengths.
   const show = (cm: number) => cmToUnitNumber(cm, units).toFixed(unitDecimals(units) + 1);
   const withUnit = (cm: number) => `${show(cm)} ${unitSuffix(units)}`;
@@ -93,7 +100,7 @@ export function CoreExportDialog({
   const run = (format: 'step' | 'stl') => {
     if (!ok) return;
     const settings: CoreSettings = { thickness: typed, sides, tab };
-    writeStored(CORE_KEY, settings);
+    writeCoreSettings(settings);
     onExport(format, laminateFor(settings));
   };
 
@@ -138,7 +145,7 @@ export function CoreExportDialog({
           </p>
           <fieldset className="flex items-center gap-4">
             <legend className="mb-2">Laminate on</legend>
-            {SIDES.map((o) => (
+            {LAMINATE_SIDES.map((o) => (
               <label key={o.value} className="flex items-center gap-1.5">
                 <input
                   type="radio"
