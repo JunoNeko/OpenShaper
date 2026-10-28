@@ -52,6 +52,8 @@ import {
   setRootThickness,
   setSliceTwist,
   setToe,
+  setPanelAngle,
+  setPanelThickness,
   smoothKnot,
   spanMidpoint,
   withFinCurve,
@@ -146,6 +148,10 @@ export interface FinState {
   setSliceTwist: (foil: number, change: Partial<FinTwist> | null) => boolean;
   /** Toe correction (deg, + toe in), clamped to ±5°. */
   setToe: (deg: number) => boolean;
+  /** The panel the fin is cut from (cm), or null for none (panel-fit.ts). */
+  setPanelThickness: (thickness: number | null) => boolean;
+  /** Turn the fin in its panel (deg). */
+  setPanelAngle: (deg: number, label?: string) => boolean;
   /** Move the fin onto another tab, placed as that tab's fins start (placeOnBase). */
   setBase: (base: FinBase) => boolean;
   /** Apply a NACA 4-digit preset to the section ('2412'). */
@@ -452,6 +458,16 @@ export const createFinStore = (): StoreApi<FinState> =>
       setToe: (deg) => {
         const d = get().design;
         return d ? commitChecked(setToe(d, deg), 'Set toe') : false;
+      },
+      setPanelThickness: (thickness) => {
+        const d = get().design;
+        const next = d && setPanelThickness(d, thickness);
+        return !!d && !!next && next !== d && commit(next, 'Set panel thickness');
+      },
+      setPanelAngle: (deg, label = 'Turn the fin in its panel') => {
+        const d = get().design;
+        const next = d && setPanelAngle(d, deg);
+        return !!d && !!next && next !== d && commit(next, label);
       },
       setBase: (base) => {
         const d = get().design;

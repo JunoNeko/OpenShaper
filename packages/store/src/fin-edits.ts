@@ -8,6 +8,8 @@
 import {
   FIN_MAX_CANT,
   FIN_MAX_TOE,
+  FIN_PANEL_MAX_ANGLE,
+  FIN_PANEL_THICKNESS,
   FIN_MIN_SLICE_CANT,
   finReadouts,
   twistAt,
@@ -424,4 +426,30 @@ export const smoothKnot = (s: Spline, index: number): Spline => {
   const knots = s.knots.slice();
   knots[index] = aligned;
   return setKnotContinuous(splineFromKnots(knots), index, true);
+};
+
+/**
+ * The panel the fin is cut from: `thickness` (cm, clamped to FIN_PANEL_THICKNESS), keeping
+ * the angle it's turned to; null clears it.
+ */
+export const setPanelThickness = (d: FinDesign, thickness: number | null): FinDesign => {
+  if (thickness === null) {
+    if (!d.panel) return d;
+    const { panel: _old, ...rest } = d;
+    void _old;
+    return rest;
+  }
+  const { min, max } = FIN_PANEL_THICKNESS;
+  const t = Math.min(max, Math.max(min, thickness));
+  return t === d.panel?.thickness
+    ? d
+    : { ...d, panel: { thickness: t, angle: d.panel?.angle ?? 0 } };
+};
+
+/** The fin turned `deg` in its panel, within ±FIN_PANEL_MAX_ANGLE; unchanged with no panel. */
+export const setPanelAngle = (d: FinDesign, deg: number): FinDesign => {
+  if (!d.panel || !Number.isFinite(deg)) return d;
+  const a =
+    Math.round(Math.min(FIN_PANEL_MAX_ANGLE, Math.max(-FIN_PANEL_MAX_ANGLE, deg)) * 100) / 100;
+  return a === d.panel.angle ? d : { ...d, panel: { ...d.panel, angle: a } };
 };

@@ -20,7 +20,8 @@
  *   2 — adds `slices` (foils at other heights) and `base` (the tab: Futures 3/4",
  *       Futures 1/2" or FCS single). Written only when a fin has slices or a base other
  *       than its position's default; read as absent, version 1 means no slices and the
- *       default base. Also `toe` (deg, + toe in): absent means 0.
+ *       default base. Also `toe` (deg, + toe in): absent means 0. Also `panel`: the
+ *       panel it's cut from, `{ thickness (mm), angle (deg) }`; absent means none set.
  */
 import {
   FIN_BASES,
@@ -76,6 +77,8 @@ export interface FinJson {
   section: SectionJson;
   /** Version 2: toe correction, deg, + toe in. Absent means 0. */
   toe?: number;
+  /** Version 2: the panel it's cut from (thickness in mm, angle in deg). Absent: none. */
+  panel?: { thickness: number; angle: number };
   /** Version 2: the tab. Absent means the position's default Futures tab. */
   base?: FinBase;
   /** Version 2: foils at other heights, lowest first; height is a fraction of the depth. */
@@ -119,7 +122,7 @@ const same = (n: number) => n;
 export const writeFinJson = (d: FinDesign, metadata?: Record<string, unknown>): string => {
   const doc: FinJson = {
     format: FIN_JSON_FORMAT,
-    version: d.slices.length || d.base !== defaultFinBase(d.position) || d.toe ? 2 : 1,
+    version: d.slices.length || d.base !== defaultFinBase(d.position) || d.toe || d.panel ? 2 : 1,
     units: 'mm',
     position: d.position,
     hand: d.hand,
@@ -127,6 +130,7 @@ export const writeFinJson = (d: FinDesign, metadata?: Record<string, unknown>): 
     lateralOffset: toMm(d.lateralOffset),
     ...(d.base !== defaultFinBase(d.position) ? { base: d.base } : {}),
     ...(d.toe ? { toe: d.toe } : {}),
+    ...(d.panel ? { panel: { thickness: toMm(d.panel.thickness), angle: d.panel.angle } } : {}),
     outline: splineToJson(scaleSpline(d.outline, toMm, toMm)),
     section: sectionToJson(d.section),
     ...(d.slices.length
@@ -165,6 +169,13 @@ const assertStructure = (doc: Record<string, unknown>): void => {
   }
   if (!isNumber(doc.cant)) fail('Malformed fin: cant is not a number');
   if (doc.toe !== undefined && !isNumber(doc.toe)) fail('Malformed fin: toe is not a number');
+  const panel = doc.panel;
+  if (
+    panel !== undefined &&
+    (!isObject(panel) || !isNumber(panel.thickness) || !isNumber(panel.angle))
+  ) {
+    fail('Malformed fin: panel needs a thickness and an angle');
+  }
   if (doc.base !== undefined && !(FIN_BASES as readonly unknown[]).includes(doc.base)) {
     fail('Malformed fin: unknown base');
   }
@@ -231,6 +242,9 @@ export const readFinJson = (
       ...(sl.twist ? { twist: { ...sl.twist } } : {}),
     })),
     taper: scaleSpline(splineFromJson(doc.taper), same, toCm),
+    ...(doc.panel
+      ? { panel: { thickness: toCm(doc.panel.thickness), angle: doc.panel.angle } }
+      : {}),
   };
   return doc.metadata ? { design, metadata: doc.metadata } : { design };
 };

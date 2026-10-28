@@ -56,6 +56,8 @@ export {
   setRootThickness,
   setSliceTwist,
   setToe,
+  setPanelAngle,
+  setPanelThickness,
   withFinCurve,
   withFoil,
   type FinCurve,
