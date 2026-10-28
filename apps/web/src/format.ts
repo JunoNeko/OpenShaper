@@ -20,6 +20,8 @@ export interface LengthUnit {
   unit: Unit;
   /** Promote to feet / meters for large values (legacy `useLargeUnits`). */
   large: boolean;
+  /** Inches: show to the nearest 1/fraction" (2, 4, 8 or 16); 16 if unset. */
+  fraction?: number;
 }
 
 export const LENGTH_UNITS: LengthUnit[] = [
@@ -37,7 +39,19 @@ export const lengthUnitByKey = (key: string | null): LengthUnit =>
 
 /** Format an internal centimeter length per the chosen unit. */
 export const fmtLen = (cm: number, u: LengthUnit): string =>
-  convertLengthToUnit(cm, u.large, u.unit);
+  u.fraction === undefined
+    ? convertLengthToUnit(cm, u.large, u.unit)
+    : convertLengthToUnit(cm, u.large, u.unit, u.fraction);
+
+/**
+ * A thickness: like {@link fmtLen}, but inches are shown as decimals to three places
+ * (0.375"), as fin thicknesses are specced. A fraction to the nearest 1/8" would round
+ * the 0.5 mm minimum to 0".
+ */
+export const fmtThick = (cm: number, u: LengthUnit): string =>
+  u.unit === Unit.INCHES || u.unit === Unit.INCHES_DECIMAL
+    ? `${cmToUnitNumber(cm, u).toFixed(3)}"`
+    : fmtLen(cm, u);
 
 /**
  * Volume, always in litres, to one decimal: "27.4L" — the way boards are specced.

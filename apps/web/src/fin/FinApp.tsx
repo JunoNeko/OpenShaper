@@ -12,13 +12,11 @@
  * cant, nudge) go with it, under it when it is small, so the nudge sits by the view
  * that shows what it does.
  *
- * Lengths show in mm, the owner's choice for fins. Components still take a `units`
- * prop (apps/web/CLAUDE.md), so a unit selector can be added here without touching
- * them.
+ * Lengths show in mm or inches, chosen in File settings (fin-settings.ts) and passed
+ * to every component as a `units` prop (apps/web/CLAUDE.md).
  */
 import {
   FIN_BASES,
-  FIN_EXPORT_MIN_THICKNESS,
   FIN_BASE_LABEL,
   FIN_MAX_CANT,
   FIN_MAX_TOE,
@@ -38,7 +36,7 @@ import {
 import type { FinPreviewView } from '@openshaper/render3d';
 import type { FinStart } from '@openshaper/store';
 import { Button, Tooltip } from '@openshaper/ui';
-import { Maximize2, RotateCcw, RotateCw } from 'lucide-react';
+import { Maximize2, RotateCcw, RotateCw, Settings } from 'lucide-react';
 import {
   lazy,
   Suspense,
@@ -57,19 +55,16 @@ import {
   useSectionCuts,
   type SectionState,
 } from './SectionAnalysis';
-import {
-  cmToUnitNumber,
-  fmtArea,
-  fmtLen,
-  lengthUnitByKey,
-  parseTypedLen,
-  unitDecimals,
-  unitSuffix,
-  type LengthUnit,
-} from '../format';
-import { NumericInput } from '../components/numeric-input';
-import { useSyncedText } from '../use-numeric-field';
+import { fmtArea, fmtLen, type LengthUnit } from '../format';
 import { readStored, writeStored } from '../persisted';
+import { FinSettingsDialog } from './FinSettingsDialog';
+import {
+  finLengthUnit,
+  readFinSettings,
+  withFinSettings,
+  writeFinSettings,
+  type FinSettings,
+} from './fin-settings';
 import { GITHUB_URL } from '../seo/site';
 import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
@@ -796,70 +791,20 @@ function PairOption({ pair, onChange }: { pair: boolean; onChange: (on: boolean)
   );
 }
 
-const EXPORT_MIN_KEY = 'bs.fin.exportMin';
-
-/** The remembered export minimum (cm), or the default; anything out of range is ignored. */
-const readExportMin = (): number =>
-  readStored(EXPORT_MIN_KEY, FIN_EXPORT_MIN_THICKNESS.default, (v) =>
-    typeof v === 'number' &&
-    v >= FIN_EXPORT_MIN_THICKNESS.min - 1e-9 &&
-    v <= FIN_EXPORT_MIN_THICKNESS.max + 1e-9
-      ? v
-      : FIN_EXPORT_MIN_THICKNESS.default,
-  );
-
-/**
- * The exports' minimum thickness: the edges and tip are thickened to it in the files
- * only (STEP, STL and core), so the design can show its finished edges. Remembered.
- */
-function ExportMinField({
-  value,
-  onChange,
+function ExportButtons({
+  pair,
   units,
+  minThickness,
 }: {
-  value: number;
-  onChange: (cm: number) => void;
+  pair: boolean;
   units: LengthUnit;
+  /** The exports' minimum thickness (cm, File settings). */
+  minThickness: number;
 }) {
-  const { min, max } = FIN_EXPORT_MIN_THICKNESS;
-  const shown = cmToUnitNumber(value, units).toFixed(unitDecimals(units));
-  const [text, setText] = useSyncedText(shown);
-  const commit = () => {
-    const cm = parseTypedLen(text, units);
-    if (cm === null) setText(shown);
-    else onChange(Math.min(max, Math.max(min, cm)));
-  };
-  // Compact, so the header stays on one line: the tooltip says what it is.
-  return (
-    <Tooltip
-      label={`Export min: exports thicken the edges and tip to at least this (${fmtLen(min, units)}–${fmtLen(max, units)}); the design isn't changed`}
-    >
-      <label className="flex items-center gap-1 text-xs text-muted-foreground">
-        Min
-        <NumericInput
-          value={text}
-          onValueChange={setText}
-          onCommit={commit}
-          onEscape={() => setText(shown)}
-          ariaLabel="Export minimum thickness"
-          className="h-7 w-11 px-1 text-center text-xs tabular-nums"
-        />
-        {unitSuffix(units)}
-      </label>
-    </Tooltip>
-  );
-}
-
-function ExportButtons({ pair, units }: { pair: boolean; units: LengthUnit }) {
   const design = useFinState(finStore, (s) => s.design);
   const issues = useMemo(() => (design ? validateFinDesign(design) : []), [design]);
   const [busy, setBusy] = useState<'step' | 'stl' | 'core' | null>(null);
   const [coreOpen, setCoreOpen] = useState(false);
-  const [minThickness, setMinThickness] = useState(readExportMin);
-  const changeMin = (cm: number) => {
-    setMinThickness(cm);
-    writeStored(EXPORT_MIN_KEY, cm);
-  };
   const run = (format: 'step' | 'stl', laminate?: FinLaminate) => {
     const d = finStore.getState().design;
     if (!d || busy) return;
@@ -873,7 +818,6 @@ function ExportButtons({ pair, units }: { pair: boolean; units: LengthUnit }) {
   const why = blocked ? 'Fix the issues listed under the measurements first' : undefined;
   return (
     <>
-      <ExportMinField value={minThickness} onChange={changeMin} units={units} />
       <Tooltip label={why ?? 'Export a STEP file for CNC (mm)'}>
         <Button
           variant="outline"
@@ -922,8 +866,39 @@ function ExportButtons({ pair, units }: { pair: boolean; units: LengthUnit }) {
   );
 }
 
+/** Opens File settings. */
+function SettingsButton({
+  settings,
+  onChange,
+}: {
+  settings: FinSettings;
+  onChange: (change: Partial<FinSettings>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Tooltip label="File settings: units, grid, export minimum and core">
+        <Button variant="ghost" size="sm" aria-label="File settings" onClick={() => setOpen(true)}>
+          <Settings />
+        </Button>
+      </Tooltip>
+      {open && (
+        <FinSettingsDialog settings={settings} onChange={onChange} onClose={() => setOpen(false)} />
+      )}
+    </>
+  );
+}
+
 export function FinApp() {
-  const units = lengthUnitByKey('mm');
+  const [settings, setSettings] = useState<FinSettings>(readFinSettings);
+  const changeSettings = useCallback((change: Partial<FinSettings>) => {
+    setSettings((s) => {
+      const next = withFinSettings(s, change);
+      writeFinSettings(next);
+      return next;
+    });
+  }, []);
+  const units = useMemo(() => finLengthUnit(settings), [settings]);
   const [view3d, setView3d] = useState<FinPreviewView>('side');
   // Section analysis in the 3D view; Reset re-frames the camera to its starting view.
   const [section, setSection] = useState<SectionState>(SECTION_DEFAULT);
@@ -1002,8 +977,9 @@ export function FinApp() {
         <div className="ml-auto flex flex-wrap items-center gap-1">
           <FileButtons onSave={save} />
           <PairOption pair={pair} onChange={changePair} />
-          <ExportButtons pair={pair} units={units} />
+          <ExportButtons pair={pair} units={units} minThickness={settings.exportMin} />
           <History />
+          <SettingsButton settings={settings} onChange={changeSettings} />
           <a
             className="px-2 text-sm text-muted-foreground underline-offset-4 hover:underline"
             href="/docs/fin-designer"
@@ -1019,7 +995,12 @@ export function FinApp() {
           onSwap={swap}
           tools={<OutlineTools units={units} />}
         >
-          <FinOutlinePane store={finStore} units={units} frameKey={sizeKey('outline')} />
+          <FinOutlinePane
+            store={finStore}
+            units={units}
+            frameKey={sizeKey('outline')}
+            gridStep={settings.grid ?? undefined}
+          />
         </ViewPane>
         <ViewPane
           view="foil"

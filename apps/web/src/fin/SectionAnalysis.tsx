@@ -28,7 +28,7 @@ import {
 import type { FinSectionPlane } from '@openshaper/render3d';
 import { Button } from '@openshaper/ui';
 import { useMemo } from 'react';
-import { fmtLen, type LengthUnit } from '../format';
+import { fmtLen, fmtThick, type LengthUnit } from '../format';
 
 /** What the analysis shows: which planes, and where each is (0–1 across its range). */
 export interface SectionState {
@@ -194,7 +194,7 @@ export function SectionOverlay({
             {v
               ? `${len(cuts!.leadingRoot - v.plane.at)} back from the leading edge · ` +
                 (v.measure
-                  ? `height ${len(v.measure.length)} · thickest ${len(v.measure.thickness)}`
+                  ? `height ${len(v.measure.length)} · thickest ${fmtThick(v.measure.thickness, units)}`
                   : 'clear of the blade')
               : ''}
           </span>
@@ -209,7 +209,7 @@ export function SectionOverlay({
             {h
               ? `${len(h.plane.at)} up` +
                 (h.measure
-                  ? ` · chord ${len(h.measure.length)} · thickness ${len(h.measure.thickness)}`
+                  ? ` · chord ${len(h.measure.length)} · thickness ${fmtThick(h.measure.thickness, units)}`
                   : ' · above the tip')
               : ''}
           </span>

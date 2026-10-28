@@ -32,6 +32,7 @@ export {
   drawGhostSpline,
   drawControlPoints,
   drawGrid,
+  MIN_FIXED_GRID_PX,
   gridStep,
   drawSectionMarkers,
   drawCurvatureComb,

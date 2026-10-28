@@ -273,6 +273,9 @@ const hexToRgba = (hex: string, alpha: number, fallback: string): string => {
   return `rgba(${parseInt(m[1]!, 16)},${parseInt(m[2]!, 16)},${parseInt(m[3]!, 16)},${alpha})`;
 };
 
+/** The closest a fixed grid's lines are drawn (px); see {@link drawGrid}. */
+export const MIN_FIXED_GRID_PX = 6;
+
 export const drawGrid = (
   ctx: CanvasRenderingContext2D,
   vp: Viewport,
@@ -280,9 +283,19 @@ export const drawGrid = (
   h: number,
   /** Override grid color (6-digit hex). Defaults to the built-in muted-blue-grey. */
   color?: string,
+  /**
+   * A fixed cell size (world units) instead of the adaptive one. Zoomed out until its
+   * lines would crowd closer than {@link MIN_FIXED_GRID_PX}, every 2nd, 4th… line is
+   * drawn, so the lines still fall on multiples of it.
+   */
+  fixed?: number,
 ): void => {
   const TARGET_PX = 64;
-  const step = gridStep(TARGET_PX / vp.scale);
+  let step = gridStep(TARGET_PX / vp.scale);
+  if (fixed !== undefined && fixed > 0 && Number.isFinite(fixed)) {
+    step = fixed;
+    while (step * vp.scale < MIN_FIXED_GRID_PX) step *= 2;
+  }
   if (step <= 0) return;
 
   const tl = screenToWorld(vp, { x: 0, y: 0 });

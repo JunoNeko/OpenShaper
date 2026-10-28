@@ -103,7 +103,7 @@ export default function DocsFinDesigner() {
         </Terms>
         <p>
           Both tabs are {mm(side.length)} long and {mm(side.thickness)} thick. Lengths are shown in
-          millimetres.
+          millimetres unless you choose inches in <a href="#settings">File settings</a>.
         </p>
         <p>
           The fin is shown four ways: the profile, the foil section, the thickness and a 3D view.
@@ -376,10 +376,37 @@ export default function DocsFinDesigner() {
         </p>
       </Section>
 
+      <Section id="settings" title="File settings">
+        <p>
+          The gear button at the right of the top bar opens File settings. Changes apply straight
+          away and are remembered in this browser.
+        </p>
+        <Terms>
+          <Term name="Units">
+            Millimetres, or inches shown to the nearest 1/16, 1/8, 1/4 or 1/2 inch. Fields show
+            decimal inches; you can type fractions such as 3/8 or 1 1/4. Exported files are always
+            in millimetres.
+          </Term>
+          <Term name="Grid">
+            The profile view&apos;s grid: Auto (it follows the zoom), or 1, 5 or 10 mm, or 1/8, 1/4,
+            1/2 or 1 inch. Zoomed far out, a fixed grid draws every second or fourth line rather
+            than a solid block, still on multiples of its size. Changing the units sets it back to
+            Auto.
+          </Term>
+          <Term name="Export">
+            The minimum thickness for exports (see <a href="#export">Export min</a>).
+          </Term>
+          <Term name="Core export">
+            The laminate thickness per face, which faces it goes on, and whether it wraps the tab:
+            what Export core… starts from (see <a href="#export">Core</a>).
+          </Term>
+        </Terms>
+      </Section>
+
       <Section id="export" title="Exporting for CNC and printing">
         <Terms>
           <Term name="Export min">
-            The thinnest the exported fin gets, beside the Export buttons:{' '}
+            The thinnest the exported fin gets, set in <a href="#settings">File settings</a>:{' '}
             {mm(FIN_EXPORT_MIN_THICKNESS.default)} by default, from{' '}
             {mm(FIN_EXPORT_MIN_THICKNESS.min)} to {mm(FIN_EXPORT_MIN_THICKNESS.max)}. STEP, STL and
             core exports thicken the edges and tip to at least this in the file, the thickest point

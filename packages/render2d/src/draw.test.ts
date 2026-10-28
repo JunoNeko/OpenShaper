@@ -24,6 +24,7 @@ import {
   drawCurvatureComb,
   drawFinsPlan,
   drawGrid,
+  MIN_FIXED_GRID_PX,
   drawMeasureCursor,
   drawSectionMarkers,
   drawSpline,
@@ -597,6 +598,24 @@ describe('drawGrid', () => {
     expect(zoomedIn.moves.length).toBeGreaterThanOrEqual(zoomedOut.moves.length);
     // Bounded: a 64px target cell over an 800×600 canvas can't produce hundreds of lines.
     expect(zoomedIn.moves.length).toBeLessThan(200);
+  });
+
+  it('draws a fixed cell size on its multiples, thinned only where the lines would crowd', () => {
+    // 20 px per unit, 0.5-unit cells: 10 px apart, every one drawn.
+    const fine = makeGridCtx();
+    drawGrid(fine.ctx, { scale: 20, originX: 0, originY: 0 }, 200, 100, undefined, 0.5);
+    const xs = [...new Set(fine.moves.filter((m) => m.y === 0).map((m) => m.x))].sort(
+      (a, b) => a - b,
+    );
+    expect(xs.slice(0, 4)).toEqual([0, 10, 20, 30]);
+    // 4 px per unit: 0.5-unit cells would be 2 px apart, so every 4th (8 px) is drawn.
+    const crowded = makeGridCtx();
+    drawGrid(crowded.ctx, { scale: 4, originX: 0, originY: 0 }, 200, 100, undefined, 0.5);
+    const cx = [...new Set(crowded.moves.filter((m) => m.y === 0).map((m) => m.x))].sort(
+      (a, b) => a - b,
+    );
+    expect(cx.slice(0, 3)).toEqual([0, 8, 16]);
+    expect(cx[1]! - cx[0]!).toBeGreaterThanOrEqual(MIN_FIXED_GRID_PX);
   });
 });
 
