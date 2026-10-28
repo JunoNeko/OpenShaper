@@ -70,7 +70,9 @@ import { GITHUB_URL } from '../seo/site';
 import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane, FinSectionTools } from './FinSectionPane';
+import { FinFrontPane } from './FinFrontPane';
 import { FinTaperPane } from './FinTaperPane';
+import { FitToPanel, PanelToggle } from './panel-tools';
 import { PointTools } from './PointTools';
 import { downloadFin, exportFin, readFinFile } from './fin-file';
 import { finStore } from './fin-store';
@@ -434,6 +436,38 @@ function SliceTwistTools({
   );
 }
 
+/**
+ * The whole fin's cant (side and quad-rear fins): in the 3D view's tools and the front
+ * view's. Disabled on an FCS tab, whose plug carries the cant, and a US box.
+ */
+function CantField() {
+  const position = useFinState(finStore, (s) => s.design?.position);
+  const cant = useFinState(finStore, (s) => s.design?.cant ?? 0);
+  const base = useFinState(finStore, (s) => s.design?.base);
+  if (!position || !base || position === 'centre') return null;
+  const fcs = !futuresKind(base);
+  return (
+    <Tooltip
+      label={
+        base === 'us-box'
+          ? 'A fin in a US box has no cant'
+          : fcs
+            ? 'Set by the FCS plug (0°, 5° or 9°)'
+            : 'Blade lean out from the tab'
+      }
+    >
+      <div>
+        <DegField
+          label={base === 'us-box' ? 'Cant' : fcs ? 'Cant (plug)' : `Cant (0–${FIN_MAX_CANT}°)`}
+          value={cant}
+          disabled={fcs}
+          onCommit={(v) => finStore.getState().setCant(v)}
+        />
+      </div>
+    </Tooltip>
+  );
+}
+
 function PlacementTools({
   view,
   onView,
@@ -445,7 +479,6 @@ function PlacementTools({
 }) {
   const position = useFinState(finStore, (s) => s.design?.position);
   const hand = useFinState(finStore, (s) => s.design?.hand);
-  const cant = useFinState(finStore, (s) => s.design?.cant ?? 0);
   const toe = useFinState(finStore, (s) => s.design?.toe ?? 0);
   const base = useFinState(finStore, (s) => s.design?.base);
   // A slice selected (here or in the foil view): cant and toe set its change instead.
@@ -454,7 +487,6 @@ function PlacementTools({
   );
   if (!position || !base) return null;
   const s = finStore.getState;
-  const fcs = !futuresKind(base);
   return (
     <>
       <label className="flex items-center gap-2">
@@ -495,28 +527,7 @@ function PlacementTools({
         </>
       ) : (
         <>
-          {position !== 'centre' && (
-            <Tooltip
-              label={
-                base === 'us-box'
-                  ? 'A fin in a US box has no cant'
-                  : fcs
-                    ? 'Set by the FCS plug (0°, 5° or 9°)'
-                    : 'Blade lean out from the tab'
-              }
-            >
-              <div>
-                <DegField
-                  label={
-                    base === 'us-box' ? 'Cant' : fcs ? 'Cant (plug)' : `Cant (0–${FIN_MAX_CANT}°)`
-                  }
-                  value={cant}
-                  disabled={fcs}
-                  onCommit={(v) => s().setCant(v)}
-                />
-              </div>
-            </Tooltip>
-          )}
+          <CantField />
           <NudgePad />
           <ToeTools
             toe={toe}
@@ -540,6 +551,25 @@ function PlacementTools({
 
 const OUTLINE_CURVES = ['outline'] as const;
 const TAPER_CURVES = ['taper'] as const;
+
+/** The Thickness view's two halves: the taper, or the fin from the front. */
+type ThicknessMode = 'taper' | 'front';
+
+const THICKNESS_MODES: readonly { mode: ThicknessMode; label: string; tip: string }[] = [
+  { mode: 'taper', label: 'Thickness', tip: 'The thickness taper, root to tip' },
+  {
+    mode: 'front',
+    label: 'Front',
+    tip: 'The fin from the front, true to scale: the blade leaning with its cant, and the panel',
+  },
+];
+
+const THICKNESS_MODE_KEY = 'bs.fin.thicknessView';
+
+const readThicknessMode = (): ThicknessMode =>
+  readStored<ThicknessMode>(THICKNESS_MODE_KEY, 'taper', (v) =>
+    v === 'front' ? 'front' : 'taper',
+  );
 
 /**
  * Where a new slice goes: halfway up the biggest gap between the root, the slices and
@@ -601,18 +631,96 @@ function RemoveSlice() {
 }
 
 /** The thickness view's controls. */
-function TaperTools({ units }: { units: LengthUnit }) {
+/** The front view's panel controls, once the fin has one: show it, tilt it, fit it. */
+function FrontPanelTools({
+  show,
+  onShow,
+  minThickness,
+}: {
+  show: boolean;
+  onShow: (on: boolean) => void;
+  minThickness: number;
+}) {
+  const tilt = useFinState(finStore, (s) => (s.design?.panel ? (s.design.panel.tilt ?? 0) : null));
+  if (tilt === null) return null;
+  return (
+    <div className="flex items-center gap-1" role="group" aria-label="Panel">
+      <PanelToggle
+        show={show}
+        onShow={onShow}
+        tooltip="Show the panel's faces, seen from the front along the panel"
+      />
+      {show && (
+        <>
+          <Tooltip label="The panel's faces leaning from upright, toward the fin's outside face (±45°): a canted blade on an upright tab fits a thinner panel leaning between them. The fin itself doesn't change, nor its exports">
+            <div className="w-36 text-sm">
+              <DegField
+                label="Tilt"
+                value={tilt}
+                onCommit={(v) => finStore.getState().setPanelTilt(v)}
+              />
+            </div>
+          </Tooltip>
+          <FitToPanel store={finStore} minThickness={minThickness} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The Thickness view's controls: which half it shows (the taper, or the fin from the
+ * front), then that half's.
+ */
+function TaperTools({
+  units,
+  mode,
+  onMode,
+  showPanel,
+  onShowPanel,
+  minThickness,
+}: {
+  units: LengthUnit;
+  mode: ThicknessMode;
+  onMode: (mode: ThicknessMode) => void;
+  showPanel: boolean;
+  onShowPanel: (on: boolean) => void;
+  minThickness: number;
+}) {
   const root = useFinState(finStore, (s) => s.design?.taper.knots[0]!.end.y);
   if (root === undefined) return null;
   return (
     <>
-      <LenField
-        label="Root thickness"
-        valueCm={root}
-        units={units}
-        onCommit={(cm) => finStore.getState().setRootThickness(cm)}
-      />
-      <PointTools store={finStore} curves={TAPER_CURVES} />
+      <div className="flex items-center gap-1" role="group" aria-label="Thickness view">
+        {THICKNESS_MODES.map(({ mode: m, label, tip }) => (
+          <Tooltip key={m} label={tip}>
+            <Button
+              size="sm"
+              variant={mode === m ? 'default' : 'outline'}
+              aria-pressed={mode === m}
+              onClick={() => onMode(m)}
+            >
+              {label}
+            </Button>
+          </Tooltip>
+        ))}
+      </div>
+      {mode === 'taper' ? (
+        <>
+          <LenField
+            label="Root thickness"
+            valueCm={root}
+            units={units}
+            onCommit={(cm) => finStore.getState().setRootThickness(cm)}
+          />
+          <PointTools store={finStore} curves={TAPER_CURVES} />
+        </>
+      ) : (
+        <>
+          <CantField />
+          <FrontPanelTools show={showPanel} onShow={onShowPanel} minThickness={minThickness} />
+        </>
+      )}
     </>
   );
 }
@@ -626,7 +734,11 @@ function TaperTools({ units }: { units: LengthUnit }) {
 function PanelStatus({ units, minThickness }: { units: LengthUnit; minThickness: number }) {
   const fit = usePanelFit(finStore, minThickness);
   if (!fit) return null;
-  const angle = fit.panel.angle ? ` at ${fit.panel.angle.toFixed(1)}°` : '';
+  const pose = [
+    fit.pose.angle ? `turned ${fit.pose.angle.toFixed(1)}°` : '',
+    fit.pose.tilt ? `tilted ${fit.pose.tilt.toFixed(1)}°` : '',
+  ].filter(Boolean);
+  const angle = pose.length ? ` ${pose.join(', ')}` : '';
   return fit.fits ? (
     <p className="text-xs text-muted-foreground">
       Fits the {fmtThick(fit.panel.thickness, units)} panel{angle}: needs{' '}
@@ -635,7 +747,7 @@ function PanelStatus({ units, minThickness }: { units: LengthUnit; minThickness:
   ) : (
     <p className="text-xs text-orange-400" data-testid="panel-warning">
       Too thick for the {fmtThick(fit.panel.thickness, units)} panel{angle}: base and blade need{' '}
-      {fmtThick(fit.width, units)}. Try Fit to panel in the foil view, a thinner foil or less cant.
+      {fmtThick(fit.width, units)}. Try Fit to panel, a thinner foil or less cant.
     </p>
   );
 }
@@ -670,9 +782,12 @@ function ViewPane({
   slot,
   onSwap,
   tools,
+  title: titleOverride,
   children,
 }: {
   view: FinView;
+  /** A title other than the view's (the Thickness view showing the front). */
+  title?: string;
   /** 0 for the large pane, 1–3 for the small ones. */
   slot: number;
   onSwap: (slot: number) => void;
@@ -680,7 +795,7 @@ function ViewPane({
   children: ReactNode;
 }) {
   const large = slot === 0;
-  const title = FIN_VIEW_TITLE[view];
+  const title = titleOverride ?? FIN_VIEW_TITLE[view];
   const keepTools = view === '3d';
   return (
     <section
@@ -952,6 +1067,11 @@ export function FinApp() {
   useFinShortcuts(finStore, { onSave: save });
   const ready = useFinAutosave(finStore);
   const [order, setOrder] = useState<FinViewOrder>(readViewOrder);
+  const [thicknessMode, setThicknessMode] = useState<ThicknessMode>(readThicknessMode);
+  const changeThicknessMode = useCallback((mode: ThicknessMode) => {
+    setThicknessMode(mode);
+    writeStored(THICKNESS_MODE_KEY, mode);
+  }, []);
   const swap = useCallback((slot: number) => {
     setOrder((o) => {
       const next = swapIntoMain(o, slot);
@@ -1055,9 +1175,28 @@ export function FinApp() {
           view="taper"
           slot={slotOf('taper')}
           onSwap={swap}
-          tools={<TaperTools units={units} />}
+          title={thicknessMode === 'front' ? 'Front' : undefined}
+          tools={
+            <TaperTools
+              units={units}
+              mode={thicknessMode}
+              onMode={changeThicknessMode}
+              showPanel={settings.showPanel}
+              onShowPanel={showPanel}
+              minThickness={settings.exportMin}
+            />
+          }
         >
-          <FinTaperPane store={finStore} units={units} frameKey={sizeKey('taper')} />
+          {thicknessMode === 'front' ? (
+            <FinFrontPane
+              store={finStore}
+              frameKey={sizeKey('taper')}
+              showPanel={settings.showPanel}
+              minThickness={settings.exportMin}
+            />
+          ) : (
+            <FinTaperPane store={finStore} units={units} frameKey={sizeKey('taper')} />
+          )}
         </ViewPane>
         <ViewPane
           view="3d"

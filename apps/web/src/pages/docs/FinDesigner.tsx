@@ -213,6 +213,12 @@ export default function DocsFinDesigner() {
           straight run that curves in near the tip is the usual shape: that curve is what controls
           how the tip flexes. <strong>Root thickness</strong> scales the whole curve.
         </p>
+        <p>
+          <strong>Front</strong>, at the top of the view, swaps the taper for the fin seen from the
+          front, true to scale: the tab, and the blade leaning with its cant. It shows the panel
+          too, when one is set (see <a href="#panel">Fitting in a panel</a>);{' '}
+          <strong>Thickness</strong> swaps back. The choice is remembered in this browser.
+        </p>
       </Section>
 
       <Section id="base" title="The base">
@@ -381,7 +387,7 @@ export default function DocsFinDesigner() {
           Fins are machined from panels (G10 and the like), so the panel&apos;s thickness limits the
           whole fin: blade and base together. Set the panel&apos;s thickness in{' '}
           <a href="#settings">File settings</a> and the app checks the fin as it will be exported
-          (at the export minimum), seen from above.
+          (at the export minimum), in three dimensions.
         </p>
         <p>
           The status line says what panel the fin needs, base included, and warns in orange when
@@ -396,8 +402,19 @@ export default function DocsFinDesigner() {
           <strong>Angle</strong> turns the fin in the panel, seen from above (±45°), and{' '}
           <strong>Fit to panel</strong> finds the angle that needs the thinnest panel. A foil with a
           flat inside face already fits best lying straight. The angle is only a check, saved with
-          the fin: the fin and its STEP and STL files don&apos;t change. Cant tilts the blade out of
-          the panel, so a canted fin needs a much thicker panel seen from above.
+          the fin: the fin and its STEP and STL files don&apos;t change.
+        </p>
+        <p>
+          Cant leans the blade out from its upright tab, so a canted fin (a Futures side fin, or an
+          FCS fin with a slice that adds cant) sticks out of a panel lying flat. The Thickness
+          view&apos;s <strong>Front</strong> button shows the fin from the front instead of its
+          taper: tab and blade true to scale, looking along the panel, with the panel&apos;s faces
+          dashed. <strong>Tilt</strong> leans the faces toward the fin&apos;s outside face (±45°),
+          so the panel runs diagonally between the tab and the leaning blade, and the{' '}
+          <strong>Cant</strong> field (the 3D view&apos;s, repeated) lets you work the lean into the
+          panel. Fit to panel, in either view, turns and tilts the fin together to what needs the
+          thinnest panel. With the panel tilted, the foil view draws its faces where they cross the
+          foil you&apos;re editing, without the outline from above.
         </p>
       </Section>
 

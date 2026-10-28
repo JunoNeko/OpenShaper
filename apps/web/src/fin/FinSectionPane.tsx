@@ -31,7 +31,15 @@ import { fmtLen, type LengthUnit } from '../format';
 import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { PointTools } from './PointTools';
 import { useFinState } from './use-fin';
-import { bestAngleOf, panelOverlay, usePanelFit } from './use-panel-fit';
+import {
+  FitToPanel,
+  PANEL_FIT,
+  PANEL_HULL_FILL,
+  PANEL_HULL_LINE,
+  PANEL_OVER,
+  PanelToggle,
+} from './panel-tools';
+import { panelOverlay, usePanelFit } from './use-panel-fit';
 import { useSettledDesign } from './use-settled-design';
 
 /** Drawn this many times taller than true. */
@@ -49,10 +57,6 @@ const OUTSIDE = '#22D3EE';
 const INSIDE = '#A78BFA';
 const GUIDE = 'rgba(138,155,179,0.7)';
 /** The panel's faces: green when the fin fits, orange (as the other limits) when not. */
-const PANEL_FIT = 'rgba(34,197,94,0.9)';
-const PANEL_OVER = 'rgba(249,115,22,0.95)';
-const PANEL_HULL_FILL = 'rgba(138,155,179,0.08)';
-const PANEL_HULL_LINE = 'rgba(138,155,179,0.45)';
 
 const mirrored = (s: Spline): Spline =>
   splineFromKnots(
@@ -142,7 +146,7 @@ function NacaPicker({ store, centre }: { store: StoreApi<FinState>; centre: bool
 
 /**
  * The panel's controls, once the fin has one (File settings): show its faces, turn the
- * fin in it, or let the app find the angle that needs the thinnest panel.
+ * fin in it, or let the app turn and tilt it to what needs the thinnest panel.
  */
 function PanelTools({
   store,
@@ -159,16 +163,11 @@ function PanelTools({
   if (angle === undefined) return null;
   return (
     <div className="flex items-center gap-1" role="group" aria-label="Panel">
-      <Tooltip label="Show the panel's faces, and the fin seen from above">
-        <Button
-          size="sm"
-          variant={show ? 'default' : 'outline'}
-          aria-pressed={show}
-          onClick={() => onShow(!show)}
-        >
-          Panel
-        </Button>
-      </Tooltip>
+      <PanelToggle
+        show={show}
+        onShow={onShow}
+        tooltip="Show the panel's faces, and the fin seen from above"
+      />
       {show && (
         <>
           <Tooltip label="The fin turned in the panel, seen from above (±45°). The fin itself doesn't change, nor its exports">
@@ -180,18 +179,7 @@ function PanelTools({
               />
             </div>
           </Tooltip>
-          <Tooltip label="Turn the fin to the angle that needs the thinnest panel">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const d = store.getState().design;
-                if (d) store.getState().setPanelAngle(bestAngleOf(d, minThickness), 'Fit to panel');
-              }}
-            >
-              Fit to panel
-            </Button>
-          </Tooltip>
+          <FitToPanel store={store} minThickness={minThickness} />
         </>
       )}
     </div>
@@ -432,18 +420,20 @@ export const FinSectionPane = memo(function FinSectionPane({
       if (overlay) {
         // The fin from above, faint, then the panel's faces: dashed, orange if it won't fit.
         ctx.save();
-        ctx.beginPath();
-        overlay.hull.forEach((p, i) => {
-          const sp = toScreen(p);
-          if (i === 0) ctx.moveTo(sp.x, sp.y);
-          else ctx.lineTo(sp.x, sp.y);
-        });
-        ctx.closePath();
-        ctx.fillStyle = PANEL_HULL_FILL;
-        ctx.fill();
-        ctx.strokeStyle = PANEL_HULL_LINE;
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        if (overlay.hull) {
+          ctx.beginPath();
+          overlay.hull.forEach((p, i) => {
+            const sp = toScreen(p);
+            if (i === 0) ctx.moveTo(sp.x, sp.y);
+            else ctx.lineTo(sp.x, sp.y);
+          });
+          ctx.closePath();
+          ctx.fillStyle = PANEL_HULL_FILL;
+          ctx.fill();
+          ctx.strokeStyle = PANEL_HULL_LINE;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
         ctx.strokeStyle = overlay.fits ? PANEL_FIT : PANEL_OVER;
         ctx.lineWidth = 1.5;
         ctx.setLineDash([7, 5]);

@@ -21,7 +21,8 @@
  *       Futures 1/2" or FCS single). Written only when a fin has slices or a base other
  *       than its position's default; read as absent, version 1 means no slices and the
  *       default base. Also `toe` (deg, + toe in): absent means 0. Also `panel`: the
- *       panel it's cut from, `{ thickness (mm), angle (deg) }`; absent means none set.
+ *       panel it's cut from, `{ thickness (mm), angle (deg), tilt? (deg) }`; absent
+ *       means none set, and an absent tilt means 0.
  */
 import {
   FIN_BASES,
@@ -77,8 +78,8 @@ export interface FinJson {
   section: SectionJson;
   /** Version 2: toe correction, deg, + toe in. Absent means 0. */
   toe?: number;
-  /** Version 2: the panel it's cut from (thickness in mm, angle in deg). Absent: none. */
-  panel?: { thickness: number; angle: number };
+  /** Version 2: the panel it's cut from (thickness in mm, angle and tilt in deg). Absent: none. */
+  panel?: { thickness: number; angle: number; tilt?: number };
   /** Version 2: the tab. Absent means the position's default Futures tab. */
   base?: FinBase;
   /** Version 2: foils at other heights, lowest first; height is a fraction of the depth. */
@@ -130,7 +131,15 @@ export const writeFinJson = (d: FinDesign, metadata?: Record<string, unknown>): 
     lateralOffset: toMm(d.lateralOffset),
     ...(d.base !== defaultFinBase(d.position) ? { base: d.base } : {}),
     ...(d.toe ? { toe: d.toe } : {}),
-    ...(d.panel ? { panel: { thickness: toMm(d.panel.thickness), angle: d.panel.angle } } : {}),
+    ...(d.panel
+      ? {
+          panel: {
+            thickness: toMm(d.panel.thickness),
+            angle: d.panel.angle,
+            ...(d.panel.tilt ? { tilt: d.panel.tilt } : {}),
+          },
+        }
+      : {}),
     outline: splineToJson(scaleSpline(d.outline, toMm, toMm)),
     section: sectionToJson(d.section),
     ...(d.slices.length
@@ -172,7 +181,10 @@ const assertStructure = (doc: Record<string, unknown>): void => {
   const panel = doc.panel;
   if (
     panel !== undefined &&
-    (!isObject(panel) || !isNumber(panel.thickness) || !isNumber(panel.angle))
+    (!isObject(panel) ||
+      !isNumber(panel.thickness) ||
+      !isNumber(panel.angle) ||
+      (panel.tilt !== undefined && !isNumber(panel.tilt)))
   ) {
     fail('Malformed fin: panel needs a thickness and an angle');
   }
@@ -243,7 +255,13 @@ export const readFinJson = (
     })),
     taper: scaleSpline(splineFromJson(doc.taper), same, toCm),
     ...(doc.panel
-      ? { panel: { thickness: toCm(doc.panel.thickness), angle: doc.panel.angle } }
+      ? {
+          panel: {
+            thickness: toCm(doc.panel.thickness),
+            angle: doc.panel.angle,
+            ...(doc.panel.tilt ? { tilt: doc.panel.tilt } : {}),
+          },
+        }
       : {}),
   };
   return doc.metadata ? { design, metadata: doc.metadata } : { design };

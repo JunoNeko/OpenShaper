@@ -446,10 +446,26 @@ export const setPanelThickness = (d: FinDesign, thickness: number | null): FinDe
     : { ...d, panel: { thickness: t, angle: d.panel?.angle ?? 0 } };
 };
 
+/** `deg` within ±FIN_PANEL_MAX_ANGLE, to a hundredth of a degree. */
+const panelDeg = (deg: number): number =>
+  Math.round(Math.min(FIN_PANEL_MAX_ANGLE, Math.max(-FIN_PANEL_MAX_ANGLE, deg)) * 100) / 100;
+
 /** The fin turned `deg` in its panel, within ±FIN_PANEL_MAX_ANGLE; unchanged with no panel. */
 export const setPanelAngle = (d: FinDesign, deg: number): FinDesign => {
   if (!d.panel || !Number.isFinite(deg)) return d;
-  const a =
-    Math.round(Math.min(FIN_PANEL_MAX_ANGLE, Math.max(-FIN_PANEL_MAX_ANGLE, deg)) * 100) / 100;
+  const a = panelDeg(deg);
   return a === d.panel.angle ? d : { ...d, panel: { ...d.panel, angle: a } };
+};
+
+/**
+ * The panel tilted `deg` about its length, within ±FIN_PANEL_MAX_ANGLE; unchanged with
+ * no panel. No tilt is stored as none.
+ */
+export const setPanelTilt = (d: FinDesign, deg: number): FinDesign => {
+  if (!d.panel || !Number.isFinite(deg)) return d;
+  const t = panelDeg(deg);
+  if (t === (d.panel.tilt ?? 0)) return d;
+  const { tilt: _old, ...panel } = d.panel;
+  void _old;
+  return { ...d, panel: t ? { ...panel, tilt: t } : panel };
 };
