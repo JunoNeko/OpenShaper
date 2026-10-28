@@ -128,9 +128,9 @@ export const FIN_MIN_SLICE_CANT = -20;
 export const FIN_SLICE_MIN_GAP = 0.02;
 
 /**
- * The panel a fin is machined from (panel-fit.ts): its thickness, and the angle the fin
- * is turned to in it, seen from above. Only a check: it doesn't change the fin or its
- * exports.
+ * The panel a fin is machined from (panel-fit.ts): its thickness, and how the fin sits
+ * in it: turned, seen from above, and tilted, seen from the front. Only a check: it
+ * doesn't change the fin or its exports.
  */
 export interface FinPanel {
   /** Panel thickness (cm). */
@@ -140,9 +140,16 @@ export interface FinPanel {
    * above), within ±{@link FIN_PANEL_MAX_ANGLE}. 0: the panel's faces run along the tab.
    */
   readonly angle: number;
+  /**
+   * The panel's faces leaning from upright, seen from the front along the panel (deg,
+   * + toward the fin's outside face, as cant leans the blade), within
+   * ±{@link FIN_PANEL_MAX_ANGLE}. A canted blade on an upright tab fits a thinner panel
+   * leaning between the two. Absent: 0.
+   */
+  readonly tilt?: number;
 }
 
-/** The furthest a fin may be turned in its panel (deg). */
+/** The furthest a fin may be turned or tilted in its panel (deg). */
 export const FIN_PANEL_MAX_ANGLE = 45;
 
 /** Panel thicknesses accepted (cm): 3 to 30 mm. */

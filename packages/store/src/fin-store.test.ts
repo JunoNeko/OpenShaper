@@ -380,6 +380,23 @@ describe('fin store: foil slices', () => {
     expect(design(s).panel!.thickness).toBe(3);
   });
 
+  it('tilts the panel, and fits it in one step, storing no tilt as none', () => {
+    const s = storeWith();
+    expect(s.getState().setPanelTilt(5)).toBe(false); // no panel yet
+    s.getState().setPanelThickness(0.9525);
+    expect(s.getState().setPanelTilt(-60)).toBe(true);
+    expect(design(s).panel!.tilt).toBe(-FIN_PANEL_MAX_ANGLE);
+    expect(s.getState().fitPanel({ angle: -1.234, tilt: 5.5 })).toBe(true);
+    expect(design(s).panel).toEqual({ thickness: 0.9525, angle: -1.23, tilt: 5.5 });
+    expect(s.getState().past.at(-1)?.label).toBe('Fit to panel');
+    expect(s.getState().fitPanel({ angle: -1.23, tilt: 5.5 })).toBe(false); // already there
+    s.getState().setPanelTilt(0);
+    expect(design(s).panel).toEqual({ thickness: 0.9525, angle: -1.23 });
+    s.getState().undo();
+    s.getState().undo();
+    expect(design(s).panel!.tilt).toBe(-FIN_PANEL_MAX_ANGLE);
+  });
+
   it('removes a slice and goes back to the root; an undo restores it', () => {
     const s = storeWith();
     s.getState().addSlice(0.5);

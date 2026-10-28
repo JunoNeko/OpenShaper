@@ -58,6 +58,7 @@ export {
   setToe,
   setPanelAngle,
   setPanelThickness,
+  setPanelTilt,
   withFinCurve,
   withFoil,
   type FinCurve,

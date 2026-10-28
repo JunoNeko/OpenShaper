@@ -183,11 +183,23 @@ describe('.fin.json versions', () => {
     expect(readFinJson(writeFinJson(defaultFinDesign('side'))).design.panel).toBeUndefined();
   });
 
+  it('keeps a tilted panel’s tilt, and reads a panel without one as untilted', () => {
+    const panel = { thickness: 0.9525, angle: 0, tilt: 5.5 };
+    const d = { ...defaultFinDesign('side', 'left'), panel };
+    expect(JSON.parse(writeFinJson(d)).panel).toEqual({ ...panel, thickness: 9.525 });
+    expect(readFinJson(writeFinJson(d)).design.panel!.tilt).toBe(5.5);
+    const flat = { ...d, panel: { thickness: 0.9525, angle: 0 } };
+    expect('tilt' in JSON.parse(writeFinJson(flat)).panel).toBe(false);
+    expect('tilt' in readFinJson(writeFinJson(flat)).design.panel!).toBe(false);
+  });
+
   it('rejects a damaged panel', () => {
     const doc = JSON.parse(writeFinJson(defaultFinDesign('side', 'left')));
     expect(() =>
       readFinJson(JSON.stringify({ ...doc, version: 2, panel: { thickness: 9 } })),
     ).toThrow(/panel/);
+    const tilted = { ...doc, version: 2, panel: { thickness: 9, angle: 0, tilt: 'x' } };
+    expect(() => readFinJson(JSON.stringify(tilted))).toThrow(/panel/);
   });
 
   it('writes an FCS 1 fin with its base, and reads it back', () => {

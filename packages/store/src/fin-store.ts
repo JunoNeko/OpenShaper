@@ -54,6 +54,7 @@ import {
   setToe,
   setPanelAngle,
   setPanelThickness,
+  setPanelTilt,
   smoothKnot,
   spanMidpoint,
   withFinCurve,
@@ -152,6 +153,10 @@ export interface FinState {
   setPanelThickness: (thickness: number | null) => boolean;
   /** Turn the fin in its panel (deg). */
   setPanelAngle: (deg: number, label?: string) => boolean;
+  /** Tilt the panel about its length (deg). */
+  setPanelTilt: (deg: number) => boolean;
+  /** Turn and tilt the fin in its panel at once (bestPanelPose), as one undo step. */
+  fitPanel: (pose: { angle: number; tilt: number }) => boolean;
   /** Move the fin onto another tab, placed as that tab's fins start (placeOnBase). */
   setBase: (base: FinBase) => boolean;
   /** Apply a NACA 4-digit preset to the section ('2412'). */
@@ -468,6 +473,16 @@ export const createFinStore = (): StoreApi<FinState> =>
         const d = get().design;
         const next = d && setPanelAngle(d, deg);
         return !!d && !!next && next !== d && commit(next, label);
+      },
+      setPanelTilt: (deg) => {
+        const d = get().design;
+        const next = d && setPanelTilt(d, deg);
+        return !!d && !!next && next !== d && commit(next, 'Tilt the panel');
+      },
+      fitPanel: ({ angle, tilt }) => {
+        const d = get().design;
+        const next = d && setPanelTilt(setPanelAngle(d, angle), tilt);
+        return !!d && !!next && next !== d && commit(next, 'Fit to panel');
       },
       setBase: (base) => {
         const d = get().design;

@@ -137,6 +137,54 @@ describe('FinApp', () => {
     HEAVY,
   );
 
+  it(
+    'shows a canted fin from the front with its panel, and tilts the panel to fit it',
+    () => {
+      localStorage.removeItem('bs.fin.settings');
+      localStorage.removeItem('bs.fin.views');
+      localStorage.removeItem('bs.fin.thicknessView');
+      act(() => finStore.getState().load(defaultKeel()));
+      act(() => {
+        finStore.getState().setPanelThickness(0.9525);
+      });
+      render(<FinApp />);
+      // Upright, the keel's leaning blade needs far more than its panel.
+      expect(screen.getByTestId('panel-warning').textContent).toMatch(
+        /Too thick for the 9\.5 mm panel/,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Show Thickness in the large pane' }));
+      const modes = within(screen.getByRole('group', { name: 'Thickness view' }));
+      fireEvent.click(modes.getByRole('button', { name: 'Front' }));
+      expect(localStorage.getItem('bs.fin.thicknessView')).toBe('"front"');
+      const front = within(screen.getByRole('region', { name: 'Front' }));
+      expect(front.getByLabelText('Front view')).toBeTruthy();
+      // The cant is here too, as in the 3D view.
+      expect((front.getByLabelText(/^Cant/) as HTMLInputElement).value).toBe(
+        String(finStore.getState().design!.cant.toFixed(1)),
+      );
+      const tools = within(front.getByRole('group', { name: 'Panel' }));
+      fireEvent.click(tools.getByRole('button', { name: 'Fit to panel' }));
+      expect(finStore.getState().past.at(-1)!.label).toBe('Fit to panel');
+      const tilt = finStore.getState().design!.panel!.tilt!;
+      expect(tilt).toBeGreaterThan(0);
+      expect((tools.getByLabelText(/^Tilt/) as HTMLInputElement).value).toBe(tilt.toFixed(1));
+      expect(screen.queryByTestId('panel-warning')).toBeNull();
+      expect(screen.getByText(/^Fits the 9\.5 mm panel .*tilted \d+\.\d°: needs/)).toBeTruthy();
+      // Typing a tilt sets it; back to Thickness shows the taper again.
+      const field = tools.getByLabelText(/^Tilt/);
+      fireEvent.change(field, { target: { value: '0' } });
+      fireEvent.keyDown(field, { key: 'Enter' });
+      expect(finStore.getState().design!.panel!.tilt).toBeUndefined();
+      fireEvent.click(modes.getByRole('button', { name: 'Thickness' }));
+      expect(screen.getByRole('region', { name: 'Thickness' })).toBeTruthy();
+      expect(screen.getByLabelText(/^Root thickness/)).toBeTruthy();
+      localStorage.removeItem('bs.fin.settings');
+      localStorage.removeItem('bs.fin.views');
+      localStorage.removeItem('bs.fin.thicknessView');
+    },
+    HEAVY,
+  );
+
   it('sets the core export’s laminate from File settings', () => {
     localStorage.removeItem('bs.fin.core');
     render(<FinApp />);
