@@ -67,3 +67,22 @@ describe('sectionPlaneCorners', () => {
     expect(Math.max(...c.map((p) => p[2]))).toBeGreaterThan(scene.max[2]);
   });
 });
+
+describe('the panel fit view', () => {
+  it('looks along the panel from behind the fin, level, turned with the fin', () => {
+    const c: [number, number, number] = [5, 0, 4];
+    const straight = new Vector3(...finCameraPosition(c, 10, 1, 1, 'panel')).sub(new Vector3(...c));
+    // From behind (−X, the tail end), level with the centre.
+    expect(straight.x).toBeLessThan(0);
+    expect(straight.y).toBeCloseTo(0, 9);
+    expect(straight.z).toBeCloseTo(0, 9);
+    const turned = new Vector3(...finCameraPosition(c, 10, 1, 1, 'panel', 10)).sub(
+      new Vector3(...c),
+    );
+    expect((Math.atan2(turned.y, turned.x) * 180) / Math.PI).toBeCloseTo(-170, 6);
+    // Far back, for its narrow field of view: all but flat.
+    expect(straight.length()).toBeGreaterThan(
+      20 * new Vector3(...finCameraPosition(c, 10, 1)).sub(new Vector3(...c)).length(),
+    );
+  });
+});

@@ -117,11 +117,9 @@ describe('FinApp', () => {
       expect(finStore.getState().past.at(-1)!.label).toBe('Fit to panel');
       const angle = finStore.getState().design!.panel!.angle;
       expect(angle).toBeLessThan(-0.5);
-      expect((tools.getByLabelText(/^Angle/) as HTMLInputElement).value).toBe(angle.toFixed(1));
-      // Hiding the panel keeps the button to show it again.
-      fireEvent.click(tools.getByRole('button', { name: 'Panel' }));
-      expect(tools.queryByRole('button', { name: 'Fit to panel' })).toBeNull();
-      expect(JSON.parse(localStorage.getItem('bs.fin.settings')!).showPanel).toBe(false);
+      expect((tools.getByLabelText(/^Panel angle/) as HTMLInputElement).value).toBe(
+        angle.toFixed(1),
+      );
       // Emptying the field clears the panel.
       fireEvent.click(screen.getByRole('button', { name: 'File settings' }));
       const field = within(screen.getByRole('dialog', { name: 'File settings' })).getByLabelText(
@@ -138,31 +136,26 @@ describe('FinApp', () => {
   );
 
   it(
-    'shows a canted fin from the front with its panel, and tilts the panel to fit it',
+    'shows a canted fin in its panel from behind, in the 3D view, and tilts the panel to fit it',
     () => {
       localStorage.removeItem('bs.fin.settings');
       localStorage.removeItem('bs.fin.views');
-      localStorage.removeItem('bs.fin.thicknessView');
       act(() => finStore.getState().load(defaultKeel()));
+      render(<FinApp />);
+      const view3d = within(screen.getByRole('region', { name: '3D' }));
+      // No panel yet: nothing to fit.
+      const button = () => view3d.getByRole('button', { name: 'Panel fit' }) as HTMLButtonElement;
+      expect(button().disabled).toBe(true);
       act(() => {
         finStore.getState().setPanelThickness(0.9525);
       });
-      render(<FinApp />);
       // Upright, the keel's leaning blade needs far more than its panel.
       expect(screen.getByTestId('panel-warning').textContent).toMatch(
         /Too thick for the 9\.5 mm panel/,
       );
-      fireEvent.click(screen.getByRole('button', { name: 'Show Thickness in the large pane' }));
-      const modes = within(screen.getByRole('group', { name: 'Thickness view' }));
-      fireEvent.click(modes.getByRole('button', { name: 'Front' }));
-      expect(localStorage.getItem('bs.fin.thicknessView')).toBe('"front"');
-      const front = within(screen.getByRole('region', { name: 'Front' }));
-      expect(front.getByLabelText('Front view')).toBeTruthy();
-      // The cant is here too, as in the 3D view.
-      expect((front.getByLabelText(/^Cant/) as HTMLInputElement).value).toBe(
-        String(finStore.getState().design!.cant.toFixed(1)),
-      );
-      const tools = within(front.getByRole('group', { name: 'Panel' }));
+      fireEvent.click(button());
+      expect(button().getAttribute('aria-pressed')).toBe('true');
+      const tools = within(view3d.getByRole('group', { name: 'Panel fit' }));
       fireEvent.click(tools.getByRole('button', { name: 'Fit to panel' }));
       expect(finStore.getState().past.at(-1)!.label).toBe('Fit to panel');
       const tilt = finStore.getState().design!.panel!.tilt!;
@@ -170,17 +163,16 @@ describe('FinApp', () => {
       expect((tools.getByLabelText(/^Tilt/) as HTMLInputElement).value).toBe(tilt.toFixed(1));
       expect(screen.queryByTestId('panel-warning')).toBeNull();
       expect(screen.getByText(/^Fits the 9\.5 mm panel .*tilted \d+\.\d°: needs/)).toBeTruthy();
-      // Typing a tilt sets it; back to Thickness shows the taper again.
+      // Typing a tilt sets it; Panel fit again goes back to the view beside the fin.
       const field = tools.getByLabelText(/^Tilt/);
       fireEvent.change(field, { target: { value: '0' } });
       fireEvent.keyDown(field, { key: 'Enter' });
       expect(finStore.getState().design!.panel!.tilt).toBeUndefined();
-      fireEvent.click(modes.getByRole('button', { name: 'Thickness' }));
-      expect(screen.getByRole('region', { name: 'Thickness' })).toBeTruthy();
-      expect(screen.getByLabelText(/^Root thickness/)).toBeTruthy();
+      fireEvent.click(button());
+      expect(button().getAttribute('aria-pressed')).toBe('false');
+      expect(tools.queryByLabelText(/^Tilt/)).toBeNull();
       localStorage.removeItem('bs.fin.settings');
       localStorage.removeItem('bs.fin.views');
-      localStorage.removeItem('bs.fin.thicknessView');
     },
     HEAVY,
   );

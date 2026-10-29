@@ -115,8 +115,8 @@ function PanelThickness({ units }: { units: LengthUnit }) {
       </label>
       <p className="text-xs text-muted-foreground">
         The panel this fin is machined from ({fmtThick(min, units)}–{fmtThick(max, units)}; empty
-        for none). Base and blade must both fit in it: the foil view shows its faces and the status
-        line says if the fin is too thick. Saved with this fin.
+        for none). Base and blade must both fit in it: the 3D view&apos;s Panel fit shows it round
+        the fin, and the status line says if the fin is too thick. Saved with this fin.
       </p>
     </>
   );
@@ -234,14 +234,6 @@ export function FinSettingsDialog({
 
           <Section title="Panel">
             <PanelThickness units={units} />
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={settings.showPanel}
-                onChange={(e) => onChange({ showPanel: e.target.checked })}
-              />
-              Show the panel in the foil view
-            </label>
           </Section>
 
           <Section title="Export">
