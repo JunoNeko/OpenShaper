@@ -1,27 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
- * How the fin sits in its panel (kernel panel-fit.ts), for the foil view's and the front
- * view's overlays and the status line. All read one measurement per design: the fin is
+ * How the fin sits in its panel (kernel panel-fit.ts), for the 3D view's panel fit and
+ * the status line. Both read one measurement per design: the fin is
  * meshed once, on the design as of the last finished edit, so a drag doesn't re-mesh it
  * on every move.
  */
 import {
   bestPanelPose,
-  bladeSection,
   finPanelPoints,
-  foilAt,
   panelAcross,
   panelOutward,
   panelSpan,
-  planHull,
-  prepareBlade,
   vec2,
   type FinDesign,
   type FinPanel,
   type PanelPose,
-  type Vec2,
   type Vert3,
 } from '@openshaper/kernel';
+import type { FinPanelOutline } from '@openshaper/render3d';
 import type { FinState } from '@openshaper/store';
 import { useMemo } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
@@ -85,101 +81,48 @@ export function usePanelFit(store: StoreApi<FinState>, minThickness: number): Pa
 }
 
 const DEG = Math.PI / 180;
-/** How far the faces are drawn each way (cm): well past any fin; the canvas clips them. */
-const REACH = 100;
 
 /**
- * Where a face of the panel crosses height `z`, across the panel (cm, along
- * {@link panelAcross}): the face is `level` along the panel's normal, and leans with the
- * tilt (panelNormal).
+ * The panel's outline for the 3D view's panel fit (fin frame, cm): its cross-section
+ * round the fin, seen from behind along the panel. Across, its two faces, centred on the
+ * fin; along them, from the fin's lowest point to its highest. Leaning with the tilt
+ * (panelNormal): a face is the line across·cos(tilt) − outward·z·sin(tilt) = level.
  */
-const faceAcrossAt = (fit: PanelFit, level: number, z: number): number =>
-  (level + fit.outward * Math.sin(fit.pose.tilt * DEG) * z) / Math.cos(fit.pose.tilt * DEG);
-
-/** The levels of the panel's two faces along its normal: centred on the fin. */
-const faceLevels = (fit: PanelFit): [number, number] => {
-  const centre = (fit.lo + fit.hi) / 2;
-  const half = fit.panel.thickness / 2;
-  return [centre - half, centre + half];
-};
-
-/** What the foil view draws for the panel, in its own coordinates (chords, shape units). */
-export interface PanelOverlay {
-  /** The fin seen from above, or null with the panel tilted: then it's the front view's. */
-  readonly hull: readonly Vec2[] | null;
-  /** The panel's two faces, each as a long segment. */
-  readonly faces: readonly (readonly [Vec2, Vec2])[];
-  readonly fits: boolean;
-}
-
-/**
- * The panel and the fin from above, mapped into the foil view of foil `foil` (0 the
- * root). The view shows that foil's shape, chord 0 to 1 across, faces in shape units.
- * The real section at that height is laid over it: along the chord from its leading to
- * its trailing edge, and across scaled so its thickest point matches the shape's. That
- * map is affine, so the panel's faces stay straight and parallel; the view's 4× stretch
- * makes the angle look steeper than it is. A tilted panel's faces are drawn where they
- * cross that height.
- */
-export const panelOverlay = (
-  d: FinDesign,
-  foil: number,
-  fit: PanelFit,
-  minThickness: number,
-): PanelOverlay | null => {
-  const b = prepareBlade(d, undefined, minThickness);
-  const eta = foil === 0 ? 0 : (d.slices[foil - 1]?.height ?? 0);
-  const shape = foilAt(d, eta);
-  const at = shape.thickest.at;
-  const z = eta * b.depth;
-  const sec = bladeSection(b, z, [0, at, 1]);
-  const mid = (i: number) =>
-    vec2((sec.outside[i]!.x + sec.inside[i]!.x) / 2, (sec.outside[i]!.y + sec.inside[i]!.y) / 2);
-  const le = mid(0);
-  const te = mid(2);
-  const len = Math.hypot(te.x - le.x, te.y - le.y);
-  if (!(len > 0)) return null;
-  const e = vec2((te.x - le.x) / len, (te.y - le.y) / len);
-  // Across the chord, toward the outside face.
-  let n = vec2(-e.y, e.x);
-  const across = (p: { x: number; y: number }) => (p.x - le.x) * n.x + (p.y - le.y) * n.y;
-  if (across(sec.outside[1]!) < across(sec.inside[1]!)) n = vec2(e.y, -e.x);
-  const wOut = across(sec.outside[1]!);
-  const wIn = across(sec.inside[1]!);
-  const [sOut, sIn] = shape.shapeAt(at);
-  if (!(sOut - sIn > 0) || !(wOut - wIn > 0)) return null;
-  const k = (wOut - wIn) / (sOut - sIn); // cm per shape unit
-  const w0 = wIn - sIn * k;
-  const toView = (p: Vec2): Vec2 =>
-    vec2(((p.x - le.x) * e.x + (p.y - le.y) * e.y) / len, (across(p) - w0) / k);
-
-  // Each face crosses this height on a line along the panel.
+export const panelOutline = (fit: PanelFit): FinPanelOutline => {
   const m = panelAcross(fit.pose.angle);
   const along = vec2(m.y, -m.x);
-  const face = (level: number): [Vec2, Vec2] => {
-    const c = faceAcrossAt(fit, level, z);
-    return [
-      toView(vec2(m.x * c - along.x * REACH, m.y * c - along.y * REACH)),
-      toView(vec2(m.x * c + along.x * REACH, m.y * c + along.y * REACH)),
-    ];
+  const t = fit.pose.tilt * DEG;
+  // In the view (across, up): the faces' normal and their direction.
+  const nu = Math.cos(t);
+  const nz = -fit.outward * Math.sin(t);
+  const fu = -nz;
+  const fz = nu;
+  let sLo = Infinity;
+  let sHi = -Infinity;
+  let mid = 0;
+  for (const p of fit.points) {
+    const s = (p.x * m.x + p.y * m.y) * fu + p.z * fz;
+    if (s < sLo) sLo = s;
+    if (s > sHi) sHi = s;
+    mid += p.x * along.x + p.y * along.y;
+  }
+  // Drawn through the fin's middle along the panel: the view is all but flat anyway.
+  mid /= Math.max(1, fit.points.length);
+  const centre = (fit.lo + fit.hi) / 2;
+  const half = fit.panel.thickness / 2;
+  const corner = (level: number, s: number): [number, number, number] => {
+    const u = level * nu + s * fu;
+    const z = level * nz + s * fz;
+    return [m.x * u + along.x * mid, m.y * u + along.y * mid, z];
   };
-  const [lo, hi] = faceLevels(fit);
   return {
-    hull: fit.pose.tilt ? null : planHull(fit.points).map(toView),
-    faces: [face(lo), face(hi)],
+    angle: fit.pose.angle,
+    corners: [
+      corner(centre - half, sLo),
+      corner(centre + half, sLo),
+      corner(centre + half, sHi),
+      corner(centre - half, sHi),
+    ],
     fits: fit.fits,
   };
 };
-
-/**
- * The panel's faces in the front view (cm): looking along the panel, across it to the
- * right ({@link panelAcross}) and height up, each face a long straight line.
- */
-export const frontPanelFaces = (fit: PanelFit): (readonly [Vec2, Vec2])[] =>
-  faceLevels(fit).map(
-    (level) =>
-      [
-        vec2(faceAcrossAt(fit, level, -REACH), -REACH),
-        vec2(faceAcrossAt(fit, level, REACH), REACH),
-      ] as const,
-  );

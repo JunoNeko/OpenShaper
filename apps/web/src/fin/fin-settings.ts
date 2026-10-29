@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * The fin designer's File settings (owner request): how lengths are shown, the profile
- * view's grid, the exports' minimum thickness and whether to draw the panel. Remembered
+ * view's grid and the exports' minimum thickness. Remembered
  * in this browser, like the export options were. The core export's laminate lives with
  * its dialog (CoreExportDialog.tsx), and the panel's thickness with the fin itself
  * (FinDesign.panel); both are edited from the same dialog.
@@ -24,8 +24,6 @@ export interface FinSettings {
   readonly grid: number | null;
   /** The exports' minimum thickness (cm; see FIN_EXPORT_MIN_THICKNESS). */
   readonly exportMin: number;
-  /** Draw the panel's faces in the foil view, when the fin has a panel. */
-  readonly showPanel: boolean;
 }
 
 export const DEFAULT_FIN_SETTINGS: FinSettings = {
@@ -33,7 +31,6 @@ export const DEFAULT_FIN_SETTINGS: FinSettings = {
   fraction: 16,
   grid: null,
   exportMin: FIN_EXPORT_MIN_THICKNESS.default,
-  showPanel: true,
 };
 
 const INCH = 2.54;
@@ -88,8 +85,7 @@ export const readFinSettings = (): FinSettings => {
     const fraction = INCH_FRACTIONS.find((f) => f === s.fraction) ?? 16;
     const grid = typeof s.grid === 'number' ? s.grid : null;
     const exportMin = okMin(s.exportMin) ? s.exportMin : oldMin;
-    const showPanel = s.showPanel !== false;
-    return withFinSettings(DEFAULT_FIN_SETTINGS, { unit, fraction, grid, exportMin, showPanel });
+    return withFinSettings(DEFAULT_FIN_SETTINGS, { unit, fraction, grid, exportMin });
   });
 };
 

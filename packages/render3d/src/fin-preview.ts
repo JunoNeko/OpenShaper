@@ -104,11 +104,31 @@ export const sectionPlaneCorners = (
       ];
 };
 
-/** Where the preview looks from: beside the fin, or from above (down the blade from the tip). */
-export type FinPreviewView = 'side' | 'above';
+/**
+ * Where the preview looks from: beside the fin, from above (down the blade from the
+ * tip), or the panel fit (from behind, along the panel the fin is cut from).
+ */
+export type FinPreviewView = 'side' | 'above' | 'panel';
 
 /** Vertical field of view of the preview camera (deg). */
 export const FIN_PREVIEW_FOV = 35;
+
+/**
+ * The panel fit view's field of view (deg): so narrow, from so far back, that it is all
+ * but flat, and the fin's leading and trailing edges line up with the panel drawn
+ * across it, as on a drawing.
+ */
+export const FIN_PANEL_VIEW_FOV = 1;
+
+/** The panel's outline in the panel fit view, and how it sits. */
+export interface FinPanelOutline {
+  /** The fin turned in the panel, seen from above (deg): the view looks along the panel. */
+  readonly angle: number;
+  /** The panel's cross-section round the fin, four corners (cm, fin frame). */
+  readonly corners: readonly (readonly [number, number, number])[];
+  /** Whether the fin fits: green if so, orange if not. */
+  readonly fits: boolean;
+}
 
 /**
  * Where the camera sits to frame the whole fin: looking at the outside face (so a right
@@ -121,12 +141,20 @@ export const finCameraPosition = (
   outward: 1 | -1,
   aspect = 1,
   view: FinPreviewView = 'side',
+  panelAngle = 0,
 ): [number, number, number] => {
   // From above: straight down the blade from past its tip, the tab's axis across the
-  // view, so a toe correction shows as the blade turned against it.
+  // view, so a toe correction shows as the blade turned against it. The panel fit:
+  // from behind the fin, level, along the panel (turned with the fin's angle in it).
+  const a = (panelAngle * Math.PI) / 180;
   const dir =
-    view === 'above' ? new Vector3(0, 0, 1) : new Vector3(-0.35, outward, 0.4).normalize();
-  const half = ((FIN_PREVIEW_FOV / 2) * Math.PI) / 180;
+    view === 'above'
+      ? new Vector3(0, 0, 1)
+      : view === 'panel'
+        ? new Vector3(-Math.cos(a), -Math.sin(a), 0)
+        : new Vector3(-0.35, outward, 0.4).normalize();
+  const fov = view === 'panel' ? FIN_PANEL_VIEW_FOV : FIN_PREVIEW_FOV;
+  const half = ((fov / 2) * Math.PI) / 180;
   // Fit the narrower of the vertical and horizontal fields.
   const fit = Math.min(half, Math.atan(Math.tan(half) * aspect));
   const dist = (radius / Math.sin(fit)) * 1.1;

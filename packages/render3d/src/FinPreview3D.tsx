@@ -12,17 +12,22 @@
  * Section analysis (`sections`): the fin turns see-through, and each section plane is
  * drawn translucent, with its cut over everything. The cut comes in ready-made (the
  * kernel's `sliceMesh`), so moving a plane only redraws.
+ *
+ * The panel fit (`view` 'panel', with `panel`): the whole fin from behind, along the
+ * panel it is cut from, all but flat, with the panel's outline drawn over it.
  */
 import { finOutward, type FinDesign } from '@openshaper/kernel';
 import { OrbitControls } from '@react-three/drei';
 import { Canvas, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, type ComponentRef } from 'react';
-import { BufferAttribute, BufferGeometry, DoubleSide, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, DoubleSide, PerspectiveCamera, Vector3 } from 'three';
 import {
+  FIN_PANEL_VIEW_FOV,
   FIN_PREVIEW_FOV,
   finCameraPosition,
   finScene,
   sectionPlaneCorners,
+  type FinPanelOutline,
   type FinPreviewView,
   type FinScene,
   type FinSectionPlane,
@@ -32,8 +37,13 @@ export interface FinPreview3DProps {
   design: FinDesign | null;
   /** Change it to re-frame the camera (a new fin). */
   frameKey?: string | number;
-  /** Beside the fin (default) or from above; changing it re-frames the camera. */
+  /**
+   * Beside the fin (default), from above, or the panel fit; changing it re-frames the
+   * camera. The panel fit needs `panel`: without one it is seen from beside.
+   */
   view?: FinPreviewView;
+  /** The panel's outline, drawn in the panel fit view. */
+  panel?: FinPanelOutline | null;
   /**
    * Section analysis: the fin turns see-through and each plane is drawn with its cut.
    * Null or absent for the plain preview.
@@ -50,11 +60,13 @@ function Framer({
   frameKey,
   outward,
   view,
+  panelAngle,
 }: {
   scene: FinScene;
   frameKey: unknown;
   outward: 1 | -1;
   view: FinPreviewView;
+  panelAngle: number;
 }) {
   const { camera, controls, size, invalidate } = useThree();
   const framed = useRef<unknown>(Symbol('never'));
@@ -62,7 +74,8 @@ function Framer({
     // Wait for the orbit controls: they mount after this on the first frame, and would
     // otherwise start aimed at the origin and override the camera set here.
     const orbit = controls as ComponentRef<typeof OrbitControls> | null;
-    const key = `${String(frameKey)}|${view}`;
+    // The panel fit re-frames when the fin turns in the panel, to keep looking along it.
+    const key = `${String(frameKey)}|${view}|${view === 'panel' ? panelAngle : ''}`;
     if (!orbit || framed.current === key || size.width === 0) return;
     framed.current = key;
     const [x, y, z] = finCameraPosition(
@@ -71,7 +84,15 @@ function Framer({
       outward,
       size.width / size.height,
       view,
+      panelAngle,
     );
+    if (camera instanceof PerspectiveCamera) {
+      camera.fov = view === 'panel' ? FIN_PANEL_VIEW_FOV : FIN_PREVIEW_FOV;
+      // From that far back, a nearer near plane would waste the depth buffer's precision.
+      camera.near = view === 'panel' ? 1 : 0.1;
+      camera.far = view === 'panel' ? 10000 : 2000;
+      camera.updateProjectionMatrix();
+    }
     // From above, the nose is up the screen; beside the fin, the blade's height is.
     if (view === 'above') camera.up.set(1, 0, 0);
     else camera.up.set(0, 0, 1);
@@ -79,7 +100,18 @@ function Framer({
     orbit.target.set(...scene.center);
     orbit.update();
     invalidate();
-  }, [frameKey, view, scene, outward, camera, controls, size.width, size.height, invalidate]);
+  }, [
+    frameKey,
+    view,
+    panelAngle,
+    scene,
+    outward,
+    camera,
+    controls,
+    size.width,
+    size.height,
+    invalidate,
+  ]);
   return null;
 }
 
@@ -123,6 +155,29 @@ function SectionPlane({ scene, plane }: { scene: FinScene; plane: FinSectionPlan
   );
 }
 
+/** The panel's outline, over everything, so the fin can't hide it. */
+function PanelOutline({ panel }: { panel: FinPanelOutline }) {
+  const geometry = useMemo(
+    () =>
+      // Each side as its own segment: corner to next corner, round the loop.
+      new BufferGeometry().setFromPoints(
+        panel.corners.flatMap((p, i) => [
+          new Vector3(...p),
+          new Vector3(...panel.corners[(i + 1) % panel.corners.length]!),
+        ]),
+      ),
+    [panel.corners],
+  );
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <lineSegments geometry={geometry} renderOrder={3}>
+      <lineBasicMaterial color={panel.fits ? PANEL_FIT : PANEL_OVER} depthTest={false} />
+    </lineSegments>
+  );
+}
+
+const PANEL_FIT = '#22C55E';
+const PANEL_OVER = '#F97316';
 const SECTION_PLANE = '#F97316';
 const SECTION_CUT = '#FDE047';
 
@@ -149,7 +204,8 @@ function TabAxis({
 export function FinPreview3D({
   design,
   frameKey,
-  view = 'side',
+  view: wanted = 'side',
+  panel = null,
   sections = null,
   background = '#0A1424',
   bladeColor = '#22D3EE',
@@ -164,6 +220,7 @@ export function FinPreview3D({
     [scene],
   );
   const outward = finOutward(design?.hand ?? null);
+  const view = wanted === 'panel' && !panel ? 'side' : wanted;
 
   return (
     <Canvas
@@ -202,11 +259,18 @@ export function FinPreview3D({
               depthWrite={!sections}
             />
           </mesh>
-          <TabAxis from={scene.tabAxis[0]} to={scene.tabAxis[1]} />
+          {view !== 'panel' && <TabAxis from={scene.tabAxis[0]} to={scene.tabAxis[1]} />}
+          {view === 'panel' && panel && <PanelOutline panel={panel} />}
           {sections?.map((p) => (
             <SectionPlane key={p.axis} scene={scene} plane={p} />
           ))}
-          <Framer scene={scene} frameKey={frameKey} outward={outward} view={view} />
+          <Framer
+            scene={scene}
+            frameKey={frameKey}
+            outward={outward}
+            view={view}
+            panelAngle={panel?.angle ?? 0}
+          />
         </>
       )}
       <OrbitControls makeDefault enableDamping={false} />

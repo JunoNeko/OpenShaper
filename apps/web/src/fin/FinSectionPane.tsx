@@ -31,16 +31,7 @@ import { fmtLen, type LengthUnit } from '../format';
 import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { PointTools } from './PointTools';
 import { useFinState } from './use-fin';
-import {
-  FitToPanel,
-  PANEL_FIT,
-  PANEL_HULL_FILL,
-  PANEL_HULL_LINE,
-  PANEL_OVER,
-  PanelToggle,
-} from './panel-tools';
-import { panelOverlay, usePanelFit } from './use-panel-fit';
-import { useSettledDesign } from './use-settled-design';
+import { FitToPanel } from './panel-tools';
 
 /** Drawn this many times taller than true. */
 export const SECTION_Y_SCALE = 4;
@@ -56,7 +47,6 @@ const SECTION_CURVES = ['outside', 'inside'] as const;
 const OUTSIDE = '#22D3EE';
 const INSIDE = '#A78BFA';
 const GUIDE = 'rgba(138,155,179,0.7)';
-/** The panel's faces: green when the fin fits, orange (as the other limits) when not. */
 
 const mirrored = (s: Spline): Spline =>
   splineFromKnots(
@@ -145,43 +135,25 @@ function NacaPicker({ store, centre }: { store: StoreApi<FinState>; centre: bool
 }
 
 /**
- * The panel's controls, once the fin has one (File settings): show its faces, turn the
- * fin in it, or let the app turn and tilt it to what needs the thinnest panel.
+ * The panel's controls, once the fin has one (File settings): turn the fin in it, or let
+ * the app turn and tilt it to what needs the thinnest panel. The 3D view's Panel fit
+ * shows the result.
  */
-function PanelTools({
-  store,
-  show,
-  onShow,
-  minThickness,
-}: {
-  store: StoreApi<FinState>;
-  show: boolean;
-  onShow: (on: boolean) => void;
-  minThickness: number;
-}) {
+function PanelTools({ store, minThickness }: { store: StoreApi<FinState>; minThickness: number }) {
   const angle = useFinState(store, (s) => s.design?.panel?.angle);
   if (angle === undefined) return null;
   return (
     <div className="flex items-center gap-1" role="group" aria-label="Panel">
-      <PanelToggle
-        show={show}
-        onShow={onShow}
-        tooltip="Show the panel's faces, and the fin seen from above"
-      />
-      {show && (
-        <>
-          <Tooltip label="The fin turned in the panel, seen from above (±45°). The fin itself doesn't change, nor its exports">
-            <div className="w-36 text-sm">
-              <DegField
-                label="Angle"
-                value={angle}
-                onCommit={(v) => store.getState().setPanelAngle(v)}
-              />
-            </div>
-          </Tooltip>
-          <FitToPanel store={store} minThickness={minThickness} />
-        </>
-      )}
+      <Tooltip label="The fin turned in the panel, seen from above (±45°): see it in the 3D view's Panel fit. The fin itself doesn't change, nor its exports">
+        <div className="w-36 text-sm">
+          <DegField
+            label="Panel angle"
+            value={angle}
+            onCommit={(v) => store.getState().setPanelAngle(v)}
+          />
+        </div>
+      </Tooltip>
+      <FitToPanel store={store} minThickness={minThickness} />
     </div>
   );
 }
@@ -193,15 +165,10 @@ function PanelTools({
 export const FinSectionTools = memo(function FinSectionTools({
   store,
   units,
-  showPanel = true,
-  onShowPanel,
   minThickness = FIN_EXPORT_MIN_THICKNESS.default,
 }: {
   store: StoreApi<FinState>;
   units: LengthUnit;
-  /** Draw the panel (File settings). */
-  showPanel?: boolean;
-  onShowPanel?: (on: boolean) => void;
   /** The exports' minimum thickness (cm): the panel holds the fin as exported. */
   minThickness?: number;
 }) {
@@ -240,14 +207,7 @@ export const FinSectionTools = memo(function FinSectionTools({
       )}
       <NacaPicker store={store} centre={centre} />
       <PointTools store={store} curves={SECTION_CURVES} />
-      {onShowPanel && (
-        <PanelTools
-          store={store}
-          show={showPanel}
-          onShow={onShowPanel}
-          minThickness={minThickness}
-        />
-      )}
+      <PanelTools store={store} minThickness={minThickness} />
     </>
   );
 });
@@ -351,26 +311,13 @@ function SplitFields({ store, share }: { store: StoreApi<FinState>; share: numbe
 export const FinSectionPane = memo(function FinSectionPane({
   store,
   frameKey = '',
-  showPanel = false,
-  minThickness = FIN_EXPORT_MIN_THICKNESS.default,
 }: {
   store: StoreApi<FinState>;
   frameKey?: string;
-  /** Draw the panel's faces and the fin from above, when the fin has a panel. */
-  showPanel?: boolean;
-  /** The exports' minimum thickness (cm): the panel holds the fin as exported. */
-  minThickness?: number;
 }) {
   const design = useFinState(store, (s) => s.design);
   const selection = useFinState(store, (s) => s.selection);
   const activeFoil = useFinState(store, (s) => s.activeFoil);
-  const settled = useSettledDesign(store);
-  const fit = usePanelFit(store, minThickness);
-  const overlay = useMemo(
-    () =>
-      showPanel && fit && settled ? panelOverlay(settled, activeFoil, fit, minThickness) : null,
-    [showPanel, fit, settled, activeFoil, minThickness],
-  );
   const handlers = useMemo(() => curveEditorHandlers(store), [store]);
   const section = design ? (getFoil(design, activeFoil) ?? undefined) : undefined;
 
@@ -417,29 +364,6 @@ export const FinSectionPane = memo(function FinSectionPane({
         ctx.lineTo(sb.x, sb.y);
         ctx.stroke();
       };
-      if (overlay) {
-        // The fin from above, faint, then the panel's faces: dashed, orange if it won't fit.
-        ctx.save();
-        if (overlay.hull) {
-          ctx.beginPath();
-          overlay.hull.forEach((p, i) => {
-            const sp = toScreen(p);
-            if (i === 0) ctx.moveTo(sp.x, sp.y);
-            else ctx.lineTo(sp.x, sp.y);
-          });
-          ctx.closePath();
-          ctx.fillStyle = PANEL_HULL_FILL;
-          ctx.fill();
-          ctx.strokeStyle = PANEL_HULL_LINE;
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        }
-        ctx.strokeStyle = overlay.fits ? PANEL_FIT : PANEL_OVER;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([7, 5]);
-        for (const [a, b] of overlay.faces) line(a, b);
-        ctx.restore();
-      }
       ctx.save();
       ctx.strokeStyle = GUIDE;
       ctx.fillStyle = GUIDE;
@@ -467,7 +391,7 @@ export const FinSectionPane = memo(function FinSectionPane({
       if (thickestAt !== null) label('thickest', thickestAt, 32, 'center');
       ctx.restore();
     },
-    [thickestAt, overlay],
+    [thickestAt],
   );
 
   if (!design || !section) return null;
