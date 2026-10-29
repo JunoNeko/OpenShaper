@@ -26,7 +26,15 @@ import {
 import { FIN_MIN_THICKNESS, FIN_POSITIONS } from './fin-design';
 import { defaultFinDesign, defaultKeel, defaultTwinFin } from './fin-defaults';
 import { finMesh } from './fin-mesh';
-import { FIN_REAR_FADE, bladeSection, chordAt, findRaisedRear, prepareBlade } from './blade';
+import {
+  FIN_REAR_FADE,
+  bladeSection,
+  chordAt,
+  findRaisedRear,
+  foilAt,
+  prepareBlade,
+  thicknessAt,
+} from './blade';
 import { BLADE_CI_TOLERANCE, bladeSurfaceDeviation, fitBladeSurface } from './blade-surface';
 import { splineExtremes } from './curve-shape';
 import type { FinDesign, FinTwist } from './fin-design';
@@ -251,47 +259,49 @@ describe('a raised rear behind a steep start at the root (the owner’s twin fin
   });
 });
 
-describe('a raised rear behind a tall steep start (the owner’s A4C, docs/specs/fins/a4c_raised_rear.fin.json)', () => {
-  /** The owner's fin, read straight from its file (mm → cm), slices and twist included. */
-  const a4c = (): FinDesign => {
-    type Row = { e: [number, number]; p: [number, number]; n: [number, number]; c: boolean };
-    type Section = { outside: Row[]; inside: Row[] | null };
-    const file = JSON.parse(
-      readFileSync(resolve(here, '../../../../docs/specs/fins/a4c_raised_rear.fin.json'), 'utf8'),
-    ) as {
-      hand: 'left' | 'right';
-      outline: Row[];
-      section: Section;
-      slices: { height: number; section: Section; twist?: FinTwist }[];
-      taper: Row[];
-    };
-    const spline = (rows: Row[], fx: number, fy: number) =>
-      splineFromKnots(
-        rows.map((k) =>
-          knot(
-            vec2(k.e[0] * fx, k.e[1] * fy),
-            vec2(k.p[0] * fx, k.p[1] * fy),
-            vec2(k.n[0] * fx, k.n[1] * fy),
-            k.c,
-          ),
-        ),
-      );
-    const section = (sec: Section) => ({
-      outside: spline(sec.outside, 1, 1),
-      inside: sec.inside ? spline(sec.inside, 1, 1) : null,
-    });
-    return {
-      ...defaultFinDesign('side', file.hand),
-      outline: spline(file.outline, 0.1, 0.1),
-      section: section(file.section),
-      slices: file.slices.map((sl) => ({
-        height: sl.height,
-        section: section(sl.section),
-        ...(sl.twist ? { twist: sl.twist } : {}),
-      })),
-      taper: spline(file.taper, 1, 0.1),
-    };
+/** An owner's fin, read straight from its file in docs/specs/fins (mm → cm), slices and twist included. */
+const ownerFin = (name: string): FinDesign => {
+  type Row = { e: [number, number]; p: [number, number]; n: [number, number]; c: boolean };
+  type Section = { outside: Row[]; inside: Row[] | null };
+  const file = JSON.parse(
+    readFileSync(resolve(here, '../../../../docs/specs/fins', name), 'utf8'),
+  ) as {
+    hand: 'left' | 'right';
+    outline: Row[];
+    section: Section;
+    slices: { height: number; section: Section; twist?: FinTwist }[];
+    taper: Row[];
   };
+  const spline = (rows: Row[], fx: number, fy: number) =>
+    splineFromKnots(
+      rows.map((k) =>
+        knot(
+          vec2(k.e[0] * fx, k.e[1] * fy),
+          vec2(k.p[0] * fx, k.p[1] * fy),
+          vec2(k.n[0] * fx, k.n[1] * fy),
+          k.c,
+        ),
+      ),
+    );
+  const section = (sec: Section) => ({
+    outside: spline(sec.outside, 1, 1),
+    inside: sec.inside ? spline(sec.inside, 1, 1) : null,
+  });
+  return {
+    ...defaultFinDesign('side', file.hand),
+    outline: spline(file.outline, 0.1, 0.1),
+    section: section(file.section),
+    slices: file.slices.map((sl) => ({
+      height: sl.height,
+      section: section(sl.section),
+      ...(sl.twist ? { twist: sl.twist } : {}),
+    })),
+    taper: spline(file.taper, 1, 0.1),
+  };
+};
+
+describe('a raised rear behind a tall steep start (the owner’s A4C, docs/specs/fins/a4c_raised_rear.fin.json)', () => {
+  const a4c = () => ownerFin('a4c_raised_rear.fin.json');
   const d = a4c();
   const b = prepareBlade(d);
   const atTe = (h: number) => {
@@ -469,6 +479,30 @@ describe('corners in an edge (the owner’s test fin, docs/specs/fins/corner_cre
           expect(run[i]!).toBeGreaterThanOrEqual(run[i - 1]! - 1e-9);
         }
       }
+    }
+  });
+});
+
+describe('the underside of a hooked tip (the owner’s hatchet, docs/specs/fins/hatchet_hook.fin.json)', () => {
+  const d = ownerFin('hatchet_hook.fin.json');
+  const b = prepareBlade(d);
+  /** A section's thickness at chord fraction `u`, over what its foil there says. */
+  const share = (h: number, u: number) => {
+    const s = bladeSection(b, h, [u]);
+    const foil = foilAt(d, h / b.depth);
+    const [o, i] = foil.shapeAt(u);
+    const t = thicknessAt(b, h);
+    const m = b.minThickness;
+    const designed = ((o - i) / foil.thickest.thickness) * (t - m) + m;
+    return (
+      Math.hypot(s.outside[0]!.x - s.inside[0]!.x, s.outside[0]!.y - s.inside[0]!.y) / designed
+    );
+  };
+
+  it('keeps the back of each section to its foil up the hook, with no thin band across it', () => {
+    // Was 0.73 at 95% of the chord 105 mm up: the trailing third a quarter too thin.
+    for (let h = 10.3; h <= 11.2; h += 0.05) {
+      for (const u of [0.9, 0.95]) expect(share(h, u)).toBeGreaterThan(0.9);
     }
   });
 });
