@@ -704,6 +704,33 @@ export const FIN_EDGE_LAND = 0.03;
 const LAND_PER_DRAW_BACK = 15 / 8;
 
 /**
+ * Away from a corner in the outline, a land is also at least this many times as wide as
+ * what it has to make up either way: where the real edge sits on the foil and where it
+ * sits smoothed up the blade differ. They differ where an edge bends hard but smoothly,
+ * as under a hatchet fin's hook: the smoothed edge touches the real one at one height
+ * and stands off it a little either side. Made up over the narrow land, that left the
+ * back third of the section a quarter thinner than its foil at that height and a quarter
+ * thicker just below, a band plain across the hook (the owner's hatchet, 2026-10);
+ * spread over a wider land it is within a few percent. Near a corner the land stays
+ * narrow ({@link landWidening}), so the corner's kink stays at the edge.
+ */
+const LAND_PER_MISMATCH = 8;
+
+/**
+ * How far a section at height `h` is from the nearest corner in the outline, as a
+ * weight: 0 within one smoothing width of it (the land as narrow as it can be), 1 from
+ * three widths away (widened by {@link LAND_PER_MISMATCH}), easing between.
+ */
+const landWidening = (b: PreparedBlade, h: number, chord: number): number => {
+  const sigma = Math.max(MIN_SMOOTHING, FIN_EDGE_SMOOTHING * chord);
+  let near = Infinity;
+  for (const k of b.design.outline.knots.slice(1, -1)) {
+    if (!k.continuous) near = Math.min(near, Math.abs(h - k.end.y));
+  }
+  return smoother(Math.min(1, Math.max(0, (near - sigma) / (2 * sigma))));
+};
+
+/**
  * Height (cm) over which a raised rear's thick trailing edge fades out above its corner:
  * how fast the foil goes from running on to the underside's cut to being drawn in to
  * the trailing edge. That change reaches a third of the chord forward, so done in 3 mm
@@ -852,8 +879,12 @@ export const bladeSection = (
   const short0 = wide(c0);
   const short1 = c1 + (1 - keep) * (1 - c1) - wide(c1);
   // Widened only to draw back (a negative share), blended in smoothly, never past the pin.
+  const widening = landWidening(b, h, Math.abs(trailing - leading)) * LAND_PER_MISMATCH;
   const landFor = (short: number) =>
-    Math.min(pin, Math.hypot(land, LAND_PER_DRAW_BACK * Math.max(0, -short)));
+    Math.min(
+      pin,
+      Math.hypot(land, LAND_PER_DRAW_BACK * Math.max(0, -short), widening * Math.abs(short)),
+    );
   const land0 = landFor(short0);
   const land1 = landFor(short1);
   const fractionAt = (u: number): number => {
