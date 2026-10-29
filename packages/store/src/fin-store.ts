@@ -42,6 +42,10 @@ import {
   getFinCurve,
   newFin,
   moveSlice,
+  resetThicknessPath,
+  resetTipLine,
+  setThicknessPath,
+  setTipLineEnd,
   newIssues,
   removeSlice,
   setCant,
@@ -180,6 +184,20 @@ export interface FinState {
    * so its moves are one undo step.
    */
   moveSlice: (foil: number, height: number) => boolean;
+  /**
+   * Move one end of the tip line (where the foil sweep ends) to a fraction of the
+   * outline's length. Wrap a drag in beginEdit / endEdit.
+   */
+  setTipLineEnd: (which: 'start' | 'end', fraction: number) => boolean;
+  /** The tip line back to the designer's default. */
+  resetTipLine: () => boolean;
+  /**
+   * Move a point of the thickness path (0 base, 1 halfway, 2 tip line) to a fraction of
+   * its section. Wrap a drag in beginEdit / endEdit.
+   */
+  setThicknessPath: (index: 0 | 1 | 2, fraction: number) => boolean;
+  /** The thickness path back to the foil's own thickest point. */
+  resetThicknessPath: () => boolean;
   /** Arrow buttons: move the fin along the tab (cm, + toward the nose). */
   nudgeFore: (dx: number) => boolean;
   /** Arrow buttons: slide the blade across the tab (cm, + outboard). */
@@ -557,6 +575,24 @@ export const createFinStore = (): StoreApi<FinState> =>
         if (next === d || !commit(next, 'Remove foil slice')) return false;
         set({ activeFoil: 0, selection: null });
         return true;
+      },
+      setTipLineEnd: (which, fraction) => {
+        const d = get().design;
+        return !!d && commitChecked(setTipLineEnd(d, which, fraction), 'Move the tip line');
+      },
+      resetTipLine: () => {
+        const d = get().design;
+        return !!d && commit(resetTipLine(d), 'Reset the tip line');
+      },
+      setThicknessPath: (index, fraction) => {
+        const d = get().design;
+        return (
+          !!d && commitChecked(setThicknessPath(d, index, fraction), 'Move the thickness path')
+        );
+      },
+      resetThicknessPath: () => {
+        const d = get().design;
+        return !!d && commit(resetThicknessPath(d), 'Reset the thickness path');
       },
       moveSlice: (foil, height) => {
         const d = get().design;

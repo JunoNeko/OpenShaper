@@ -54,6 +54,7 @@ export default function DocsFinDesigner() {
       toc={[
         { id: 'start', label: 'Starting a fin' },
         { id: 'outline', label: 'The outline' },
+        { id: 'sweep', label: 'The foil sweep' },
         { id: 'foil', label: 'The foil' },
         { id: 'slices', label: 'Foil slices and twist' },
         { id: 'taper', label: 'Thickness and flex' },
@@ -138,11 +139,39 @@ export default function DocsFinDesigner() {
         </p>
       </Section>
 
+      <Section id="sweep" title="The foil sweep">
+        <p>
+          The fin is foiled the way a foiler works it: the foil starts along the base and sweeps up
+          the blade, turning as it goes, until it lies across the tip. The profile shows where it
+          starts and ends as two soft green lines, <strong>Foil sweep start (base)</strong> along
+          the root and <strong>Foil sweep end (tip)</strong> across the tip. In between, every
+          section runs from the leading edge to the trailing edge, so each edge is foiled straight
+          across, hooked tips and raised rears included. The root foil is the one laid along every
+          section; above the tip line it rounds off to the thinnest at the tip edge.
+        </p>
+        <p>
+          Drag either green dot at the ends of the tip line along the outline to move where the
+          sweep ends: it starts where the outline begins to curve tightly into the tip. The dashed
+          orange line is the <strong>thickness path</strong>: where each section is thickest, from
+          the base to the tip line. Drag its three orange dots (at the base, halfway and at the tip
+          line) along their sections to move it; the foil keeps its shape either side of its
+          thickest point. How thick the fin is there still comes from the thickness curve, at the
+          height of that point.
+        </p>
+        <p>
+          On a raised rear the sweep starts along the underside too, so the underside keeps the
+          foil&apos;s thickness rather than thinning to an edge.
+        </p>
+      </Section>
+
       <Section id="foil" title="The foil">
         <p>
-          The foil section is a horizontal slice through the fin: the outside face above the chord
-          line, the inside face below, drawn four times taller than true so a thin foil can be
-          shaped by hand. Its size follows the outline and the taper; this pane sets only its shape.
+          The foil view shows the foil being edited true to scale: as thick for its chord as the
+          thickness curve makes it there, the outside face above the chord line and the inside face
+          below. Scroll to zoom in on a thin foil. The root foil is the one the sweep carries up the
+          blade; a slice&apos;s foil is a horizontal one (see{' '}
+          <a href="#slices">Foil slices and twist</a>). Its size follows the outline and the taper;
+          this pane sets only its shape.
         </p>
         <Terms>
           <Term name="Asymmetric">
@@ -152,13 +181,12 @@ export default function DocsFinDesigner() {
             shared, the way shapers describe a foil: 70 / 30 is 70% of the thickness above the chord
             line and 30% below. Type either and the other follows; Enter builds the foil as a
             rounded leading edge on each face, as tall as that face&apos;s share of the thickness,
-            then a straight line on to the trailing edge. The radii look round in the foil view,
-            which draws thickness four times over; in the fin each is four times longer than it is
-            tall, a fine nose with the thickest point about a sixth of the way back. Each face gets
-            a point halfway round its radius and one where it meets the line, to reshape it from.
-            The sizes are true to the fin: its thickness and chord at the root, or at the slice
-            being edited. The split goes from 100 / 0 down to 51 / 49: an even split is a symmetric
-            foil, which has its own button.
+            then a straight line on to the trailing edge: in the fin each radius is four times
+            longer than it is tall, a fine nose with the thickest point about a sixth of the way
+            back. Each face gets a point halfway round its radius and one where it meets the line,
+            to reshape it from. The sizes are true to the fin: its thickness and chord at the root,
+            or at the slice being edited. The split goes from 100 / 0 down to 51 / 49: an even split
+            is a symmetric foil, which has its own button.
           </Term>
           <Term name="Symmetric">
             The same curve on both faces — always the case on a centre fin.
@@ -175,31 +203,32 @@ export default function DocsFinDesigner() {
 
       <Section id="slices" title="Foil slices and twist">
         <p>
-          One foil runs all the way up the blade unless you add slices. Slices are also how you
-          twist a fin (see below). <strong>Add slice (twist)</strong> (in the profile&apos;s
-          toolbar) puts a dashed line across the profile; drag it up or down to set its height — in
-          the profile or the thickness view. A slice can be dragged past another: it waits just
-          short of it, then hops to the other side. Each slice has its own foil: pick its tab in the
-          foil view (Root, then each slice by height) and shape it with the same tools, NACA presets
-          included. A new slice starts as a copy of the foil below it.
+          The sweep carries one foil up the blade. A <strong>Horizontal slice foil</strong> sets the
+          foil across the fin at one height instead, as a CAD designer or flow modeller would think
+          of it. Slices are also how you twist a fin (see below). <strong>Add slice (twist)</strong>{' '}
+          (in the profile&apos;s toolbar) puts a dashed line across the profile; drag it up or down
+          to set its height — in the profile or the thickness view. A slice can be dragged past
+          another: it waits just short of it, then hops to the other side. Each slice has its own
+          foil: pick its tab in the foil view (Root, then each slice by height) and shape it with
+          the same tools, NACA presets included. A new slice starts as a copy of the foil below it.
         </p>
         <p>
-          Between slices the foil blends smoothly from one to the next, easing into each so no line
-          forms at a slice; above the top slice it stays as that slice. The thickness still comes
-          from the thickness curve. <strong>Remove slice</strong>, next to Add slice, takes the
-          selected slice away: click a slice&apos;s line (or its foil tab) to select it. Slices keep
-          at least 2% of the depth from each other and from the root and tip.
+          A slice&apos;s foil holds at its height and blends smoothly into the sweep below it, down
+          to the base (or the slice below), and above it, up to the tip line (or the slice above),
+          easing in and out so no line forms. A slice above the tip line blends into the rounded
+          tip, which the profile shades. The thickness still comes from the thickness curve.{' '}
+          <strong>Remove slice</strong>, next to Add slice, takes the selected slice away: click a
+          slice&apos;s line (or its foil tab) to select it. Slices keep at least 2% of the depth
+          from each other and from the root and tip.
         </p>
         <p>
           A slice can also change the cant and toe above it, bending the upper blade out and
           twisting it, as some Futures designs do. Pick the slice in the 3D view&apos;s{' '}
           <strong>Slice (twist)</strong> list (or its tab in the foil view): the position arrows
-          grey out, and <strong>Cant above slice</strong> (−20° to 20°: it may lean back past
-          upright) and <strong>Toe above slice</strong> set its change.{' '}
-          <strong>Transition below slice</strong> is how far below the slice the change starts (10
-          mm to begin with): below it the blade is as it was, through it the change eases in with no
-          crease, above the slice it holds. It stays greyed out on a slice that only changes the
-          foil, until you give that slice a cant or toe. Each section turns about its own thickest
+          grey out, and <strong>Cant at slice</strong> (−20° to 20°: it may lean back past upright)
+          and <strong>Toe at slice</strong> set its change. The blade eases from the root&apos;s
+          cant and toe (or the slice below&apos;s) to the slice&apos;s over the whole span between
+          them, with no crease, and holds them above it. Each section turns about its own thickest
           point. <strong>No change here</strong> takes the change away. On an FCS single tab the
           root has no cant (the plug sets it), but a slice may still add some.
         </p>

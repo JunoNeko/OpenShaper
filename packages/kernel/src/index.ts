@@ -62,3 +62,4 @@ export {
   defaultTaper,
   flatFace,
 } from './fin-design/fin-defaults';
+export * from './fin-design/swept-loft';

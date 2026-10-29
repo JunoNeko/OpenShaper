@@ -229,12 +229,6 @@ const checkSection = (d: FinDesign, issues: FinIssue[]): void => {
       if (!(Math.abs(tw.toe) <= FIN_MAX_TOE)) {
         issues.push({ code: 'toe', message: `Toe must be within ±${FIN_MAX_TOE}°${where}.` });
       }
-      if (!(tw.transition >= 0 && tw.transition <= slice.height + EPS)) {
-        issues.push({
-          code: 'slice-height',
-          message: `The transition zone must fit between the root and the slice${where}.`,
-        });
-      }
     }
   }
 };

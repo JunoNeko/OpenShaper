@@ -57,7 +57,7 @@ export {
   type EditorOverlays,
 } from './draw';
 export { SplineEditor, type SplineEditorProps, type Calibration } from './SplineEditor';
-export { FinCurveEditor, type FinCurveEditorProps } from './FinCurveEditor';
+export { FinCurveEditor, type FinCurveEditorProps, type FinCurveMarker } from './FinCurveEditor';
 export {
   HIT_TOL_PX,
   TOUCH_HIT_TOL_PX,

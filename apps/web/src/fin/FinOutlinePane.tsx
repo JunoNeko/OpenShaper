@@ -2,7 +2,9 @@
 /**
  * The fin's side profile, editable, drawn over its tab: the base line and the tab
  * itself, and on a Futures tab the 4 mm front-overhang limit and the
- * insertion-clearance line behind the tab (fin-clearance.ts). An FCS single tab drops
+ * insertion-clearance line behind the tab (fin-clearance.ts). Over the fin, the foil
+ * sweep (sweep-overlay.ts): its start along the base and its end across the tip, each a
+ * soft green band, and the thickness path between them, all draggable. An FCS single tab drops
  * straight into its plug, so it has neither. Points are dragged through the fin store, which clamps
  * every move to the fin's rules.
  */
@@ -22,7 +24,14 @@ import { memo, useCallback, useMemo } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
 import type { LengthUnit } from '../format';
 import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
-import { sliceGuideHandlers, sliceGuides } from './slice-guides';
+import { SLICE_COLOR, sliceGuideHandlers, sliceGuides } from './slice-guides';
+import {
+  PATH_COLOR,
+  SWEEP_BAND,
+  SWEEP_LINE,
+  sweepMarkerHandlers,
+  sweepOverlay,
+} from './sweep-overlay';
 import { useFinState } from './use-fin';
 
 const TAB_FILL = 'rgba(138,155,179,0.18)';
@@ -72,6 +81,9 @@ export const FinOutlinePane = memo(function FinOutlinePane({
     () => ({ minX: tabRear, maxX: tabRear + tabLen, minY: -tabHeight, maxY: 0 }),
     [tabRear, tabLen, tabHeight],
   );
+
+  const sweep = useMemo(() => (design ? sweepOverlay(design) : null), [design]);
+  const markerHandlers = useMemo(() => sweepMarkerHandlers(store), [store]);
 
   const layers = useMemo(
     () => (design ? [{ id: 'outline', spline: design.outline, editable: true }] : []),
@@ -124,8 +136,61 @@ export const FinOutlinePane = memo(function FinOutlinePane({
         line({ x: 0, y: clearanceAt(c, 0) }, { x: rear, y: clearanceAt(c, rear) }, LIMIT);
       }
       ctx.restore();
+
+      if (sweep) {
+        ctx.save();
+        const path = (pts: readonly { x: number; y: number }[]) => {
+          ctx.beginPath();
+          pts.forEach((p, i) => {
+            const q = toScreen(p);
+            if (i === 0) ctx.moveTo(q.x, q.y);
+            else ctx.lineTo(q.x, q.y);
+          });
+        };
+        // A slice above the tip line's low end blends into the rounded tip: shade it.
+        if (sweep.sliceIntoTip) {
+          path([...sweep.cap, ...[...sweep.tip].reverse()]);
+          ctx.closePath();
+          ctx.fillStyle = SLICE_COLOR.replace('0.9)', '0.18)');
+          ctx.fill();
+        }
+        // The sweep's start and end: a soft band under a thin line.
+        ctx.lineCap = 'round';
+        for (const line of [sweep.base, sweep.tip]) {
+          path(line);
+          ctx.strokeStyle = SWEEP_BAND;
+          ctx.lineWidth = 10;
+          ctx.stroke();
+          ctx.strokeStyle = SWEEP_LINE;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+        // The thickness path.
+        path(sweep.path);
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = PATH_COLOR;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.fillStyle = SWEEP_LINE;
+        // Labels placed in pixels from their lines, so they read at any zoom.
+        const mid = (pts: readonly { x: number; y: number }[]) =>
+          toScreen(pts[Math.floor(pts.length / 2)]!);
+        const b = mid(sweep.base);
+        ctx.textAlign = 'center';
+        ctx.fillText('Foil sweep start (base)', b.x, b.y - 10);
+        const t = mid(sweep.tip);
+        ctx.textAlign = 'left';
+        ctx.fillText('Foil sweep end (tip)', t.x + 12, t.y + 4);
+        if (sweep.sliceIntoTip) {
+          ctx.fillStyle = SLICE_COLOR;
+          ctx.fillText('Slice blends into the tip', t.x + 12, t.y + 18);
+        }
+        ctx.restore();
+      }
     },
-    [design, tab, tabLen, kind],
+    [design, tab, tabLen, kind, sweep],
   );
 
   const handlers = useMemo(() => curveEditorHandlers(store), [store]);
@@ -141,6 +206,8 @@ export const FinOutlinePane = memo(function FinOutlinePane({
       drawUnder={drawUnder}
       onViewport={onViewport}
       guides={guides}
+      markers={sweep?.markers}
+      {...markerHandlers}
       {...guideHandlers}
       {...handlers}
     />

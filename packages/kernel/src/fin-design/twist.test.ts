@@ -9,41 +9,38 @@ import { finMesh } from './fin-mesh';
 import { validateFinDesign } from './fin-rules';
 
 const base = { ...defaultFinDesign('side', 'left'), cant: 7 };
-/** A slice at 60% with 12° cant and 1° less toe, blending in over 15% of the depth. */
+/** A slice at 60% with 12° cant and 1° less toe, eased in from the root. */
 const twisted: FinDesign = {
   ...base,
-  slices: [{ height: 0.6, section: base.section, twist: { cant: 12, toe: -1, transition: 0.15 } }],
+  slices: [{ height: 0.6, section: base.section, twist: { cant: 12, toe: -1 } }],
 };
 
 describe('twistAt', () => {
-  it('keeps the fin’s cant and toe below the zone, the slice’s above, eased between', () => {
-    expect(twistAt(twisted, 0.3)).toEqual({ cant: 7, toe: 0 });
-    const start = twistAt(twisted, 0.45); // where the zone starts
-    expect(start.cant).toBeCloseTo(7, 12);
-    expect(start.toe).toBeCloseTo(0, 12);
+  it('has the fin’s cant and toe at the root, the slice’s from it up, eased between', () => {
+    expect(twistAt(twisted, 0)).toEqual({ cant: 7, toe: 0 });
     expect(twistAt(twisted, 0.8)).toEqual({ cant: 12, toe: -1 });
-    const mid = twistAt(twisted, 0.525);
-    expect(mid.cant).toBeCloseTo(9.5, 12); // halfway through the zone: halfway
+    const mid = twistAt(twisted, 0.3);
+    expect(mid.cant).toBeCloseTo(9.5, 12); // halfway up the span: halfway
     expect(mid.toe).toBeCloseTo(-0.5, 12);
   });
 
-  it('eases with no kink where the zone starts or ends', () => {
+  it('eases with no kink at the root or the slice', () => {
     const slope = (eta: number) =>
-      (twistAt(twisted, eta + 1e-6).cant - twistAt(twisted, eta - 1e-6).cant) / 2e-6;
-    expect(Math.abs(slope(0.45))).toBeLessThan(1e-3);
+      (twistAt(twisted, eta + 1e-6).cant - twistAt(twisted, Math.max(0, eta - 1e-6)).cant) /
+      (eta + 1e-6 - Math.max(0, eta - 1e-6));
+    expect(Math.abs(slope(0))).toBeLessThan(1e-3);
     expect(Math.abs(slope(0.6))).toBeLessThan(1e-3);
   });
 
   it('is valid, and checks the slice’s values', () => {
     expect(validateFinDesign(twisted)).toEqual([]);
-    const bad = (twist: { cant: number; toe: number; transition: number }) =>
+    const bad = (twist: { cant: number; toe: number }) =>
       validateFinDesign({ ...twisted, slices: [{ ...twisted.slices[0]!, twist }] }).map(
         (i) => i.code,
       );
-    expect(bad({ cant: -25, toe: 0, transition: 0.1 })).toContain('cant');
-    expect(bad({ cant: -15, toe: 0, transition: 0.1 })).toEqual([]); // negative is allowed
-    expect(bad({ cant: 7, toe: 6, transition: 0.1 })).toContain('toe');
-    expect(bad({ cant: 7, toe: 0, transition: 0.7 })).toContain('slice-height');
+    expect(bad({ cant: -25, toe: 0 })).toContain('cant');
+    expect(bad({ cant: -15, toe: 0 })).toEqual([]); // negative is allowed
+    expect(bad({ cant: 7, toe: 6 })).toContain('toe');
   });
 });
 
@@ -51,9 +48,8 @@ describe('the bent, twisted blade', () => {
   const b0 = prepareBlade(base);
   const b = prepareBlade(twisted);
 
-  it('is unchanged below the transition zone', () => {
-    // The bent blade adds its lean up step by step: the same, to rounding.
-    const h = 0.4 * b.depth;
+  it('is unchanged at the root', () => {
+    const h = 0;
     const s = bladeSection(b, h);
     const s0 = bladeSection(b0, h);
     s.outside.forEach((p, j) => {
@@ -71,7 +67,9 @@ describe('the bent, twisted blade', () => {
     const a = bladeSection(b, 0.65 * b.depth);
     const c = bladeSection(b, 0.75 * b.depth);
     const lean = Math.atan2(meanY(c) - meanY(a), c.height - a.height) * RAD_TO_DEG;
-    expect(lean).toBeCloseTo(12, 1);
+    // Within a quarter degree: the toe turns each section about its own thickest point,
+    // which drifts a little along the chord up the sweep.
+    expect(Math.abs(lean - 12)).toBeLessThan(0.25);
   });
 
   it('turns its sections by the slice’s toe: the chord a degree toward toe out', () => {
@@ -91,7 +89,10 @@ describe('the bent, twisted blade', () => {
     const widest = Math.max(
       ...s.outside.map((p, j) => Math.hypot(p.x - s.inside[j]!.x, p.y - s.inside[j]!.y)),
     );
-    expect(widest * Math.cos((12 * Math.PI) / 180)).toBeCloseTo(thicknessAt(b, h), 3);
+    // Within the sweep's lean: up here its sections cross a horizontal cut at a slant.
+    expect(
+      Math.abs((widest * Math.cos((12 * Math.PI) / 180)) / thicknessAt(b, h) - 1),
+    ).toBeLessThan(0.1);
   });
 
   it('meshes', () => {

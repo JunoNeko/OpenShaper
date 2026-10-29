@@ -3,12 +3,13 @@
  * The 3D blade of a {@link FinDesign}, as horizontal sections: step 4 of
  * docs/design/fin-designer.md. Meshing (step 7) and STEP (step 5) both loft these.
  *
- * At height h above the tab top, a section is built from:
- * - **chord:** where the line y = h crosses the outline (leading and trailing edge);
- * - **shape:** the section faces, stretched along a chord (see "Smoothed edges");
- * - **thickness:** the taper at h / depth. The section is scaled so its thickest point
- *   is exactly that thick. The outline sets the chord, the taper the thickness;
- *   neither scales the other.
+ * At height h above the tab top, a section runs along the chord there (where the line
+ * y = h crosses the outline) and takes its thickness from the **foil sweep**
+ * (swept-loft.ts): the root foil laid along sections swept from the base to the tip
+ * line, each as thick at its thickest point as the taper says at that point's height.
+ * A horizontal slice foil ({@link sliceWeight}) blends in around its height: along the
+ * chord, scaled to the taper at h. The outline sets the chord, the taper the thickness;
+ * neither scales the other.
  *
  * Then two adjustments:
  * - **Minimum thickness:** nowhere thinner than {@link PreparedBlade.minThickness}: the
@@ -34,17 +35,13 @@
  * equally. So the edges come out a little thicker than designed once laminated, on
  * the side with less laminate.
  *
- * **Smoothed edges.** Stretching the foil from the leading to the trailing edge of
- * each slice ties every point of it to both edges: wherever an edge bends sharply
- * (a hooked tip, the underside of a raised rear), the whole slice shifts at once and the
- * blade creases right across. So the foil is laid over smoothed copies of the edges
- * instead ({@link foilEdges}): never inside the blade, smoothed over about
- * {@link FIN_EDGE_SMOOTHING} of the chord, and equal to the real edge wherever that is
- * straight or bends gently. Over the last {@link FIN_EDGE_PIN} of the chord at each edge
- * the foil is drawn back to the real edge, so edges still end at the minimum; a sharp
- * bend only reshapes the blade near that edge. The exception is a raised rear's
- * underside ({@link RaisedRear}): there the foil is cut off at the underside instead,
- * so it has the foil's real thickness rather than being a 0.5 mm flap (round 1).
+ * **Why sweep.** Stretching the foil along horizontal sections ties every point of it to
+ * both edges, and wherever an edge runs near level (a hooked tip, a raised rear's
+ * underside) a horizontal section meets it at a glancing angle: whole sections shifted
+ * at once, creasing the blade, or thinned to a flap. Owner testing needed a pile of edge
+ * smoothing to hide that; the sweep's sections meet both edges across instead. Every
+ * edge ends at the minimum, except a raised rear's underside ({@link RaisedRear}), which
+ * is part of the sweep's base and keeps the root foil's thickness.
  *
  * Frame (cm): the fin stands on its tab, as on a board turned deck-down.
  * - X runs along the tab toward its front (the nose), as in the outline.
@@ -56,12 +53,29 @@
  * ({@link finOutward}). A centre fin's outside is +Y too; it is symmetric with no cant,
  * so the choice is moot.
  */
-import type { Spline } from '../bezier-spline';
-import { value, xDeriv, yDeriv } from '../bezier-curve';
+import { value } from '../bezier-curve';
 import { DEG_TO_RAD } from '../constants';
 import type { Vert3 } from '../loft';
 import { crossings, splineExtremes, yAtX } from './curve-shape';
-import { FIN_MIN_THICKNESS, finOutward, type FinDesign, type FinSection } from './fin-design';
+import {
+  FIN_MIN_THICKNESS,
+  finOutward,
+  type FinDesign,
+  type FinSection,
+  type FinThicknessPath,
+} from './fin-design';
+import { findRaisedRear, type RaisedRear } from './raised-rear';
+import {
+  capRounding,
+  cellsAtHeight,
+  foilFractionAt,
+  locateOnSweep,
+  sweepGrid,
+  sweepPointOn,
+  thicknessPathAt,
+  type SweepGrid,
+  type SweepHit,
+} from './swept-loft';
 
 /** Chord stations from leading edge (0) to trailing edge (1), clustered at both edges. */
 export const cosineStations = (n: number): number[] =>
@@ -113,96 +127,7 @@ export interface PreparedBlade {
   readonly raisedRear: RaisedRear | null;
 }
 
-/**
- * The underside of a raised rear: the end of the outline, walking back from the
- * trailing-edge root, while it runs backward and rises at under 45° (after a steep
- * lead-in off the root, if it has one: see {@link REAR_LEAD}). Steeper than that it is
- * the trailing edge. Where it ends (`corner`) the trailing edge proper starts.
- * Below the corner the trailing edge keeps the foil's thickness (see
- * {@link bladeSection}); everywhere else it is the minimum.
- */
-export interface RaisedRear {
-  readonly cornerX: number;
-  readonly cornerZ: number;
-}
-
-/** Samples per segment when walking the underside. */
-const REAR_SAMPLES = 64;
-
-/**
- * How high (cm) the outline may always rise steeply off the trailing-edge root before
- * its underside starts: a root handle pulled up (the owner's twin fin) leaves the root
- * steeply for a millimetre or two, then turns back along the underside. A taller
- * lead-in still counts if the underside then runs back further than the lead-in rose
- * (the owner's A4C: 6.9 mm up, then 30 mm back); otherwise it is a trailing edge rising
- * from the root, like a side fin's that only sweeps back shallowly near the tip.
- */
-const REAR_LEAD = 0.3;
-
-const isUnderside = (dx: number, dz: number): boolean => dx < 0 && dz >= 0 && dz < -dx;
-
-/** The raised rear of an outline (see {@link RaisedRear}), or null if it has none. */
-export const findRaisedRear = (outline: Spline): RaisedRear | null => {
-  const k = outline.coeffs;
-  const top = splineExtremes(outline, 'y').max;
-  // Walking back along the outline from its end, the direction is minus the derivative.
-  // Kept just inside the segment: a handle pulled onto its end point has no direction there.
-  const dir = (seg: number, t: number) => {
-    const tt = Math.min(1 - 1e-6, Math.max(1e-6, t));
-    return { x: -xDeriv(k[seg]!, tt), z: -yDeriv(k[seg]!, tt) };
-  };
-  let lastGood: { seg: number; t: number } | null = null;
-  // Where the underside starts: the top of the steep lead-in, if there is one.
-  let start: { x: number; y: number } | null = null;
-  const corner = (x: number, z: number): RaisedRear | null =>
-    z > 0 && start && (start.y <= REAR_LEAD || start.x - x > start.y)
-      ? { cornerX: x, cornerZ: z }
-      : null;
-  for (let seg = k.length - 1; seg >= 0; seg--) {
-    for (let j = REAR_SAMPLES; j >= 0; j--) {
-      const t = j / REAR_SAMPLES;
-      if (seg < top.segment || (seg === top.segment && t <= top.t)) return null; // to the tip
-      const d = dir(seg, t);
-      if (isUnderside(d.x, d.z)) {
-        if (!lastGood) start = value(k[seg]!, t);
-        lastGood = { seg, t };
-        continue;
-      }
-      // Steep at the root: a lead-in, judged once the underside's length is known.
-      if (!lastGood) continue;
-      // The corner is between the last sample that was underside and this one.
-      let lo = lastGood.seg === seg ? lastGood.t : 0; // underside side (higher t)
-      let hi = t; // trailing-edge side
-      if (lastGood.seg !== seg) {
-        // The previous sample was the start of the segment after: the corner is the knot.
-        const at = value(k[seg]!, 1);
-        return corner(at.x, at.y);
-      }
-      for (let i = 0; i < 50; i++) {
-        const mid = (lo + hi) / 2;
-        const m = dir(seg, mid);
-        if (isUnderside(m.x, m.z)) lo = mid;
-        else hi = mid;
-      }
-      const turn = value(k[seg]!, hi);
-      // An underside that curls up into a sharp point (the owner's keel) turns steep a
-      // little short of it: the point is the corner, where the edge really changes
-      // direction. Without this the point's kink lands in the trailing edge above the
-      // corner and creases the blade across at its height.
-      const knot = outline.knots[seg]!;
-      if (
-        !knot.continuous &&
-        knot.end.x < turn.x &&
-        knot.end.y > turn.y &&
-        knot.end.y - turn.y <= REAR_LEAD
-      ) {
-        return corner(knot.end.x, knot.end.y);
-      }
-      return corner(turn.x, turn.y);
-    }
-  }
-  return null;
-};
+export { findRaisedRear, type RaisedRear } from './raised-rear';
 
 /** One horizontal section of the blade, at shared chord stations. */
 export interface BladeSection {
@@ -391,199 +316,53 @@ export const bladeTop = (b: PreparedBlade, gap: number): number => {
 export const thicknessAt = (b: PreparedBlade, h: number): number =>
   yAtX(b.design.taper, Math.min(1, Math.max(0, h / b.depth)));
 
-/**
- * How widely each edge is smoothed, as a fraction of the chord at that height: 0.05 is
- * 5 mm on a 100 mm chord. Scaled by the chord, so near the tip, where the chord closes,
- * the smoothed edges hug the real ones.
- */
-export const FIN_EDGE_SMOOTHING = 0.05;
-
-/** The narrowest smoothing (cm), so it never shrinks below a few samples. */
-const MIN_SMOOTHING = 0.02;
-
-/** Heights the edges are sampled at for smoothing and row spacing. */
+/** Heights the edges are sampled at, for row spacing and the lean. */
 const EDGE_SAMPLES = 1200;
 
 /**
- * Both edges sampled up the blade: the real ones (`leading`, `trailing`), the smoothed
- * ones the foil is laid over (`foilLeading`, `foilTrailing`), and `travel`, the running
- * total of height plus how far both edges have moved, which spaces sections evenly
- * along the edges rather than the height ({@link bladeRowHeights}).
+ * Both edges sampled up the blade, and `travel`: the running total of height plus how
+ * far both edges have moved, which spaces sections evenly along the edges rather than
+ * the height ({@link bladeRowHeights}).
  */
-export interface FoilEdges {
+export interface BladeEdges {
   readonly heights: Float64Array;
   readonly leading: Float64Array;
   readonly trailing: Float64Array;
-  readonly foilLeading: Float64Array;
-  readonly foilTrailing: Float64Array;
   readonly travel: Float64Array;
-  /**
-   * Where the real edges sit on the foil laid over the smoothed ones ({@link foilRange}),
-   * smoothed up the blade the same way: what the foil is drawn toward over most of the
-   * chord, so a corner in an edge doesn't crease the blade right across.
-   */
-  readonly smoothFrom: Float64Array;
-  readonly smoothTo: Float64Array;
 }
 
-const edgesCache = new WeakMap<PreparedBlade, FoilEdges>();
+const edgesCache = new WeakMap<PreparedBlade, BladeEdges>();
 
-/**
- * One edge, smoothed: a local straight-line fit, Gaussian-weighted over `sigma[i]` either
- * side (exact for a straight edge, whatever its slope), then moved outward by however
- * far it cut inside the real edge nearby, so the foil never ends inside the blade.
- * `out` is +1 where outward is +x (the leading edge on a fin facing +x), −1 otherwise.
- */
-const smoothEdge = (
-  hs: Float64Array,
-  xs: Float64Array,
-  sigma: Float64Array,
-  out: 1 | -1,
-): Float64Array => {
-  const n = hs.length;
-  const window = (i: number): [number, number] => {
-    const reach = 3 * sigma[i]!;
-    let a = i;
-    let b = i;
-    while (a > 0 && hs[i]! - hs[a - 1]! <= reach) a--;
-    while (b < n - 1 && hs[b + 1]! - hs[i]! <= reach) b++;
-    return [a, b];
-  };
-  const weight = (i: number, j: number) => {
-    const d = (hs[j]! - hs[i]!) / sigma[i]!;
-    return Math.exp(-0.5 * d * d);
-  };
-  // The local line fit at each sample.
-  const fit = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    const [a, b] = window(i);
-    let sw = 0;
-    let sh = 0;
-    let sx = 0;
-    let shh = 0;
-    let shx = 0;
-    for (let j = a; j <= b; j++) {
-      const w = weight(i, j);
-      const dh = hs[j]! - hs[i]!;
-      sw += w;
-      sh += w * dh;
-      sx += w * xs[j]!;
-      shh += w * dh * dh;
-      shx += w * dh * xs[j]!;
-    }
-    const det = sw * shh - sh * sh;
-    fit[i] = det > 1e-18 ? (sx * shh - sh * shx) / det : xs[i]!;
-  }
-  // How far inside the real edge the fit is, spread over its neighbourhood (the most in
-  // reach of each sample, then a weighted average of that), so the push back out is
-  // smooth too and at least as large as the cut at every sample.
-  const inside = Float64Array.from(fit, (f, i) => Math.max(0, out * (xs[i]! - f)));
-  const reachMax = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    const [a, b] = window(i);
-    let m = 0;
-    for (let j = a; j <= b; j++) m = Math.max(m, inside[j]!);
-    reachMax[i] = m;
-  }
-  const smoothed = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    const [a, b] = window(i);
-    let sw = 0;
-    let sm = 0;
-    for (let j = a; j <= b; j++) {
-      const w = weight(i, j);
-      sw += w;
-      sm += w * reachMax[j]!;
-    }
-    const x = fit[i]! + out * (sw > 0 ? sm / sw : 0);
-    // Never inside the blade, even where the spread falls a hair short.
-    smoothed[i] = out > 0 ? Math.max(x, xs[i]!) : Math.min(x, xs[i]!);
-  }
-  return smoothed;
-};
-
-/** `xs` averaged over heights with Gaussian weights of width `sigma[i]` at each sample. */
-const gaussianAverage = (hs: Float64Array, xs: Float64Array, sigma: Float64Array): Float64Array => {
-  const n = hs.length;
-  const out = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    const reach = 3 * sigma[i]!;
-    let sw = 0;
-    let sx = 0;
-    for (let j = i; j >= 0 && hs[i]! - hs[j]! <= reach; j--) {
-      const d = (hs[j]! - hs[i]!) / sigma[i]!;
-      const w = Math.exp(-0.5 * d * d);
-      sw += w;
-      sx += w * xs[j]!;
-    }
-    for (let j = i + 1; j < n && hs[j]! - hs[i]! <= reach; j++) {
-      const d = (hs[j]! - hs[i]!) / sigma[i]!;
-      const w = Math.exp(-0.5 * d * d);
-      sw += w;
-      sx += w * xs[j]!;
-    }
-    out[i] = sw > 0 ? sx / sw : xs[i]!;
-  }
-  return out;
-};
-
-/** Both edges up the blade, real and smoothed (see {@link FoilEdges}). Cached per blade. */
-export const foilEdges = (b: PreparedBlade): FoilEdges => {
+/** Both edges up the blade (see {@link BladeEdges}). Cached per blade. */
+export const bladeEdges = (b: PreparedBlade): BladeEdges => {
   const hit = edgesCache.get(b);
   if (hit) return hit;
   const n = EDGE_SAMPLES;
   const heights = new Float64Array(n + 1);
   const leading = new Float64Array(n + 1);
   const trailing = new Float64Array(n + 1);
-  const sigma = new Float64Array(n + 1);
+  const travel = new Float64Array(n + 1);
   for (let i = 0; i <= n; i++) {
     const h = (b.depth * i) / n;
     const c = chordAt(b, h);
     heights[i] = h;
     leading[i] = c.leading;
     trailing[i] = c.trailing;
-    sigma[i] = Math.max(MIN_SMOOTHING, FIN_EDGE_SMOOTHING * Math.abs(c.leading - c.trailing));
+    if (i > 0) {
+      travel[i] =
+        travel[i - 1]! +
+        (h - heights[i - 1]!) +
+        Math.abs(c.leading - leading[i - 1]!) +
+        Math.abs(c.trailing - trailing[i - 1]!);
+    }
   }
-  // Forward is toward the leading edge: +x on every fin the designer makes, but
-  // worked out rather than assumed.
-  const fwd: 1 | -1 = leading[0]! >= trailing[0]! ? 1 : -1;
-  const foilLeading = smoothEdge(heights, leading, sigma, fwd);
-  const foilTrailing = smoothEdge(heights, trailing, sigma, fwd === 1 ? -1 : 1);
-  const travel = new Float64Array(n + 1);
-  for (let i = 1; i <= n; i++) {
-    travel[i] =
-      travel[i - 1]! +
-      (heights[i]! - heights[i - 1]!) +
-      Math.abs(leading[i]! - leading[i - 1]!) +
-      Math.abs(trailing[i]! - trailing[i - 1]!);
-  }
-  // Where the real edges sit on the foil, then smoothed up the blade like the edges.
-  const rawFrom = new Float64Array(n + 1);
-  const rawTo = new Float64Array(n + 1);
-  for (let i = 0; i <= n; i++) {
-    const span = foilTrailing[i]! - foilLeading[i]!;
-    const c = (v: number) => Math.min(1, Math.max(0, v));
-    rawFrom[i] = span === 0 ? 0 : c((leading[i]! - foilLeading[i]!) / span);
-    rawTo[i] = span === 0 ? 1 : c((trailing[i]! - foilLeading[i]!) / span);
-  }
-  const smoothFrom = gaussianAverage(heights, rawFrom, sigma);
-  const smoothTo = gaussianAverage(heights, rawTo, sigma);
-  const edges = {
-    heights,
-    leading,
-    trailing,
-    foilLeading,
-    foilTrailing,
-    travel,
-    smoothFrom,
-    smoothTo,
-  };
+  const edges = { heights, leading, trailing, travel };
   edgesCache.set(b, edges);
   return edges;
 };
 
-/** Linear interpolation in a column of {@link FoilEdges} at height `h`. */
-const edgeAt = (e: FoilEdges, col: Float64Array, h: number): number => {
+/** Linear interpolation in a column of {@link BladeEdges} at height `h`. */
+const edgeAt = (e: BladeEdges, col: Float64Array, h: number): number => {
   const n = e.heights.length - 1;
   const f = Math.min(n, Math.max(0, (h / e.heights[n]!) * n));
   const i = Math.min(n - 1, Math.floor(f));
@@ -621,9 +400,9 @@ export const outlineFeatureHeights = (b: PreparedBlade, top: number): number[] =
   return [...new Set(hs)].filter((h) => h > 0 && h < top).sort((p, q) => p - q);
 };
 
-/** How far the edges have travelled from the root to height `h` (see {@link FoilEdges}). */
+/** How far the edges have travelled from the root to height `h` (see {@link BladeEdges}). */
 export const bladeTravel = (b: PreparedBlade, h: number): number => {
-  const e = foilEdges(b);
+  const e = bladeEdges(b);
   return edgeAt(e, e.travel, h);
 };
 
@@ -639,7 +418,7 @@ export const bladeRowHeights = (
   hi: number,
   count: number,
 ): number[] => {
-  const e = foilEdges(b);
+  const e = bladeEdges(b);
   const t0 = edgeAt(e, e.travel, lo);
   const t1 = edgeAt(e, e.travel, hi);
   const out: number[] = [lo];
@@ -659,9 +438,9 @@ export const bladeRowHeights = (
 /**
  * The root section's outside and inside faces (blade-frame y, cm) at its thickest point:
  * what the tab must sit between (fin-placement.ts). Worked out directly rather than by
- * building the section: there the faces are the root foil's, scaled to the taper, and
- * the smoothed edges (which make building a section costly, and every nudge rechecks
- * this) don't change them.
+ * building the section (every nudge rechecks this): at the root the sweep lays the root
+ * foil along the chord, scaled to the taper, and wherever the thickness path puts its
+ * thickest point the faces there are the same.
  */
 export const rootThickestFaces = (b: PreparedBlade): { outside: number; inside: number } => {
   const foil = foilAt(b.design, 0);
@@ -676,129 +455,33 @@ export const rootThickestFaces = (b: PreparedBlade): { outside: number; inside: 
   };
 };
 
-/**
- * The fraction of the chord, from each edge, over which the foil is drawn back from the
- * smoothed edge to the real one. Inside it the smoothed edges set the foil, so a sharp
- * bend doesn't crease the blade across; at the edge itself it is the real foil edge,
- * so edges end at the minimum rather than bulging (round 2 testing).
- */
-export const FIN_EDGE_PIN = 0.3;
-
-/**
- * The last stretch of chord, from each edge, over which the foil is brought exactly to
- * the real edge. Across the wider {@link FIN_EDGE_PIN} stretch it is drawn toward where
- * the edge sits smoothed up the blade, so a corner in an edge only reaches this far
- * across the blade: drawing straight to the real edge over the whole stretch carried
- * each corner a third of the way across as a crease (the owner's test fin).
- */
-export const FIN_EDGE_LAND = 0.03;
-
-/**
- * Where the wide step carries the foil past the real edge, the land draws it back. Drawn
- * back over too short a land, the foil ran backward there: folded over and clamped at
- * the minimum, a bulge and then a flat at the edge, 0.07 mm deep but plain in the 3D
- * view and in CAD under the keel's rounded top (round 4 testing). So a land is at least
- * this many times as wide as what it draws back: the ramp's steepest slope, which keeps
- * the foil from ever running backward. It leaves corners' lands as they were.
- */
-const LAND_PER_DRAW_BACK = 15 / 8;
-
-/**
- * Away from a corner in the outline, a land is also at least this many times as wide as
- * what it has to make up either way: where the real edge sits on the foil and where it
- * sits smoothed up the blade differ. They differ where an edge bends hard but smoothly,
- * as under a hatchet fin's hook: the smoothed edge touches the real one at one height
- * and stands off it a little either side. Made up over the narrow land, that left the
- * back third of the section a quarter thinner than its foil at that height and a quarter
- * thicker just below, a band plain across the hook (the owner's hatchet, 2026-10);
- * spread over a wider land it is within a few percent. Near a corner the land stays
- * narrow ({@link landWidening}), so the corner's kink stays at the edge.
- */
-const LAND_PER_MISMATCH = 8;
-
-/**
- * How far a section at height `h` is from the nearest corner in the outline, as a
- * weight: 0 within one smoothing width of it (the land as narrow as it can be), 1 from
- * three widths away (widened by {@link LAND_PER_MISMATCH}), easing between.
- */
-const landWidening = (b: PreparedBlade, h: number, chord: number): number => {
-  const sigma = Math.max(MIN_SMOOTHING, FIN_EDGE_SMOOTHING * chord);
-  let near = Infinity;
-  for (const k of b.design.outline.knots.slice(1, -1)) {
-    if (!k.continuous) near = Math.min(near, Math.abs(h - k.end.y));
-  }
-  return smoother(Math.min(1, Math.max(0, (near - sigma) / (2 * sigma))));
-};
-
-/**
- * Height (cm) over which a raised rear's thick trailing edge fades out above its corner:
- * how fast the foil goes from running on to the underside's cut to being drawn in to
- * the trailing edge. That change reaches a third of the chord forward, so done in 3 mm
- * it left a ridge across the blade just above the corner (the owner's keel); over
- * 10 mm the ridge is about four times smoother, and the trailing edge is back to the
- * minimum 10 mm above the corner (0.84 mm 3 mm up on the keel).
- */
-export const FIN_REAR_FADE = 1.0;
-
 /** 0 → 1 with flat ends: 6t⁵ − 15t⁴ + 10t³, curvature continuous where it joins. */
 const smoother = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10);
-
-/**
- * How much of the cut trailing edge a section keeps: all of it on a raised rear's
- * underside, so it has the foil's thickness there; none above, so the trailing edge is
- * the minimum. Fades between, just above the corner.
- */
-const rearCut = (b: PreparedBlade, h: number): number => {
-  const r = b.raisedRear;
-  if (!r || h >= r.cornerZ + FIN_REAR_FADE) return 0;
-  if (h <= r.cornerZ) return 1;
-  return 1 - smoother((h - r.cornerZ) / FIN_REAR_FADE);
-};
-
-/**
- * The part of the foil a section at height `h` keeps, as fractions of the foil's chord:
- * where the real edges sit on the foil laid over the smoothed ones. 0 and 1 where the
- * edges are straight or bend gently; inside that at a sharp bend.
- */
-export const foilRange = (b: PreparedBlade, h: number): { from: number; to: number } => {
-  const { leading, trailing } = chordAt(b, h);
-  const e = foilEdges(b);
-  const fl = edgeAt(e, e.foilLeading, h);
-  const span = edgeAt(e, e.foilTrailing, h) - fl;
-  if (span === 0) return { from: 0, to: 1 };
-  const clamp = (f: number) => Math.min(1, Math.max(0, f));
-  return { from: clamp((leading - fl) / span), to: clamp((trailing - fl) / span) };
-};
 
 /** Whether any slice changes the cant or toe. */
 export const hasTwist = (d: FinDesign): boolean => d.slices.some((sl) => sl.twist);
 
 /**
- * Cant and toe (deg) at height `eta` (fraction of the depth): the fin's own, changed by
- * each slice with a twist as it is passed. Below a slice's transition zone the blade
- * keeps what it had; through the zone it eases to the slice's values (`smoother`, so the
- * bend and twist have no crease where they start or end); above, it has them.
+ * Cant and toe (deg) at height `eta` (fraction of the depth): the fin's own at the root,
+ * each slice's with a twist at its height, easing from one to the next over the whole
+ * span between them (`smoother`, so the bend and twist have no crease where they start
+ * or end). Above the last, the blade keeps its cant and toe.
  */
 export const twistAt = (d: FinDesign, eta: number): { cant: number; toe: number } => {
-  let cant = d.cant;
-  let toe = d.toe ?? 0;
-  let floor = 0; // the last anchor: a zone can't start below it
+  let from = { height: 0, cant: d.cant, toe: d.toe ?? 0 };
   for (const sl of d.slices) {
     if (!sl.twist) continue;
-    const top = sl.height;
-    const start = Math.max(floor, top - sl.twist.transition);
-    if (eta >= top) {
-      cant = sl.twist.cant;
-      toe = sl.twist.toe;
-    } else if (eta > start) {
-      const w = smoother((eta - start) / (top - start));
-      cant += (sl.twist.cant - cant) * w;
-      toe += (sl.twist.toe - toe) * w;
-      break;
-    } else break;
-    floor = top;
+    const to = { height: sl.height, cant: sl.twist.cant, toe: sl.twist.toe };
+    if (eta < to.height) {
+      const w = smoother(Math.max(0, (eta - from.height) / (to.height - from.height)));
+      return {
+        cant: from.cant + (to.cant - from.cant) * w,
+        toe: from.toe + (to.toe - from.toe) * w,
+      };
+    }
+    from = to;
   }
-  return { cant, toe };
+  return { cant: from.cant, toe: from.toe };
 };
 
 const slideCache = new WeakMap<PreparedBlade, Float64Array>();
@@ -808,7 +491,7 @@ const slideCache = new WeakMap<PreparedBlade, Float64Array>();
  * from the root, since with a slice's cant the lean changes up the blade and bends it.
  * Tabulated once per blade (Simpson's rule per step), read by interpolation.
  */
-const slideAt = (b: PreparedBlade, h: number): number => {
+export const slideAt = (b: PreparedBlade, h: number): number => {
   let table = slideCache.get(b);
   const n = EDGE_SAMPLES;
   if (!table) {
@@ -850,7 +533,104 @@ export const toeTurn = (
   };
 };
 
-/** The horizontal section of the blade at height `h` (cm above the tab top). */
+/** What the swept loft needs per blade: its grid, and each section's thickness and path. */
+interface SweptBlade {
+  readonly grid: SweepGrid;
+  /** The base foil, laid along every section. */
+  readonly foil: Foil;
+  /** Per grid row: where the section is thickest (fraction along it), and how much (cm). */
+  readonly path: Float64Array;
+  readonly scale: Float64Array;
+  /** The tip line's height, as a fraction of the depth: where slices hand back to the sweep. */
+  readonly tipEta: number;
+}
+
+const sweptCache = new WeakMap<PreparedBlade, SweptBlade>();
+
+const sweptBlade = (b: PreparedBlade): SweptBlade => {
+  const hit = sweptCache.get(b);
+  if (hit) return hit;
+  const d = b.design;
+  const grid = sweepGrid(d);
+  const foil = pureFoil(d.section);
+  const at = foil.thickest.at;
+  const path = new Float64Array(grid.rows);
+  const scale = new Float64Array(grid.rows);
+  const m = b.minThickness;
+  const taper = (z: number) => thicknessAt(b, Math.min(b.depth, Math.max(0, z)));
+  const way: FinThicknessPath = d.thicknessPath ?? [at, at, at];
+  let tipThickness = m;
+  for (let i = 0; i < grid.rows; i++) {
+    const t = Math.min(1, i / grid.tipRow);
+    path[i] = thicknessPathAt(way, t);
+    let thickness: number;
+    if (i <= grid.tipRow) {
+      // As thick as the taper says at the height of the section's thickest point.
+      thickness = taper(sweepPointOn(grid, i, path[i]!).y);
+      if (i === grid.tipRow) tipThickness = thickness;
+    } else {
+      thickness = m + (tipThickness - m) * capRounding(grid.capV[i]!);
+    }
+    scale[i] =
+      foil.thickest.thickness > 0 ? Math.max(0, thickness - m) / foil.thickest.thickness : 0;
+  }
+  const tipBase = grid.tipRow * grid.cols;
+  const tipZ = (grid.z[tipBase]! + grid.z[tipBase + grid.cols - 1]!) / 2;
+  const swept = { grid, foil, path, scale, tipEta: b.depth > 0 ? tipZ / b.depth : 1 };
+  sweptCache.set(b, swept);
+  return swept;
+};
+
+/**
+ * How much the horizontal slice foils count at height `eta`, 0 to 1: none at the base,
+ * rising to all of it at the first slice, all of it between slices, and back to none at
+ * the tip line (or the tip, for a slice above the tip line). A slice reshapes the blade
+ * around its height and hands back to the sweep at the base and the tip.
+ */
+export const sliceWeight = (d: FinDesign, eta: number, tipEta: number): number => {
+  if (d.slices.length === 0) return 0;
+  const first = d.slices[0]!.height;
+  const last = d.slices[d.slices.length - 1]!.height;
+  if (eta <= first) return smoother(Math.max(0, eta / first));
+  if (eta <= last) return 1;
+  const top = tipEta > last ? tipEta : 1;
+  return 1 - smoother(Math.min(1, (eta - last) / (top - last)));
+};
+
+/** The horizontal slice foil at height `eta`: a slice's, or a blend of the two either side. */
+export const sliceFoilAt = (d: FinDesign, eta: number): Foil | null => {
+  const sl = d.slices;
+  if (sl.length === 0) return null;
+  let k = 0;
+  while (k < sl.length - 1 && eta >= sl[k + 1]!.height) k++;
+  const lo = sl[k]!;
+  const hi = sl[k + 1];
+  if (!hi || eta <= lo.height) return pureFoil(lo.section);
+  const w = smoother(Math.min(1, (eta - lo.height) / (hi.height - lo.height)));
+  if (w >= 1) return pureFoil(hi.section);
+  const shapeAt = (u: number): [number, number] => {
+    const [o0, i0] = sectionShapeAt(lo.section, u);
+    const [o1, i1] = sectionShapeAt(hi.section, u);
+    return [o0 + (o1 - o0) * w, i0 + (i1 - i0) * w];
+  };
+  return {
+    shapeAt,
+    thickest: findThickest((u) => {
+      const [o, i] = shapeAt(u);
+      return o - i;
+    }),
+    outsideShare: share(lo.section) + (share(hi.section) - share(lo.section)) * w,
+  };
+};
+
+/** The tip line's height as a fraction of the depth (see {@link sliceWeight}). */
+export const tipLineEta = (b: PreparedBlade): number => sweptBlade(b).tipEta;
+
+/**
+ * The horizontal section of the blade at height `h` (cm above the tab top): the swept
+ * loft's thickness field (swept-loft.ts) read along the chord there, blended with the
+ * horizontal slice foils by {@link sliceWeight}.
+ */
 export const bladeSection = (
   b: PreparedBlade,
   h: number,
@@ -858,67 +638,81 @@ export const bladeSection = (
 ): BladeSection => {
   const { leading, trailing } = chordAt(b, h);
   const thickness = thicknessAt(b, h);
-  const { from: c0, to: c1 } = foilRange(b, h);
-  // Over the last stretch of chord at each edge, draw the foil back to its own edge, so
-  // both edges end at the minimum; only a raised rear's underside keeps its cut. In two
-  // steps: across the wide stretch toward where the edge sits smoothed up the blade
-  // (smooth in height, so a corner in an edge doesn't crease the blade across), then over
-  // the last few percent exactly onto the real edge.
-  const keep = rearCut(b, h);
-  const e = foilEdges(b);
-  // Not clamped to the real range: a min or max here would put the corner's kink back.
-  const s0 = edgeAt(e, e.smoothFrom, h);
-  const s1 = edgeAt(e, e.smoothTo, h);
-  const pin = FIN_EDGE_PIN * (s1 - s0);
-  const land = FIN_EDGE_LAND * (c1 - c0);
-  const ramp = (t: number) => smoother(Math.min(1, Math.max(0, t)));
-  const wide = (g: number) =>
-    g - s0 * ramp((s0 + pin - g) / pin) + (1 - keep) * (1 - s1) * ramp((g - (s1 - pin)) / pin);
-  // What the wide step leaves to do at each real edge: 0 at the leading edge, and at the
-  // trailing edge 1 (or the cut, where a raised rear keeps it).
-  const short0 = wide(c0);
-  const short1 = c1 + (1 - keep) * (1 - c1) - wide(c1);
-  // Widened only to draw back (a negative share), blended in smoothly, never past the pin.
-  const widening = landWidening(b, h, Math.abs(trailing - leading)) * LAND_PER_MISMATCH;
-  const landFor = (short: number) =>
-    Math.min(
-      pin,
-      Math.hypot(land, LAND_PER_DRAW_BACK * Math.max(0, -short), widening * Math.abs(short)),
-    );
-  const land0 = landFor(short0);
-  const land1 = landFor(short1);
-  const fractionAt = (u: number): number => {
-    const g = c0 + (c1 - c0) * u;
-    if (!(pin > 0) || !(land > 0)) return g;
-    // The edges exactly, not as the sum below comes out to a hair either side of them.
-    if (u <= 0) return 0;
-    if (u >= 1) return Math.min(1, Math.max(0, c1 + (1 - keep) * (1 - c1)));
-    const f =
-      wide(g) - short0 * ramp((c0 + land0 - g) / land0) + short1 * ramp((g - (c1 - land1)) / land1);
-    return Math.min(1, Math.max(0, f)); // exactly 0 and 1 at the edges, not a hair past
-  };
-  const end = fractionAt(1);
-  // Cut short of the foil's thickest point, the section is thickest at the cut.
-  const foil = foilAt(b.design, b.depth > 0 ? h / b.depth : 0);
-  const thickestShape =
-    foil.thickest.at <= end ? foil.thickest.thickness : foil.shapeAt(end)[0] - foil.shapeAt(end)[1];
   const m = b.minThickness;
-  const scale = thickestShape > 0 ? Math.max(0, thickness - m) / thickestShape : 0;
+  const sw = sweptBlade(b);
+  const { grid, foil } = sw;
+  const cells = cellsAtHeight(grid, h);
+  const eta = b.depth > 0 ? h / b.depth : 0;
+  const weight = sliceWeight(b.design, eta, sw.tipEta);
+  const sliceFoil = weight > 0 ? sliceFoilAt(b.design, eta) : null;
+  const sliceScale =
+    sliceFoil && sliceFoil.thickest.thickness > 0
+      ? Math.max(0, thickness - m) / sliceFoil.thickest.thickness
+      : 0;
+  const faces = (u: number): [number, number] => {
+    // The sweep's: each section's foil, read where this point falls on it.
+    // The edges are the minimum, except along the base: a raised rear's underside is the
+    // base's foil cut off, as thick as the foil there.
+    let out = m * foil.outsideShare;
+    let ins = -m * (1 - foil.outsideShare);
+    {
+      const hit = locateOnSweep(grid, leading + (trailing - leading) * u, h, cells);
+      const onBase = (hit: SweepHit) => hit.row < 1 && hit.along > 1e-3 && hit.along < 1 - 1e-3;
+      if (hit && (u > 0 && u < 1 ? true : onBase(hit))) {
+        const alongAt = hit.along;
+        const i0 = Math.min(grid.rows - 2, Math.floor(hit.row));
+        const a = hit.row - i0;
+        const row = (i: number): [number, number] => {
+          const [o, n] = foil.shapeAt(foilFractionAt(alongAt, sw.path[i]!, foil.thickest.at));
+          return [
+            o * sw.scale[i]! + m * foil.outsideShare,
+            n * sw.scale[i]! - m * (1 - foil.outsideShare),
+          ];
+        };
+        const [o0, n0] = row(i0);
+        const [o1, n1] = row(i0 + 1);
+        out = o0 + (o1 - o0) * a;
+        ins = n0 + (n1 - n0) * a;
+      }
+    }
+    if (!sliceFoil) return [out, ins];
+    // A horizontal slice foil: along the chord here, as the taper says.
+    const [o, n] = sliceFoil.shapeAt(u);
+    const sOut = o * sliceScale + m * sliceFoil.outsideShare;
+    const sIns = n * sliceScale - m * (1 - sliceFoil.outsideShare);
+    return [out + (sOut - out) * weight, ins + (sIns - ins) * weight];
+  };
+  const { outside: lamOut, inside: lamIn } = b.laminate;
+  const lam = lamOut + lamIn;
+  const offsets = stations.map((u) => {
+    let [out, ins] = faces(u);
+    if (lam > 0) {
+      // The core: each face in by its laminate. Under the minimum, the face with less
+      // laminate makes up the shortfall, so a laminated face stays true.
+      const short = Math.max(0, m - (out - ins - lam));
+      out += short * (lamIn / lam) - lamOut;
+      ins += lamIn - short * (lamOut / lam);
+    }
+    return [out, ins] as const;
+  });
+
   const turn = toeTurn(b);
   // Cant and toe here: the fin's own, unless a slice changes them (twistAt).
-  const tw = hasTwist(b.design) ? twistAt(b.design, b.depth > 0 ? h / b.depth : 0) : null;
+  const tw = hasTwist(b.design) ? twistAt(b.design, eta) : null;
   const slide = tw ? slideAt(b, h) : h * b.lean;
   const widen = tw ? 1 / Math.cos(tw.cant * DEG_TO_RAD) : b.widen;
   // A slice's own toe turns its section about its thickest point, before the fin's toe.
   const own = tw && tw.toe !== (b.design.toe ?? 0) ? tw.toe - (b.design.toe ?? 0) : 0;
   let pivot: { x: number; y: number; cos: number; sin: number } | null = null;
   if (own) {
-    const [ot, it] = foil.shapeAt(foil.thickest.at);
-    const centre = ((ot + it) * scale + m * (2 * foil.outsideShare - 1)) / 2;
+    let k = 0;
+    offsets.forEach(([o, n], j) => {
+      if (o - n > offsets[k]![0] - offsets[k]![1]) k = j;
+    });
     const a = -b.outward * own * DEG_TO_RAD;
     pivot = {
-      x: leading + (trailing - leading) * foil.thickest.at,
-      y: b.outward * (slide + centre * widen),
+      x: leading + (trailing - leading) * stations[k]!,
+      y: b.outward * (slide + ((offsets[k]![0] + offsets[k]![1]) / 2) * widen),
       cos: Math.cos(a),
       sin: Math.sin(a),
     };
@@ -942,26 +736,13 @@ export const bladeSection = (
       z: h,
     };
   };
-
-  const { outside: lamOut, inside: lamIn } = b.laminate;
-  const lam = lamOut + lamIn;
   const outside: Vert3[] = [];
   const inside: Vert3[] = [];
-  for (const u of stations) {
-    const [o, i] = foil.shapeAt(fractionAt(u));
-    let out = o * scale + m * foil.outsideShare;
-    let ins = i * scale - m * (1 - foil.outsideShare);
-    if (lam > 0) {
-      // The core: each face in by its laminate. Under the minimum, the face with less
-      // laminate makes up the shortfall, so a laminated face stays true.
-      const short = Math.max(0, m - (out - ins - lam));
-      out += short * (lamIn / lam) - lamOut;
-      ins += lamIn - short * (lamOut / lam);
-    }
+  stations.forEach((u, j) => {
     const x = leading + (trailing - leading) * u;
-    outside.push(at(x, out));
-    inside.push(at(x, ins));
-  }
+    outside.push(at(x, offsets[j]![0]));
+    inside.push(at(x, offsets[j]![1]));
+  });
   return {
     height: h,
     leadingX: leading,

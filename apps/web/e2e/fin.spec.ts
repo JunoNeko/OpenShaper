@@ -134,7 +134,7 @@ test.describe('Fin designer', () => {
       page.getByRole('button', { name: 'Save' }).click(),
     ]);
     const savedPath = (await saved.path())!;
-    expect(JSON.parse(await readFile(savedPath, 'utf8')).version).toBe(2);
+    expect(JSON.parse(await readFile(savedPath, 'utf8')).version).toBe(3);
     await page.getByLabel('Start a new fin').selectOption({ label: 'Centre' });
     await expect(page.getByRole('tablist', { name: 'Foil' })).toHaveCount(0);
     await page.getByLabel('Open a fin file').setInputFiles(savedPath);
