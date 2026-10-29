@@ -5,7 +5,11 @@ import {
   FIN_MIN_THICKNESS,
   FIN_PANEL_MAX_ANGLE,
   FIN_SLICE_MIN_GAP,
+  FIN_THICKNESS_PATH_LIMITS,
   defaultFinDesign,
+  prepareBlade,
+  tipApexFraction,
+  tipLineOf,
   finReadouts,
   foilShare,
   SPLIT_NOSE_ASPECT,
@@ -342,11 +346,11 @@ describe('fin store: foil slices', () => {
     expect(design(s).slices[0]!.height).toBe(FIN_SLICE_MIN_GAP);
   });
 
-  it("takes a slice's foil and twist with it past another, cutting the transition to fit", () => {
+  it("takes a slice's foil and twist with it past another", () => {
     const s = storeWith();
     s.getState().addSlice(0.3);
     s.getState().applyNaca('0008');
-    s.getState().setSliceTwist(1, { cant: 12, transition: 0.3 });
+    s.getState().setSliceTwist(1, { cant: 12 });
     s.getState().addSlice(0.7);
     const moving = design(s).slices[0]!;
     s.getState().setActiveFoil(1);
@@ -355,11 +359,10 @@ describe('fin store: foil slices', () => {
     expect(a!.height).toBe(0.7);
     expect(b!.section).toBe(moving.section);
     expect(b!.twist).toEqual(moving.twist);
-    // Down near the root its transition no longer fits under it: cut to fit.
     s.getState().moveSlice(2, 0.1);
     const low = design(s).slices[0]!;
     expect(low.height).toBe(0.1);
-    expect(low.twist!.transition).toBe(0.1);
+    expect(low.twist).toEqual(moving.twist);
     expect(validateFinDesign(design(s))).toEqual([]);
   });
 
@@ -429,22 +432,22 @@ describe('fin store: foil slices', () => {
 });
 
 describe('fin store: a slice’s cant and toe', () => {
-  it('starts a change from what the blade has there, with a 10 mm zone that fits', () => {
+  it('starts a change from what the blade has there', () => {
     const s = storeWith();
     s.getState().addSlice(0.5);
     expect(s.getState().setSliceTwist(1, { cant: 12 })).toBe(true);
     const tw = design(s).slices[0]!.twist!;
     expect(tw.cant).toBe(12);
     expect(tw.toe).toBe(0); // the fin's toe, unchanged
-    expect(tw.transition * finReadouts(design(s)).depth).toBeCloseTo(1, 9); // 10 mm
+    expect(Object.keys(tw).sort()).toEqual(['cant', 'toe']);
   });
 
-  it('clamps its values, the zone to the room below the slice', () => {
+  it('clamps its values', () => {
     const s = storeWith();
     s.getState().addSlice(0.5);
-    s.getState().setSliceTwist(1, { cant: -40, toe: 9, transition: 3 });
+    s.getState().setSliceTwist(1, { cant: -40, toe: 9 });
     const tw = design(s).slices[0]!.twist!;
-    expect([tw.cant, tw.toe, tw.transition]).toEqual([-20, 5, 0.5]);
+    expect([tw.cant, tw.toe]).toEqual([-20, 5]);
     expect(validateFinDesign(design(s))).toEqual([]);
   });
 
@@ -575,5 +578,37 @@ describe('fin store: outside / inside split', () => {
     const s = storeWith(defaultFinDesign('centre'));
     expect(s.getState().setFoilSplit(0.7)).toBe(false);
     expect(design(s).section.inside).toBeNull();
+  });
+});
+
+describe('fin store: the foil sweep', () => {
+  it('moves the tip line’s ends, each kept on its side of the tip, undoably', () => {
+    const s = storeWith();
+    const before = tipLineOf(design(s));
+    s.getState().beginEdit('Move the tip line');
+    expect(s.getState().setTipLineEnd('start', before.start - 0.05)).toBe(true);
+    s.getState().endEdit();
+    expect(design(s).tipLine!.start).toBeCloseTo(before.start - 0.05, 9);
+    expect(design(s).tipLine!.end).toBeCloseTo(before.end, 9);
+    // Past the tip it stops short of it.
+    s.getState().setTipLineEnd('start', 0.99);
+    expect(design(s).tipLine!.start).toBeLessThan(tipApexFraction(design(s).outline));
+    s.getState().undo();
+    s.getState().undo();
+    expect(design(s).tipLine).toBeUndefined();
+    s.getState().setTipLineEnd('end', 0.7);
+    expect(s.getState().resetTipLine()).toBe(true);
+    expect(design(s).tipLine).toBeUndefined();
+  });
+
+  it('moves the thickness path within its limits, and resets it', () => {
+    const s = storeWith();
+    expect(s.getState().setThicknessPath(0, 0.45)).toBe(true);
+    const at = prepareBlade(design(s)).thickestAt;
+    expect(design(s).thicknessPath).toEqual([0.45, at, at]);
+    s.getState().setThicknessPath(2, 0.99);
+    expect(design(s).thicknessPath![2]).toBe(FIN_THICKNESS_PATH_LIMITS.max);
+    expect(s.getState().resetThicknessPath()).toBe(true);
+    expect(design(s).thicknessPath).toBeUndefined();
   });
 });

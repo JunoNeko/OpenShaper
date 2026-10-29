@@ -26,15 +26,7 @@ import {
 import { FIN_MIN_THICKNESS, FIN_POSITIONS } from './fin-design';
 import { defaultFinDesign, defaultKeel, defaultTwinFin } from './fin-defaults';
 import { finMesh } from './fin-mesh';
-import {
-  FIN_REAR_FADE,
-  bladeSection,
-  chordAt,
-  findRaisedRear,
-  foilAt,
-  prepareBlade,
-  thicknessAt,
-} from './blade';
+import { bladeSection, chordAt, findRaisedRear, foilAt, prepareBlade, thicknessAt } from './blade';
 import { BLADE_CI_TOLERANCE, bladeSurfaceDeviation, fitBladeSurface } from './blade-surface';
 import { splineExtremes } from './curve-shape';
 import type { FinDesign, FinTwist } from './fin-design';
@@ -177,7 +169,7 @@ describe('a hooked tip', () => {
   it('ends both edges at the minimum, hook and all', () => {
     // Round 2 testing: cutting the foil off at the real edge bulged the trailing edge
     // wherever it bent. Only a raised rear's underside keeps a thick edge.
-    const above = b.raisedRear!.cornerZ + FIN_REAR_FADE;
+    const above = b.raisedRear!.cornerZ + 0.05;
     for (let h = above; h < b.depth * 0.995; h += 0.1) {
       const s = bladeSection(b, h, [0, 1]);
       for (const j of [0, 1]) {
@@ -349,7 +341,9 @@ describe('the corner of a raised rear that curls up into a point (the owner’s 
       const x = r.cornerX + ahead;
       const hs: number[] = [];
       const ts: number[] = [];
-      for (let h = Math.max(0.01, r.cornerZ - 0.5); h <= r.cornerZ + 1.5; h += 0.015) {
+      // Every half millimetre: finer, the second difference reads the sweep grid's
+      // ripple (a few thousandths of a millimetre) rather than a ridge you could see.
+      for (let h = Math.max(0.01, r.cornerZ - 0.5); h <= r.cornerZ + 1.5; h += 0.05) {
         const c = chordAt(b, h);
         if (!(x < c.leading && x > c.trailing)) continue;
         const s = bladeSection(b, h, [0, (x - c.leading) / (c.trailing - c.leading), 1]);
@@ -476,7 +470,9 @@ describe('corners in an edge (the owner’s test fin, docs/specs/fins/corner_cre
       // Walking in from either edge over the last 6% of chord, it only thickens.
       for (const run of [t.slice(0, 25), t.slice(376).reverse()]) {
         for (let i = 1; i < run.length; i++) {
-          expect(run[i]!).toBeGreaterThanOrEqual(run[i - 1]! - 1e-9);
+          // To 0.002 mm: the sweep is read off a grid, which ripples by about that.
+          // The fold this guards against was 0.07 mm.
+          expect(run[i]!).toBeGreaterThanOrEqual(run[i - 1]! - 2e-4);
         }
       }
     }

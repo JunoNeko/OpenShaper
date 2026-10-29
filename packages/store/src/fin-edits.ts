@@ -11,11 +11,13 @@ import {
   FIN_PANEL_MAX_ANGLE,
   FIN_PANEL_THICKNESS,
   FIN_MIN_SLICE_CANT,
-  finReadouts,
   twistAt,
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
+  FIN_THICKNESS_PATH_LIMITS,
   chordAt,
+  tipApexFraction,
+  tipLineOf,
   defaultCanard,
   finHasToe,
   prepareBlade,
@@ -120,10 +122,9 @@ export const addSlice = (
 };
 
 /**
- * Slice `foil` (1-based) changing the cant and toe: `change` sets any of them, starting
- * from what the blade has there now (so a new change begins as no change), with a
- * transition zone of 10 mm or the room below the slice, if smaller. `null` removes it.
- * Values are clamped to their ranges.
+ * Slice `foil` (1-based) changing the cant and toe: `change` sets either, starting from
+ * what the blade has there now (so a new change begins as no change). `null` removes
+ * it. Values are clamped to their ranges.
  */
 export const setSliceTwist = (
   d: FinDesign,
@@ -135,17 +136,10 @@ export const setSliceTwist = (
   if (!sl) return d;
   let twist: FinTwist | undefined;
   if (change) {
-    const below = i === 0 ? 0 : d.slices[i - 1]!.height;
-    const depth = finReadouts(d).depth;
-    const now = sl.twist ?? {
-      ...twistAt(d, sl.height),
-      transition: Math.min(sl.height - below, depth > 0 ? 1 / depth : 0.1),
-    };
-    const next = { ...now, ...change };
+    const next = { ...(sl.twist ?? twistAt(d, sl.height)), ...change };
     twist = {
       cant: Math.min(FIN_MAX_CANT, Math.max(FIN_MIN_SLICE_CANT, next.cant)),
       toe: Math.round(Math.min(FIN_MAX_TOE, Math.max(-FIN_MAX_TOE, next.toe)) * 1e6) / 1e6,
-      transition: Math.min(sl.height - below, Math.max(0, next.transition)),
     };
   }
   const slices = d.slices.map((s, j) => {
@@ -169,7 +163,6 @@ export const removeSlice = (d: FinDesign, foil: FinFoilIndex): FinDesign =>
  * them and from the root and tip: dragged up to a neighbour it waits just short of it,
  * and hops to the far side once the drag is past the neighbour. Slices are kept in
  * order up the blade, so its index may change: returns the design and its new index.
- * A twist's transition zone is cut to fit under the slice's new height.
  */
 export const moveSlice = (
   d: FinDesign,
@@ -202,8 +195,7 @@ export const moveSlice = (
     }
   }
   if (h === sl.height) return { design: d, foil };
-  const twist = sl.twist && { ...sl.twist, transition: Math.min(sl.twist.transition, h) };
-  const moved = twist ? { ...sl, height: h, twist } : { ...sl, height: h };
+  const moved = { ...sl, height: h };
   const at = others.findIndex((o) => o.height > h);
   const pos = at === -1 ? others.length : at;
   const slices = [...others.slice(0, pos), moved, ...others.slice(pos)];
@@ -468,4 +460,63 @@ export const setPanelTilt = (d: FinDesign, deg: number): FinDesign => {
   const { tilt: _old, ...panel } = d.panel;
   void _old;
   return { ...d, panel: t ? { ...panel, tilt: t } : panel };
+};
+
+/**
+ * How far either end of the tip line keeps from the tip's furthest point, and from the
+ * roots (fraction of the outline's length): the sweep needs room between them.
+ */
+const TIP_LINE_GAP = 0.01;
+const TIP_LINE_FROM_ROOT = 0.15;
+
+/**
+ * The tip line with one end (`start`, on the leading edge's side, or `end`, on the
+ * trailing edge's) moved to `fraction` of the outline's length. Each end stays on its
+ * own side of the tip and clear of the roots.
+ */
+export const setTipLineEnd = (
+  d: FinDesign,
+  which: 'start' | 'end',
+  fraction: number,
+): FinDesign => {
+  if (!Number.isFinite(fraction)) return d;
+  const now = tipLineOf(d);
+  const apex = tipApexFraction(d.outline);
+  const f =
+    which === 'start'
+      ? Math.min(apex - TIP_LINE_GAP, Math.max(TIP_LINE_FROM_ROOT, fraction))
+      : Math.min(1 - TIP_LINE_FROM_ROOT, Math.max(apex + TIP_LINE_GAP, fraction));
+  if (Math.abs(f - now[which]) < 1e-9) return d;
+  return { ...d, tipLine: { ...now, [which]: f } };
+};
+
+/** The tip line back to where the designer puts it (swept-loft.ts, defaultTipLine). */
+export const resetTipLine = (d: FinDesign): FinDesign => {
+  if (!d.tipLine) return d;
+  const { tipLine: _old, ...rest } = d;
+  void _old;
+  return rest;
+};
+
+/**
+ * Point `index` of the thickness path (0 at the base, 1 halfway, 2 at the tip line)
+ * moved to `fraction` of its section, within FIN_THICKNESS_PATH_LIMITS.
+ */
+export const setThicknessPath = (d: FinDesign, index: 0 | 1 | 2, fraction: number): FinDesign => {
+  if (!Number.isFinite(fraction)) return d;
+  const at = prepareBlade(d).thickestAt;
+  const now: [number, number, number] = d.thicknessPath ? [...d.thicknessPath] : [at, at, at];
+  const { min, max } = FIN_THICKNESS_PATH_LIMITS;
+  const f = Math.round(Math.min(max, Math.max(min, fraction)) * 1e4) / 1e4;
+  if (now[index] === f) return d;
+  now[index] = f;
+  return { ...d, thicknessPath: now };
+};
+
+/** The thickness path back to the base foil's own thickest point all the way up. */
+export const resetThicknessPath = (d: FinDesign): FinDesign => {
+  if (!d.thicknessPath) return d;
+  const { thicknessPath: _old, ...rest } = d;
+  void _old;
+  return rest;
 };

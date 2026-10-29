@@ -23,6 +23,12 @@
  *       default base. Also `toe` (deg, + toe in): absent means 0. Also `panel`: the
  *       panel it's cut from, `{ thickness (mm), angle (deg), tilt? (deg) }`; absent
  *       means none set, and an absent tilt means 0.
+ *   3 — the swept loft (swept-loft.ts): the same fields, read the same way, but the
+ *       blade is foiled along sections swept from the base to a tip line, so an older
+ *       file comes out a little differently. Adds `tipLine` (`{ start, end }`, fractions
+ *       of the outline's length) and `thicknessPath` (three fractions of a section),
+ *       absent for the defaults. A slice's `transition` is gone: read and dropped.
+ *       Always written as version 3.
  */
 import {
   FIN_BASES,
@@ -42,11 +48,8 @@ import {
 } from '@openshaper/kernel';
 import { assertKnots, isObject, splineFromJson, splineToJson, type KnotJson } from './knot-json';
 
-/**
- * Newest version this reads and writes. Version 2 adds foil `slices`; a fin without any
- * is still written as version 1, so it opens in the designer before slices too.
- */
-export const FIN_JSON_VERSION = 2;
+/** Newest version this reads and writes (see the history above). */
+export const FIN_JSON_VERSION = 3;
 export const FIN_JSON_FORMAT = 'openshaper-fin';
 
 interface SectionJson {
@@ -78,6 +81,10 @@ export interface FinJson {
   section: SectionJson;
   /** Version 2: toe correction, deg, + toe in. Absent means 0. */
   toe?: number;
+  /** Version 3: where the foil sweep ends (fractions of the outline). Absent: the default. */
+  tipLine?: { start: number; end: number };
+  /** Version 3: where the sweep's sections are thickest (fractions). Absent: the foil's own. */
+  thicknessPath?: [number, number, number];
   /** Version 2: the panel it's cut from (thickness in mm, angle and tilt in deg). Absent: none. */
   panel?: { thickness: number; angle: number; tilt?: number };
   /** Version 2: the tab. Absent means the position's default Futures tab. */
@@ -86,8 +93,11 @@ export interface FinJson {
   slices?: {
     height: number;
     section: SectionJson;
-    /** A cant and toe change at the slice (deg); transition as a fraction of the depth. */
-    twist?: { cant: number; toe: number; transition: number };
+    /**
+     * A cant and toe change at the slice (deg). Version 2 also had `transition` (how far
+     * below the slice it eased in): read and dropped, it eases over the whole span now.
+     */
+    twist?: { cant: number; toe: number; transition?: number };
   }[];
   taper: KnotJson[];
   metadata?: Record<string, unknown>;
@@ -123,7 +133,7 @@ const same = (n: number) => n;
 export const writeFinJson = (d: FinDesign, metadata?: Record<string, unknown>): string => {
   const doc: FinJson = {
     format: FIN_JSON_FORMAT,
-    version: d.slices.length || d.base !== defaultFinBase(d.position) || d.toe || d.panel ? 2 : 1,
+    version: FIN_JSON_VERSION,
     units: 'mm',
     position: d.position,
     hand: d.hand,
@@ -131,6 +141,8 @@ export const writeFinJson = (d: FinDesign, metadata?: Record<string, unknown>): 
     lateralOffset: toMm(d.lateralOffset),
     ...(d.base !== defaultFinBase(d.position) ? { base: d.base } : {}),
     ...(d.toe ? { toe: d.toe } : {}),
+    ...(d.tipLine ? { tipLine: { start: d.tipLine.start, end: d.tipLine.end } } : {}),
+    ...(d.thicknessPath ? { thicknessPath: [...d.thicknessPath] } : {}),
     ...(d.panel
       ? {
           panel: {
@@ -188,6 +200,14 @@ const assertStructure = (doc: Record<string, unknown>): void => {
   ) {
     fail('Malformed fin: panel needs a thickness and an angle');
   }
+  const tip = doc.tipLine;
+  if (tip !== undefined && (!isObject(tip) || !isNumber(tip.start) || !isNumber(tip.end))) {
+    fail('Malformed fin: the tip line needs a start and an end');
+  }
+  const path = doc.thicknessPath;
+  if (path !== undefined && (!Array.isArray(path) || path.length !== 3 || !path.every(isNumber))) {
+    fail('Malformed fin: the thickness path needs three numbers');
+  }
   if (doc.base !== undefined && !(FIN_BASES as readonly unknown[]).includes(doc.base)) {
     fail('Malformed fin: unknown base');
   }
@@ -203,10 +223,7 @@ const assertStructure = (doc: Record<string, unknown>): void => {
         fail(`Malformed fin: slice ${i + 1} has no height`);
       assertSection((sl as Record<string, unknown>).section, `slice ${i + 1}`);
       const tw = (sl as Record<string, unknown>).twist;
-      if (
-        tw !== undefined &&
-        (!isObject(tw) || !isNumber(tw.cant) || !isNumber(tw.toe) || !isNumber(tw.transition))
-      ) {
+      if (tw !== undefined && (!isObject(tw) || !isNumber(tw.cant) || !isNumber(tw.toe))) {
         fail(`Malformed fin: slice ${i + 1} has a damaged cant / toe change`);
       }
     });
@@ -251,9 +268,19 @@ export const readFinJson = (
     slices: (doc.slices ?? []).map((sl) => ({
       height: sl.height,
       section: sectionFromJson(sl.section),
-      ...(sl.twist ? { twist: { ...sl.twist } } : {}),
+      ...(sl.twist ? { twist: { cant: sl.twist.cant, toe: sl.twist.toe } } : {}),
     })),
     taper: scaleSpline(splineFromJson(doc.taper), same, toCm),
+    ...(doc.tipLine ? { tipLine: { start: doc.tipLine.start, end: doc.tipLine.end } } : {}),
+    ...(doc.thicknessPath
+      ? {
+          thicknessPath: [
+            doc.thicknessPath[0],
+            doc.thicknessPath[1],
+            doc.thicknessPath[2],
+          ] as const,
+        }
+      : {}),
     ...(doc.panel
       ? {
           panel: {

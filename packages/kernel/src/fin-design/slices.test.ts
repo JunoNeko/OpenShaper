@@ -65,14 +65,26 @@ describe('a blade with a slice', () => {
 
   it('is a valid design', () => expect(validateFinDesign(d)).toEqual([]));
 
-  it('is still exactly the taper thickness at its thickest, every height', () => {
-    for (const f of [0.1, 0.3, 0.45, 0.6, 0.8]) {
-      const h = f * b.depth;
+  it('is the taper thickness at its thickest at the slice, and close to it either side', () => {
+    const widest = (h: number) => {
       const s = bladeSection(b, h, cosineStations(2000));
-      const max = Math.max(...s.outside.map((p, j) => p.y - s.inside[j]!.y));
-      expect(max).toBeLessThanOrEqual(thicknessAt(b, h) + 1e-9);
-      expect(max).toBeGreaterThan(thicknessAt(b, h) - 1e-4);
+      return Math.max(...s.outside.map((p, j) => p.y - s.inside[j]!.y));
+    };
+    // At the slice, all horizontal slice foil, scaled to the taper.
+    const h = 0.6 * b.depth;
+    expect(widest(h)).toBeCloseTo(thicknessAt(b, h), 4);
+    // Either side it blends with the sweep, whose sections lean a little.
+    for (const f of [0.1, 0.3, 0.45, 0.8]) {
+      const z = f * b.depth;
+      expect(Math.abs(widest(z) / thicknessAt(b, z) - 1)).toBeLessThan(0.05);
     }
+  });
+
+  it('hands back to the sweep at the base', () => {
+    const plain = prepareBlade({ ...d, slices: [] });
+    const a = bladeSection(b, 0);
+    const c = bladeSection(plain, 0);
+    a.outside.forEach((p, j) => expect(p.y).toBeCloseTo(c.outside[j]!.y, 12));
   });
 
   it('takes the slice’s shape at the slice: symmetric about the centre plane', () => {

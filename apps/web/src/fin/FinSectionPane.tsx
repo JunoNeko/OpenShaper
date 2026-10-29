@@ -11,13 +11,17 @@
  */
 import {
   FIN_EXPORT_MIN_THICKNESS,
+  chordAt,
   finReadouts,
   foilAt,
+  prepareBlade,
+  thicknessAt,
   foilShare,
   knot,
   parseNaca4,
   splineFromKnots,
   vec2,
+  type FinDesign,
   type Spline,
 } from '@openshaper/kernel';
 import { FinCurveEditor, type FinCurveLayer } from '@openshaper/render2d';
@@ -33,11 +37,25 @@ import { PointTools } from './PointTools';
 import { useFinState } from './use-fin';
 import { FitToPanel } from './panel-tools';
 
-/** Drawn this many times taller than true. */
-export const SECTION_Y_SCALE = 4;
+/**
+ * How much taller than its drawn shape the foil really is, to draw it true to scale
+ * (owner request): the thickness the taper gives it over the chord it has, against the
+ * shape's own thickness in chords. The root foil along the root; a horizontal slice
+ * foil along the chord at its height. Kept within a quarter to four times.
+ */
+export const foilTrueScale = (d: FinDesign, foil: number): number => {
+  const b = prepareBlade(d);
+  const sl = foil > 0 ? d.slices[foil - 1] : undefined;
+  const h = sl ? sl.height * b.depth : 0;
+  const { leading, trailing } = chordAt(b, Math.min(b.depth, h));
+  const chord = Math.abs(leading - trailing);
+  const shape = foilAt(d, sl ? sl.height : 0).thickest.thickness;
+  if (!(chord > 0) || !(shape > 0)) return 1;
+  return Math.min(4, Math.max(0.25, thicknessAt(b, h) / chord / shape));
+};
 
 /** Keep the chord line and a strip under it (for the labels) in view; the faces add the rest. */
-const SECTION_FRAME = { minX: 0, maxX: 1, minY: -0.03, maxY: 0.01 };
+const SECTION_FRAME = { minX: 0, maxX: 1, minY: -0.12, maxY: 0.02 };
 
 /** The presets in the dropdown; "Other…" takes any 4-digit code. */
 const SUGGESTED = ['0008', '0010', '0012', '2408', '2410', '2412', '4409', '4412', '6409'];
@@ -320,6 +338,10 @@ export const FinSectionPane = memo(function FinSectionPane({
   const activeFoil = useFinState(store, (s) => s.activeFoil);
   const handlers = useMemo(() => curveEditorHandlers(store), [store]);
   const section = design ? (getFoil(design, activeFoil) ?? undefined) : undefined;
+  const trueScale = useMemo(
+    () => (design ? foilTrueScale(design, activeFoil) : 1),
+    [design, activeFoil],
+  );
 
   const layers = useMemo((): FinCurveLayer[] => {
     if (!section) return [];
@@ -408,14 +430,20 @@ export const FinSectionPane = memo(function FinSectionPane({
           {section.inside && <span style={{ color: INSIDE }}>— inside</span>}
         </span>
       )}
+      <span
+        className="pointer-events-none absolute right-2 top-1 z-10 text-xs text-muted-foreground"
+        aria-hidden
+      >
+        True scale · scroll to zoom
+      </span>
       <FinCurveEditor
         label="Foil section"
         layers={layers}
         selection={pickFromSelection(selection, ['outside', 'inside'])}
         alsoSelected={alsoFromSelection(selection, ['outside', 'inside'])}
-        yScale={SECTION_Y_SCALE}
+        yScale={trueScale}
         frameBounds={SECTION_FRAME}
-        frameKey={`${design.position}-${frameKey}`}
+        frameKey={`${design.position}-${activeFoil}-${frameKey}`}
         drawUnder={drawUnder}
         {...handlers}
       />

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { value } from '../bezier-curve';
 import type { Spline } from '../bezier-spline';
-import { bladeSection, foilRange, prepareBlade } from './blade';
+import { bladeSection, prepareBlade } from './blade';
 import { yAtX } from './curve-shape';
 import { defaultFinDesign } from './fin-defaults';
 import { FIN_MIN_THICKNESS } from './fin-design';
@@ -121,9 +121,8 @@ describe.each(['0012', '0008', '2412', '4412', '6409', '2408'])('nacaSection(%s)
     // A left fin: its outside face is on +Y, so offsets read directly.
     const d = { ...defaultFinDesign('side', 'left'), cant: 0, section: s };
     const b = prepareBlade(d);
-    // Stations where the foil's fractions fall (the smoothed edges can trim it).
-    const r = foilRange(b, 0);
-    const station = (f: number) => (f - r.from) / (r.to - r.from);
+    // At the root the base foil runs along the chord exactly.
+    const station = (f: number) => f;
     // The minimum is added to the outside face, so measure the foil above it.
     const m = FIN_MIN_THICKNESS;
     const at = bladeSection(b, 0, [station(n.position)]);

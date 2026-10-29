@@ -33,7 +33,7 @@ export const sliceGuides = (
     at: axis === 'y' ? sl.height * depth : sl.height,
     color: SLICE_COLOR,
     selected: activeFoil === i + 1,
-    label: fmtLen(sl.height * depth, units),
+    label: `Horizontal slice foil · ${fmtLen(sl.height * depth, units)}`,
   }));
 };
 

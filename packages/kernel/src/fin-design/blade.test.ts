@@ -8,8 +8,6 @@ import {
   bladeSection,
   chordAt,
   cosineStations,
-  foilEdges,
-  foilRange,
   rootThickestFaces,
   prepareBlade,
   thicknessAt,
@@ -17,6 +15,7 @@ import {
   type PreparedBlade,
 } from './blade';
 import { defaultFinDesign, defaultTaper } from './fin-defaults';
+import { sweepGrid, sweepPointOn } from './swept-loft';
 import { FIN_MIN_THICKNESS, FIN_POSITIONS, type FinDesign } from './fin-design';
 import { finReadouts } from './fin-readouts';
 import { validateFinDesign } from './fin-rules';
@@ -40,10 +39,12 @@ const widths = (s: BladeSection): number[] =>
 const heights = (b: ReturnType<typeof prepareBlade>) =>
   [0, 0.1, 0.25, 0.5, 0.7, 0.85, 0.95, 1].map((f) => f * b.depth);
 
-/** The station (actual chord fraction) where the foil's fraction `f` falls at height `h`. */
-const stationOf = (b: PreparedBlade, h: number, f: number): number => {
-  const r = foilRange(b, h);
-  return (f - r.from) / (r.to - r.from);
+/** The thickest station of a finely sampled section, and its width there. */
+const thickestOf = (b: PreparedBlade, h: number): { at: number; width: number } => {
+  const s = bladeSection(b, h, cosineStations(400));
+  const w = widths(s);
+  const j = w.indexOf(Math.max(...w));
+  return { at: s.stations[j]!, width: w[j]! };
 };
 
 describe('minimum thickness', () => {
@@ -66,43 +67,9 @@ describe('minimum thickness', () => {
       const slopeA = (y[j + 1]! - y[j]!) / (x[j + 1]! - x[j]!);
       const slopeB = (y[j + 2]! - y[j + 1]!) / (x[j + 2]! - x[j + 1]!);
       expect(Math.abs(slopeA)).toBeGreaterThan(1e-4); // still thinning, not flat
-      expect(slopeB).toBeGreaterThanOrEqual(slopeA - 1e-9); // and bending one way (x falls)
-    }
-  });
-});
-
-describe('smoothed edges', () => {
-  // Straight leading and trailing edges meeting at a sharp tip.
-  const straight: FinDesign = {
-    ...defaultFinDesign('side', 'left'),
-    cant: 0,
-    outline: polyline([vec2(10, 0), vec2(-2, 8), vec2(0, 0)]),
-  };
-
-  it('are the real edges wherever those are straight, whatever their slope', () => {
-    const e = foilEdges(prepareBlade(straight));
-    for (let i = 0; i < e.heights.length; i++) {
-      expect(e.foilLeading[i]).toBeCloseTo(e.leading[i]!, 9);
-      expect(e.foilTrailing[i]).toBeCloseTo(e.trailing[i]!, 9);
-    }
-  });
-
-  it.each(FIN_POSITIONS)('never lie inside the blade (default %s)', (position) => {
-    const e = foilEdges(prepareBlade(defaultFinDesign(position)));
-    for (let i = 0; i < e.heights.length; i++) {
-      expect(e.foilLeading[i]).toBeGreaterThanOrEqual(e.leading[i]!);
-      expect(e.foilTrailing[i]).toBeLessThanOrEqual(e.trailing[i]!);
-    }
-  });
-
-  it.each(FIN_POSITIONS)('hardly move the edges of the default %s', (position) => {
-    // Below the tip, where the edges curve gently; at the tip they close sharply, and
-    // the smoothing rounds them more by design.
-    const b = prepareBlade(defaultFinDesign(position));
-    const e = foilEdges(b);
-    for (let i = 0; e.heights[i]! <= 0.9 * b.depth; i++) {
-      expect(e.foilLeading[i]! - e.leading[i]!).toBeLessThan(0.05); // 0.5 mm
-      expect(e.trailing[i]! - e.foilTrailing[i]!).toBeLessThan(0.2); // 2 mm
+      // And bending one way (x falls), to within the sweep's interpolation: a few
+      // hundredths of a percent of the slope.
+      expect(slopeB).toBeGreaterThanOrEqual(slopeA - 1e-3 * Math.abs(slopeA));
     }
   });
 });
@@ -146,21 +113,34 @@ describe.each(FIN_POSITIONS)('bladeSection(default %s)', (position) => {
     expect(validateFinDesign(d)).toEqual([]);
   });
 
-  it('is exactly the taper thickness at the thickest point', () => {
-    for (const h of heights(flat)) {
-      const s = bladeSection(flat, h, [stationOf(flat, h, flat.thickestAt)]);
-      const t = thicknessAt(flat, h);
-      expect(widths(s)[0]).toBeCloseTo(Math.max(t, FIN_MIN_THICKNESS), 9);
+  it('is exactly the taper thickness at the root’s thickest point', () => {
+    const s = bladeSection(flat, 0, [flat.thickestAt]);
+    expect(widths(s)[0]).toBeCloseTo(thicknessAt(flat, 0), 9);
+  });
+
+  it('is the taper thickness on the thickness path, all the way up the sweep', () => {
+    // The taper sets each sweep section's thickness at its thickest point, at that
+    // point's height: read there, a horizontal section has it (to the grid's reading).
+    const g = sweepGrid(flat.design);
+    for (const f of [0, 0.25, 0.5, 0.75, 0.95]) {
+      const q = sweepPointOn(g, f * g.tipRow, flat.thickestAt);
+      const p = { x: q.x, y: Math.max(0, q.y) }; // a hair under 0 at the root, by rounding
+      const c = chordAt(flat, p.y);
+      const s = bladeSection(flat, p.y, [(p.x - c.leading) / (c.trailing - c.leading)]);
+      expect(Math.abs(widths(s)[0]! / thicknessAt(flat, p.y) - 1)).toBeLessThan(0.01);
     }
   });
 
-  it('is nowhere thicker than the taper says, nor thinner than the minimum', () => {
+  it('is never thinner than the minimum, nor far off the taper', () => {
     for (const h of heights(flat)) {
       const s = bladeSection(flat, h, cosineStations(200));
       const t = Math.max(thicknessAt(flat, h), FIN_MIN_THICKNESS);
       for (const w of widths(s)) {
         expect(w).toBeGreaterThanOrEqual(FIN_MIN_THICKNESS - 1e-12);
-        expect(w).toBeLessThanOrEqual(t + 1e-12);
+        // Up near the tip a horizontal cut crosses the leaning sweep sections, each as
+        // thick as the taper at its own thickest point's height.
+        // Above the tip line the rounded tip sets it instead.
+        if (h < 0.9 * flat.depth) expect(w).toBeLessThanOrEqual(t * 1.2);
       }
     }
   });
@@ -207,23 +187,21 @@ describe('section faces', () => {
     }
   });
 
-  it('puts the thickest point where the shape is thickest, at every height', () => {
-    // Flat inside face: the section is thickest where the outside face peaks.
+  it('puts the thickest point where the shape is thickest', () => {
+    // Flat inside face: the section is thickest where the outside face peaks. At the
+    // root exactly; up the blade the sweep's sections lean, so nearly.
     const b = prepareBlade(defaultFinDesign('side'));
-    const h = b.depth / 4;
-    const s = bladeSection(b, h, cosineStations(400));
-    const w = widths(s);
-    const j = w.indexOf(Math.max(...w));
-    expect(Math.abs(s.stations[j]! - stationOf(b, h, b.thickestAt))).toBeLessThan(0.01);
+    expect(Math.abs(thickestOf(b, 0).at - b.thickestAt)).toBeLessThan(0.01);
+    expect(Math.abs(thickestOf(b, b.depth / 4).at - b.thickestAt)).toBeLessThan(0.05);
   });
 
   it('scales a thinner taper without changing the chord', () => {
     const d = defaultFinDesign('side');
     const thin = prepareBlade({ ...d, cant: 0, taper: defaultTaper(0.4) });
     const thick = prepareBlade({ ...d, cant: 0, taper: defaultTaper(0.8) });
-    const h = thick.depth * 0.3;
-    const a = bladeSection(thin, h, [stationOf(thin, h, thin.thickestAt)]);
-    const c = bladeSection(thick, h, [stationOf(thick, h, thick.thickestAt)]);
+    const h = 0;
+    const a = bladeSection(thin, h, [thin.thickestAt]);
+    const c = bladeSection(thick, h, [thick.thickestAt]);
     // Twice the taper, twice the thickness there: the minimum is part of it, not extra.
     expect(widths(c)[0]! / widths(a)[0]!).toBeCloseTo(
       thicknessAt(thick, h) / thicknessAt(thin, h),
@@ -253,10 +231,13 @@ describe('cant', () => {
 
   it.each([7, 20])('keeps the true thickness at the taper value at %s°', (cant) => {
     const b = prepareBlade({ ...base, cant });
-    const h = b.depth * 0.4;
-    const s = bladeSection(b, h, [stationOf(b, h, b.thickestAt)]);
+    const s = bladeSection(b, 0, [b.thickestAt]);
     // Horizontal width × cos(cant) = thickness square to the leaning blade.
-    expect(widths(s)[0]! * Math.cos(cant * DEG_TO_RAD)).toBeCloseTo(thicknessAt(b, h), 12);
+    expect(widths(s)[0]! * Math.cos(cant * DEG_TO_RAD)).toBeCloseTo(thicknessAt(b, 0), 12);
+    // Up the blade too, to within the sweep's lean.
+    const h = b.depth * 0.4;
+    const up = thickestOf(b, h).width * Math.cos(cant * DEG_TO_RAD);
+    expect(Math.abs(up / thicknessAt(b, h) - 1)).toBeLessThan(0.03);
   });
 
   it('leaves the root on the tab top whatever the cant', () => {
@@ -295,7 +276,7 @@ describe('rootThickestFaces', () => {
   it.each(FIN_POSITIONS)('matches the built root section at its thickest (%s)', (position) => {
     for (const d of [defaultFinDesign(position, 'left'), defaultFinDesign(position, 'right')]) {
       const b = prepareBlade(d);
-      const s = bladeSection(b, 0, [stationOf(b, 0, b.thickestAt)]);
+      const s = bladeSection(b, 0, [b.thickestAt]);
       const f = rootThickestFaces(b);
       expect(f.outside).toBeCloseTo(s.outside[0]!.y, 9);
       expect(f.inside).toBeCloseTo(s.inside[0]!.y, 9);

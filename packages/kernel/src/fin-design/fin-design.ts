@@ -100,22 +100,20 @@ export interface FinSlice {
   readonly section: FinSection;
   /**
    * A change of cant and toe at this slice, or none (the blade carries on as below it).
-   * Above the slice the blade has this cant and toe; below the transition zone it keeps
-   * what it had; in between it eases from one to the other. More cant bends the blade
-   * out, a different toe twists it (Futures' upper-blade designs). Each section turns
-   * about its own thickest point.
+   * The blade eases from the cant and toe below (the root's, or the slice below's) to
+   * these over the whole span up to the slice, and keeps them above it. More cant bends
+   * the blade out, a different toe twists it (Futures' upper-blade designs). Each
+   * section turns about its own thickest point.
    */
   readonly twist?: FinTwist;
 }
 
-/** Cant and toe at a slice, and how far below it they blend in. */
+/** Cant and toe at a slice. */
 export interface FinTwist {
-  /** Cant above the slice (deg), {@link FIN_MIN_SLICE_CANT} to {@link FIN_MAX_CANT}. */
+  /** Cant at the slice and above (deg), {@link FIN_MIN_SLICE_CANT} to {@link FIN_MAX_CANT}. */
   readonly cant: number;
-  /** Toe above the slice (deg, + toe in), ±{@link FIN_MAX_TOE}. */
+  /** Toe at the slice and above (deg, + toe in), ±{@link FIN_MAX_TOE}. */
   readonly toe: number;
-  /** The transition zone: how far below the slice the change starts (fraction of the depth). */
-  readonly transition: number;
 }
 
 /** A slice may take the blade's lean back past upright: an edge case owners asked for. */
@@ -154,6 +152,27 @@ export const FIN_PANEL_MAX_ANGLE = 45;
 
 /** Panel thicknesses accepted (cm): 3 to 30 mm. */
 export const FIN_PANEL_THICKNESS = { min: 0.3, max: 3 } as const;
+
+/**
+ * Where the foil sweep ends (owner proposal, swept-loft.ts): the tip line's two ends on
+ * the outline, as fractions of its length from the leading-edge root (0) to the
+ * trailing-edge root (1). `start` is on the leading edge's side of the tip, `end` on
+ * the trailing edge's.
+ */
+export interface FinTipLine {
+  readonly start: number;
+  readonly end: number;
+}
+
+/**
+ * The thickness path (swept-loft.ts): where each sweep section is thickest, as a fraction
+ * of the section's length from the leading edge, at the base, halfway up and at the tip
+ * line, curving smoothly between.
+ */
+export type FinThicknessPath = readonly [number, number, number];
+
+/** How near either edge the thickness path may go (fraction of the section). */
+export const FIN_THICKNESS_PATH_LIMITS = { min: 0.1, max: 0.8 } as const;
 
 export interface FinDesign {
   readonly position: FinPosition;
@@ -205,6 +224,10 @@ export interface FinDesign {
    * the height keeps the taper valid when the outline's depth changes.
    */
   readonly taper: Spline;
+  /** Where the foil sweep ends; absent for the default (swept-loft.ts, defaultTipLine). */
+  readonly tipLine?: FinTipLine;
+  /** Where the sweep's sections are thickest; absent for the base foil's own thickest point. */
+  readonly thicknessPath?: FinThicknessPath;
   /** The panel it's cut from, if the user has set one (File settings). */
   readonly panel?: FinPanel;
 }

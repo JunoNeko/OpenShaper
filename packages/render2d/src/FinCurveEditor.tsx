@@ -58,6 +58,18 @@ import {
   type Viewport,
 } from './viewport';
 
+/**
+ * A point the user can drag that isn't on a curve: a control the app keeps where it
+ * belongs (the tip line's ends slide along the outline, say). Data coordinates.
+ */
+export interface FinCurveMarker {
+  readonly id: string;
+  readonly at: Vec2;
+  readonly color: string;
+  /** Accessible and hover name. */
+  readonly label: string;
+}
+
 export interface FinCurveEditorProps {
   layers: readonly FinCurveLayer[];
   selection: FinCurvePick | null;
@@ -93,6 +105,12 @@ export interface FinCurveEditorProps {
   /** The dragged guide's new value on its axis, in data space. */
   onGuideDrag?: (id: string, at: number) => void;
   onGuideDragEnd?: () => void;
+  /** Draggable markers, drawn over the curves and picked before them. */
+  markers?: readonly FinCurveMarker[];
+  onMarkerDragStart?: (id: string) => void;
+  /** Where the pointer has dragged the marker to, in data space. */
+  onMarkerDrag?: (id: string, to: Vec2) => void;
+  onMarkerDragEnd?: () => void;
   /** Reports the view whenever it changes (tests, overlays). */
   onViewport?: (vp: Viewport) => void;
   /** A fixed grid spacing (data units); the grid fits the zoom if unset. */
@@ -105,7 +123,11 @@ export interface FinCurveEditorProps {
 type Drag =
   | { kind: 'handle'; pick: FinCurvePick; grabbed: Vec2; pointerAt: Vec2; id: number }
   | { kind: 'pan'; last: ScreenPoint; id: number }
-  | { kind: 'guide'; guide: FinCurveGuide; id: number };
+  | { kind: 'guide'; guide: FinCurveGuide; id: number }
+  | { kind: 'marker'; marker: string; grabbed: Vec2; pointerAt: Vec2; id: number };
+
+/** Radius of a marker's dot (px). */
+const MARKER_R = 5;
 
 export function FinCurveEditor({
   layers,
@@ -129,6 +151,10 @@ export function FinCurveEditor({
   gridStep,
   label,
   background,
+  markers,
+  onMarkerDragStart,
+  onMarkerDrag,
+  onMarkerDragEnd,
 }: FinCurveEditorProps) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -191,7 +217,20 @@ export function FinCurveEditor({
     });
     if (guides) drawGuides(ctx, guides, vp, yScale);
     drawFinCurves(ctx, layers, vp, yScale, selection, hovered, alsoSelected);
+    for (const m of markers ?? []) {
+      const s = toView(m.at, yScale);
+      const x = vp.originX + s.x * vp.scale;
+      const y = vp.originY - s.y * vp.scale;
+      ctx.beginPath();
+      ctx.arc(x, y, MARKER_R, 0, Math.PI * 2);
+      ctx.fillStyle = m.color;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.stroke();
+    }
   }, [
+    markers,
     vp,
     size,
     layers,
@@ -229,6 +268,25 @@ export function FinCurveEditor({
       onSelect?.(pick, e.shiftKey);
       onDragStart?.(pick);
     } else {
+      // Then the markers: curve points come first, so a marker sitting on one never hides it.
+      const tol = tolFor(e) + MARKER_R;
+      const marker = (markers ?? []).find((m) => {
+        const s = toView(m.at, yScale);
+        return (
+          Math.hypot(vp.originX + s.x * vp.scale - p.x, vp.originY - s.y * vp.scale - p.y) <= tol
+        );
+      });
+      if (marker) {
+        drag.current = {
+          kind: 'marker',
+          marker: marker.id,
+          grabbed: toView(marker.at, yScale),
+          pointerAt: screenToWorld(vp, p),
+          id: e.pointerId,
+        };
+        onMarkerDragStart?.(marker.id);
+        return;
+      }
       const guide = guides && pickGuide(guides, vp, p, yScale, tolFor(e));
       if (guide) {
         drag.current = { kind: 'guide', guide, id: e.pointerId };
@@ -254,6 +312,11 @@ export function FinCurveEditor({
     if (d.kind === 'handle') {
       const to = dragTo(d.grabbed, d.pointerAt, screenToWorld(vp, p));
       onDrag?.(d.pick, fromView(to, yScale));
+    } else if (d.kind === 'marker') {
+      onMarkerDrag?.(
+        d.marker,
+        fromView(dragTo(d.grabbed, d.pointerAt, screenToWorld(vp, p)), yScale),
+      );
     } else if (d.kind === 'guide') {
       onGuideDrag?.(d.guide.id, guideValueAt(d.guide, vp, p, yScale));
     } else {
@@ -270,6 +333,7 @@ export function FinCurveEditor({
     e.currentTarget.releasePointerCapture?.(e.pointerId);
     if (d.kind === 'handle') onDragEnd?.();
     if (d.kind === 'guide') onGuideDragEnd?.();
+    if (d.kind === 'marker') onMarkerDragEnd?.();
   };
 
   const onDoubleClick = (e: MouseEvent<HTMLCanvasElement>) => {

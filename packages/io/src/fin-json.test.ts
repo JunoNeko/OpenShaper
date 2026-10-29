@@ -139,10 +139,10 @@ describe.each(designs)('.fin.json round trip (%s)', (_, d) => {
 });
 
 describe('.fin.json versions', () => {
-  it('writes an FCS-tabbed fin as version 2 with its base, and reads it back', () => {
+  it('writes an FCS-tabbed fin with its base, and reads it back', () => {
     const d = { ...defaultFinDesign('side', 'left'), base: 'fcs-single' as const, cant: 0 };
     const doc = JSON.parse(writeFinJson(d)) as Record<string, unknown>;
-    expect(doc.version).toBe(2);
+    expect(doc.version).toBe(3);
     expect(doc.base).toBe('fcs-single');
     expect(readFinJson(writeFinJson(d)).design.base).toBe('fcs-single');
   });
@@ -151,21 +151,26 @@ describe('.fin.json versions', () => {
     const base = defaultFinDesign('side', 'left');
     const d = {
       ...base,
-      slices: [
-        { height: 0.6, section: base.section, twist: { cant: 12, toe: -1, transition: 0.15 } },
-      ],
+      slices: [{ height: 0.6, section: base.section, twist: { cant: 12, toe: -1 } }],
     };
-    expect(readFinJson(writeFinJson(d)).design.slices[0]!.twist).toEqual({
-      cant: 12,
-      toe: -1,
-      transition: 0.15,
-    });
+    expect(readFinJson(writeFinJson(d)).design.slices[0]!.twist).toEqual({ cant: 12, toe: -1 });
   });
 
-  it('writes a toe correction as version 2 and reads it back', () => {
+  it('reads an older file’s transition zone and drops it: the change eases over the whole span', () => {
+    const base = defaultFinDesign('side', 'left');
+    const d = {
+      ...base,
+      slices: [{ height: 0.6, section: base.section, twist: { cant: 12, toe: -1 } }],
+    };
+    const doc = JSON.parse(writeFinJson(d));
+    doc.slices[0].twist.transition = 0.15;
+    expect(readFinJson(JSON.stringify(doc)).design.slices[0]!.twist).toEqual({ cant: 12, toe: -1 });
+  });
+
+  it('writes a toe correction and reads it back', () => {
     const d = { ...defaultFinDesign('side', 'left'), toe: -1.25 };
     const doc = JSON.parse(writeFinJson(d)) as Record<string, unknown>;
-    expect(doc.version).toBe(2);
+    expect(doc.version).toBe(3);
     expect(readFinJson(writeFinJson(d)).design.toe).toBe(-1.25);
     expect(readFinJson(writeFinJson(defaultFinDesign('side'))).design.toe).toBe(0);
   });
@@ -173,7 +178,7 @@ describe('.fin.json versions', () => {
   it('keeps the panel through a save, in mm, and leaves it out when none is set', () => {
     const d = { ...defaultFinDesign('side', 'left'), panel: { thickness: 0.9525, angle: -2.5 } };
     const doc = JSON.parse(writeFinJson(d)) as { version: number; panel: unknown };
-    expect(doc.version).toBe(2);
+    expect(doc.version).toBe(3);
     expect(doc.panel).toEqual({ thickness: 9.525, angle: -2.5 });
     const back = readFinJson(writeFinJson(d)).design.panel!;
     expect(back.thickness).toBeCloseTo(0.9525, 12);
@@ -235,18 +240,38 @@ describe('.fin.json versions', () => {
     );
   });
 
-  it('writes a fin without slices as version 1, so the designer before slices opens it', () => {
+  it('writes every fin as version 3, the swept loft, leaving out what isn’t set', () => {
     const doc = JSON.parse(writeFinJson(defaultFinDesign('centre'))) as Record<string, unknown>;
-    expect(doc.version).toBe(1);
+    expect(doc.version).toBe(3);
     expect(doc.slices).toBeUndefined();
-  });
-
-  it('writes a fin with slices as version 2', () => {
+    expect(doc.tipLine).toBeUndefined();
+    expect(doc.thicknessPath).toBeUndefined();
     const d = {
       ...defaultFinDesign('centre'),
       slices: [{ height: 0.5, section: nacaSection('0010') }],
     };
-    expect((JSON.parse(writeFinJson(d)) as Record<string, unknown>).version).toBe(2);
+    expect((JSON.parse(writeFinJson(d)) as Record<string, unknown>).version).toBe(3);
+  });
+
+  it('keeps a moved tip line and thickness path through a save', () => {
+    const d = {
+      ...defaultFinDesign('side', 'left'),
+      tipLine: { start: 0.42, end: 0.61 },
+      thicknessPath: [0.3, 0.35, 0.4] as const,
+    };
+    const back = readFinJson(writeFinJson(d)).design;
+    expect(back.tipLine).toEqual({ start: 0.42, end: 0.61 });
+    expect(back.thicknessPath).toEqual([0.3, 0.35, 0.4]);
+  });
+
+  it('rejects a damaged tip line or thickness path', () => {
+    const doc = JSON.parse(writeFinJson(defaultFinDesign('side', 'left')));
+    expect(() => readFinJson(JSON.stringify({ ...doc, tipLine: { start: 0.4 } }))).toThrow(
+      /tip line/,
+    );
+    expect(() => readFinJson(JSON.stringify({ ...doc, thicknessPath: [0.3, 0.4] }))).toThrow(
+      /thickness path/,
+    );
   });
 
   it('reads a version 1 file as a fin with no slices', () => {

@@ -379,15 +379,16 @@ function SliceSelect({ units }: { units: LengthUnit }) {
   );
 }
 
-/** A selected slice's cant and toe above it, and its transition zone below. */
+/**
+ * A selected slice's cant and toe: the blade eases to them from the root (or the slice
+ * below) over the whole span up to the slice, and keeps them above it.
+ */
 function SliceTwistTools({
   foil,
-  units,
   view,
   onView,
 }: {
   foil: number;
-  units: LengthUnit;
   view: FinPreviewView;
   onView: (v: FinPreviewView) => void;
 }) {
@@ -395,43 +396,23 @@ function SliceTwistTools({
   if (!design) return null;
   const sl = design.slices[foil - 1];
   if (!sl) return null;
-  const depth = finReadouts(design).depth;
   // A slice without a change shows what the blade has there now.
-  const now = sl.twist ?? { ...twistAt(design, sl.height), transition: 0 };
+  const now = sl.twist ?? twistAt(design, sl.height);
   const set = (change: Partial<FinTwist> | null) => finStore.getState().setSliceTwist(foil, change);
   return (
     <>
       <DegField
-        label={`Cant above slice (${FIN_MIN_SLICE_CANT}–${FIN_MAX_CANT}°)`}
+        label={`Cant at slice (${FIN_MIN_SLICE_CANT}–${FIN_MAX_CANT}°)`}
         value={now.cant}
         onCommit={(v) => set({ cant: v })}
       />
       <ToeTools
         toe={now.toe}
         onSet={(v) => set({ toe: v })}
-        label="Toe above slice"
+        label="Toe at slice"
         view={view}
         onView={onView}
       />
-      {/* Always shown, so it doesn't seem to vanish (owner feedback): a slice that only
-          changes the foil has no cant or toe change to blend in, so it waits for one. */}
-      <Tooltip
-        label={
-          sl.twist
-            ? 'How far below the slice its cant and toe blend in'
-            : 'Set a cant or toe above this slice first: then this is how far below it they blend in'
-        }
-      >
-        <div>
-          <LenField
-            label="Transition below slice"
-            valueCm={now.transition * depth}
-            units={units}
-            disabled={!sl.twist}
-            onCommit={(cm) => set({ transition: depth > 0 ? cm / depth : 0 })}
-          />
-        </div>
-      </Tooltip>
       {sl.twist && (
         <Button size="sm" variant="outline" onClick={() => set(null)}>
           No change here
@@ -584,7 +565,7 @@ function PlacementTools({
       {slice > 0 ? (
         <>
           <NudgePad disabled />
-          <SliceTwistTools foil={slice} units={units} view={view} onView={onView} />
+          <SliceTwistTools foil={slice} view={view} onView={onView} />
         </>
       ) : (
         <>
@@ -824,14 +805,18 @@ function History() {
   );
 }
 
-/** Open and Save: `.fin.json` files. Opening replaces the fin and starts a fresh history. */
-function FileButtons({ onSave }: { onSave: () => void }) {
+/**
+ * Open and Save: `.fin.json` files. Opening replaces the fin and starts a fresh history,
+ * and re-fits every view to it (`onOpened`), as a new fin does.
+ */
+function FileButtons({ onSave, onOpened }: { onSave: () => void; onOpened: () => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const open = async (file: File | undefined) => {
     if (!file) return;
     try {
       finStore.getState().load(await readFinFile(file));
+      onOpened();
       setProblem(null);
     } catch (e) {
       setProblem((e as Error).message);
@@ -1077,7 +1062,7 @@ export function FinApp() {
           </select>
         </label>
         <div className="ml-auto flex flex-wrap items-center gap-1">
-          <FileButtons onSave={save} />
+          <FileButtons onSave={save} onOpened={() => setStarts((n) => n + 1)} />
           <PairOption pair={pair} onChange={changePair} />
           <ExportButtons pair={pair} units={units} minThickness={settings.exportMin} />
           <History />

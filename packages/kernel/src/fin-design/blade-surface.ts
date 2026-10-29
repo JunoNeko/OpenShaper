@@ -123,7 +123,7 @@ const lerp3 = (a: Vert3, b: Vert3, t: number): Vert3 => ({
  * One section as a closed loop: outside LE→TE, the trailing-edge cap, inside TE→LE,
  * the leading-edge cap, ending on its first point again.
  */
-export const sectionLoop = (s: BladeSection): Vert3[] => {
+export const sectionLoop = (s: Pick<BladeSection, 'outside' | 'inside'>): Vert3[] => {
   const n = s.outside.length - 1;
   const cap = (a: Vert3, b: Vert3): Vert3[] =>
     Array.from({ length: CAP_INTERIOR }, (_, i) => lerp3(a, b, (i + 1) / (CAP_INTERIOR + 1)));
@@ -146,9 +146,10 @@ const loopCorners = (n: number): number[] => {
 
 /**
  * Heights where the taper has a corner: the thickness kinks right across the section,
- * so the surface creases there. Corners in the outline don't crease it: the foil is laid
- * over smoothed edges (blade.ts), so only the edge itself has the corner, and a crease
- * all the way round would draw a line across the blade (round 2 testing).
+ * so the surface creases there. Corners in the outline don't crease it: the foil sweep
+ * fades a corner within a few sections (swept-loft.ts), so only the edge itself has
+ * the corner, and a crease all the way round would draw a line across the blade (round 2
+ * testing).
  */
 const creaseHeights = (b: PreparedBlade, topZ: number): number[] => {
   const d = b.design;
