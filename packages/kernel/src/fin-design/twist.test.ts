@@ -2,33 +2,40 @@
 /** Cant and toe changed at a slice: the upper blade bent and twisted. */
 import { describe, expect, it } from 'vitest';
 import { RAD_TO_DEG } from '../constants';
-import { bladeSection, cosineStations, prepareBlade, thicknessAt, twistAt } from './blade';
+import {
+  FIN_SLICE_REACH,
+  bladeSection,
+  cosineStations,
+  prepareBlade,
+  thicknessAt,
+  twistAt,
+} from './blade';
 import { defaultFinDesign } from './fin-defaults';
 import type { FinDesign } from './fin-design';
 import { finMesh } from './fin-mesh';
 import { validateFinDesign } from './fin-rules';
 
 const base = { ...defaultFinDesign('side', 'left'), cant: 7 };
-/** A slice at 60% with 12° cant and 1° less toe, eased in from the root. */
+/** A slice at 60% with 12° cant and 1° less toe, eased in over the 15% below it. */
 const twisted: FinDesign = {
   ...base,
   slices: [{ height: 0.6, section: base.section, twist: { cant: 12, toe: -1 } }],
 };
 
 describe('twistAt', () => {
-  it('has the fin’s cant and toe at the root, the slice’s from it up, eased between', () => {
+  it('keeps the fin’s cant and toe below the slice’s reach, the slice’s from it up, eased between', () => {
     expect(twistAt(twisted, 0)).toEqual({ cant: 7, toe: 0 });
+    expect(twistAt(twisted, 0.3)).toEqual({ cant: 7, toe: 0 }); // well below: untouched
     expect(twistAt(twisted, 0.8)).toEqual({ cant: 12, toe: -1 });
-    const mid = twistAt(twisted, 0.3);
-    expect(mid.cant).toBeCloseTo(9.5, 12); // halfway up the span: halfway
+    const mid = twistAt(twisted, 0.6 - FIN_SLICE_REACH / 2);
+    expect(mid.cant).toBeCloseTo(9.5, 12); // halfway through its reach: halfway
     expect(mid.toe).toBeCloseTo(-0.5, 12);
   });
 
-  it('eases with no kink at the root or the slice', () => {
+  it('eases with no kink where its reach starts or at the slice', () => {
     const slope = (eta: number) =>
-      (twistAt(twisted, eta + 1e-6).cant - twistAt(twisted, Math.max(0, eta - 1e-6)).cant) /
-      (eta + 1e-6 - Math.max(0, eta - 1e-6));
-    expect(Math.abs(slope(0))).toBeLessThan(1e-3);
+      (twistAt(twisted, eta + 1e-6).cant - twistAt(twisted, eta - 1e-6).cant) / 2e-6;
+    expect(Math.abs(slope(0.6 - FIN_SLICE_REACH))).toBeLessThan(1e-3);
     expect(Math.abs(slope(0.6))).toBeLessThan(1e-3);
   });
 

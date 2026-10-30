@@ -17,7 +17,7 @@
  * fades within a few sections rather than running across the blade. The base foil is
  * laid along each section by length, stretched so its thickest point is on the
  * thickness path ({@link FinDesign.thicknessPath}), and as thick there as the taper says
- * at that height. Past the tip line the tip foil thins on a rounded (elliptical) curve to
+ * at that height. Past the tip line the tip foil thins on a convex (parabolic) curve to
  * the minimum at the tip edge.
  *
  * blade.ts reads this as a thickness field over the profile and cuts it horizontally into
@@ -296,15 +296,29 @@ const coonsPoint = (f: SweepFrame, s: number, u: number): Vec2 => {
   return vec2(c('x'), c('y'));
 };
 
-/** The tip cap at (v, u): v from the tip line (0) toward the very tip (1), straight across. */
+/**
+ * The tip cap at (v, u): each row a blend, `v` of the way from the tip line (0) out to
+ * the tip edge itself (1), `u` along both from the leading edge's end to the trailing
+ * edge's. The last row is the edge, so every point of it is reached and thins to the
+ * minimum (owner testing: straight rows across the tip left the outline's bulge beyond
+ * them square).
+ */
 const capPoint = (f: SweepFrame, v: number, u: number): Vec2 => {
-  const a = along(f.tipEdge, v / 2);
-  const b = along(f.tipEdge, 1 - v / 2);
-  return vec2(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u);
+  const t = vec2(
+    f.tipStart.x + (f.tipEnd.x - f.tipStart.x) * u,
+    f.tipStart.y + (f.tipEnd.y - f.tipStart.y) * u,
+  );
+  const e = along(f.tipEdge, u);
+  return vec2(t.x + (e.x - t.x) * v, t.y + (e.y - t.y) * v);
 };
 
-/** The thickness factor over the tip cap: 1 at the tip line, rounding to 0 at the tip. */
-export const capRounding = (v: number): number => Math.sqrt(Math.max(0, 1 - v * v));
+/**
+ * The thickness factor over the tip cap: 1 at the tip line, level there so it joins the
+ * sweep without a crease, curving down to 0 at the tip edge. A parabola (1 − v²), not an
+ * ellipse: an ellipse falls away vertically at the edge, a blunt round nose that read as a
+ * square end where the tip is shallow (owner testing).
+ */
+export const capRounding = (v: number): number => Math.max(0, 1 - v * v);
 
 /** Sections from the base to the tip line, and over the tip cap; points across each. */
 export const SWEEP_ROWS = 96;
@@ -333,8 +347,6 @@ const sweepFolds = (x: Float64Array, z: Float64Array, rows: number, cols: number
   }
   return pos > 0 && neg > 0;
 };
-/** How close the last cap section comes to the very tip (fraction of the cap). */
-const CAP_END = 0.995;
 
 /**
  * The sweep laid out as a grid of points on the profile: `rows` sections (base, up to
@@ -412,7 +424,7 @@ export const sweepGrid = (d: FinDesign): SweepGrid => {
   // Gathered toward the tip, where the rounding turns fastest.
   for (let k = 1; k <= CAP_ROWS; k++) {
     const i = SWEEP_ROWS + k;
-    const v = Math.sin((Math.PI / 2) * (k / CAP_ROWS)) * CAP_END;
+    const v = Math.sin((Math.PI / 2) * (k / CAP_ROWS));
     capV[i] = v;
     for (let j = 0; j < cols; j++) {
       const p = capPoint(f, v, j / SWEEP_COLUMNS);

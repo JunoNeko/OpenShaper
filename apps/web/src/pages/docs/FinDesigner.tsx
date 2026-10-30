@@ -223,10 +223,11 @@ export default function DocsFinDesigner() {
           the same tools, NACA presets included. A new slice starts as a copy of the foil below it.
         </p>
         <p>
-          A slice&apos;s foil holds at its height and blends smoothly into the sweep below it, down
-          to the base (or the slice below), and above it, up to the tip line (or the slice above),
-          easing in and out so no line forms. A slice above the tip line blends into the rounded
-          tip, which the profile shades. The thickness still comes from the thickness curve.{' '}
+          A slice&apos;s foil holds at its height and blends smoothly into the sweep over 15% of the
+          fin&apos;s depth below and above it — less where the base, the tip line or the next slice
+          is nearer — easing in and out so no line forms. Two slices closer than that hold their
+          foils all the way between them. A slice above the tip line blends into the rounded tip,
+          which the profile shades. The thickness still comes from the thickness curve.{' '}
           <strong>Remove slice</strong>, next to Add slice, takes the selected slice away: click a
           slice&apos;s line (or its foil tab) to select it. Slices keep at least 2% of the depth
           from each other and from the root and tip.
@@ -236,11 +237,11 @@ export default function DocsFinDesigner() {
           twisting it, as some Futures designs do. Pick the slice in the 3D view&apos;s{' '}
           <strong>Slice (twist)</strong> list (or its tab in the foil view): the position arrows
           grey out, and <strong>Cant at slice</strong> (−20° to 20°: it may lean back past upright)
-          and <strong>Toe at slice</strong> set its change. The blade eases from the root&apos;s
-          cant and toe (or the slice below&apos;s) to the slice&apos;s over the whole span between
-          them, with no crease, and holds them above it. Each section turns about its own thickest
-          point. <strong>No change here</strong> takes the change away. On an FCS single tab the
-          root has no cant (the plug sets it), but a slice may still add some.
+          and <strong>Toe at slice</strong> set its change. The blade eases from the cant and toe
+          below (the root&apos;s, or the slice below&apos;s) to the slice&apos;s over the 15% of the
+          depth just under it, with no crease, and holds them above it. Each section turns about its
+          own thickest point. <strong>No change here</strong> takes the change away. On an FCS
+          single tab the root has no cant (the plug sets it), but a slice may still add some.
         </p>
       </Section>
 
