@@ -54,6 +54,9 @@
  * so the choice is moot.
  */
 import { value } from '../bezier-curve';
+import { splineFromKnots, type Spline } from '../bezier-spline';
+import { knot } from '../knot';
+import { vec2 } from '../vec2';
 import { DEG_TO_RAD } from '../constants';
 import type { Vert3 } from '../loft';
 import { crossings, splineExtremes, yAtX } from './curve-shape';
@@ -185,7 +188,7 @@ const findThickest = (t: (u: number) => number): { at: number; thickness: number
  */
 const thickestCache = new WeakMap<FinSection, { at: number; thickness: number }>();
 
-const sectionThickest = (sec: FinSection): { at: number; thickness: number } => {
+export const sectionThickest = (sec: FinSection): { at: number; thickness: number } => {
   const hit = thickestCache.get(sec);
   if (hit) return hit;
   const found = findThickest((u) => {
@@ -213,6 +216,69 @@ const pureFoil = (sec: FinSection): Foil => ({
   thickest: sectionThickest(sec),
   outsideShare: share(sec),
 });
+
+/** Two foils blended, `w` of the way from `a` to `b`. */
+const blendFoils = (a: FinSection, b: FinSection, w: number): Foil => {
+  if (w <= 0 || a === b) return pureFoil(a);
+  if (w >= 1) return pureFoil(b);
+  const shapeAt = (u: number): [number, number] => {
+    const [o0, i0] = sectionShapeAt(a, u);
+    const [o1, i1] = sectionShapeAt(b, u);
+    return [o0 + (o1 - o0) * w, i0 + (i1 - i0) * w];
+  };
+  return {
+    shapeAt,
+    thickest: findThickest((u) => {
+      const [o, i] = shapeAt(u);
+      return o - i;
+    }),
+    outsideShare: share(a) + (share(b) - share(a)) * w,
+  };
+};
+
+/** The tip foil (foil sweep end): its own, or the base foil's. */
+export const tipFoilOf = (d: FinDesign): FinSection => d.tipSection ?? d.section;
+
+/**
+ * The thickness path (base, halfway, tip line): the base and tip foils' thickest points
+ * at its ends, the design's middle or halfway between them.
+ */
+export const thicknessPathOf = (d: FinDesign): FinThicknessPath => {
+  const a = sectionThickest(d.section).at;
+  const c = sectionThickest(tipFoilOf(d)).at;
+  return [a, d.thicknessMid ?? (a + c) / 2, c];
+};
+
+/**
+ * `sec` reshaped so it is thickest at `to` (fraction of the chord), keeping its ends and
+ * the order of its points: every point's (and handle's) x moved by a power curve that
+ * takes the old thickest point to the new one, a few times over, as the curve between
+ * the points follows them only roughly.
+ */
+export const moveFoilThickest = (sec: FinSection, to: number): FinSection => {
+  const target = Math.min(0.95, Math.max(0.05, to));
+  const warp = (s: Spline, q: number): Spline => {
+    const x = (v: number) => (v <= 0 || v >= 1 ? v : Math.pow(v, q));
+    return splineFromKnots(
+      s.knots.map((k) =>
+        knot(
+          vec2(x(k.end.x), k.end.y),
+          vec2(x(k.tangentToPrev.x), k.tangentToPrev.y),
+          vec2(x(k.tangentToNext.x), k.tangentToNext.y),
+          k.continuous,
+        ),
+      ),
+    );
+  };
+  let out = sec;
+  for (let i = 0; i < 6; i++) {
+    const at = sectionThickest(out).at;
+    if (Math.abs(at - target) < 5e-4 || !(at > 0 && at < 1)) break;
+    const q = Math.log(target) / Math.log(at);
+    out = { outside: warp(out.outside, q), inside: out.inside ? warp(out.inside, q) : null };
+  }
+  return out;
+};
 
 /**
  * The foil at height `eta` (a fraction of the depth): the root foil, a slice's, or a
@@ -536,8 +602,8 @@ export const toeTurn = (
 /** What the swept loft needs per blade: its grid, and each section's thickness and path. */
 interface SweptBlade {
   readonly grid: SweepGrid;
-  /** The base foil, laid along every section. */
-  readonly foil: Foil;
+  /** Per grid row: the foil laid along it, blended from the base foil to the tip foil. */
+  readonly foils: readonly Foil[];
   /** Per grid row: where the section is thickest (fraction along it), and how much (cm). */
   readonly path: Float64Array;
   readonly scale: Float64Array;
@@ -552,13 +618,15 @@ const sweptBlade = (b: PreparedBlade): SweptBlade => {
   if (hit) return hit;
   const d = b.design;
   const grid = sweepGrid(d);
-  const foil = pureFoil(d.section);
-  const at = foil.thickest.at;
+  const tip = tipFoilOf(d);
+  const foils = Array.from({ length: grid.rows }, (_, i) =>
+    blendFoils(d.section, tip, smoother(Math.min(1, i / grid.tipRow))),
+  );
   const path = new Float64Array(grid.rows);
   const scale = new Float64Array(grid.rows);
   const m = b.minThickness;
   const taper = (z: number) => thicknessAt(b, Math.min(b.depth, Math.max(0, z)));
-  const way: FinThicknessPath = d.thicknessPath ?? [at, at, at];
+  const way = thicknessPathOf(d);
   let tipThickness = m;
   for (let i = 0; i < grid.rows; i++) {
     const t = Math.min(1, i / grid.tipRow);
@@ -571,12 +639,12 @@ const sweptBlade = (b: PreparedBlade): SweptBlade => {
     } else {
       thickness = m + (tipThickness - m) * capRounding(grid.capV[i]!);
     }
-    scale[i] =
-      foil.thickest.thickness > 0 ? Math.max(0, thickness - m) / foil.thickest.thickness : 0;
+    const most = foils[i]!.thickest.thickness;
+    scale[i] = most > 0 ? Math.max(0, thickness - m) / most : 0;
   }
   const tipBase = grid.tipRow * grid.cols;
   const tipZ = (grid.z[tipBase]! + grid.z[tipBase + grid.cols - 1]!) / 2;
-  const swept = { grid, foil, path, scale, tipEta: b.depth > 0 ? tipZ / b.depth : 1 };
+  const swept = { grid, foils, path, scale, tipEta: b.depth > 0 ? tipZ / b.depth : 1 };
   sweptCache.set(b, swept);
   return swept;
 };
@@ -640,7 +708,8 @@ export const bladeSection = (
   const thickness = thicknessAt(b, h);
   const m = b.minThickness;
   const sw = sweptBlade(b);
-  const { grid, foil } = sw;
+  const { grid, foils } = sw;
+  const base = foils[0]!;
   const cells = cellsAtHeight(grid, h);
   const eta = b.depth > 0 ? h / b.depth : 0;
   const weight = sliceWeight(b.design, eta, sw.tipEta);
@@ -653,8 +722,8 @@ export const bladeSection = (
     // The sweep's: each section's foil, read where this point falls on it.
     // The edges are the minimum, except along the base: a raised rear's underside is the
     // base's foil cut off, as thick as the foil there.
-    let out = m * foil.outsideShare;
-    let ins = -m * (1 - foil.outsideShare);
+    let out = m * base.outsideShare;
+    let ins = -m * (1 - base.outsideShare);
     {
       const hit = locateOnSweep(grid, leading + (trailing - leading) * u, h, cells);
       const onBase = (hit: SweepHit) => hit.row < 1 && hit.along > 1e-3 && hit.along < 1 - 1e-3;
@@ -663,10 +732,11 @@ export const bladeSection = (
         const i0 = Math.min(grid.rows - 2, Math.floor(hit.row));
         const a = hit.row - i0;
         const row = (i: number): [number, number] => {
-          const [o, n] = foil.shapeAt(foilFractionAt(alongAt, sw.path[i]!, foil.thickest.at));
+          const f = foils[i]!;
+          const [o, n] = f.shapeAt(foilFractionAt(alongAt, sw.path[i]!, f.thickest.at));
           return [
-            o * sw.scale[i]! + m * foil.outsideShare,
-            n * sw.scale[i]! - m * (1 - foil.outsideShare),
+            o * sw.scale[i]! + m * f.outsideShare,
+            n * sw.scale[i]! - m * (1 - f.outsideShare),
           ];
         };
         const [o0, n0] = row(i0);

@@ -253,25 +253,32 @@ describe('.fin.json versions', () => {
     expect((JSON.parse(writeFinJson(d)) as Record<string, unknown>).version).toBe(3);
   });
 
-  it('keeps a moved tip line and thickness path through a save', () => {
+  it('keeps a moved tip line, the tip foil and the thickness path through a save', () => {
+    const base = defaultFinDesign('side', 'left');
     const d = {
-      ...defaultFinDesign('side', 'left'),
+      ...base,
       tipLine: { start: 0.42, end: 0.61 },
-      thicknessPath: [0.3, 0.35, 0.4] as const,
+      tipSection: nacaSection('2410'),
+      thicknessMid: 0.35,
     };
     const back = readFinJson(writeFinJson(d)).design;
     expect(back.tipLine).toEqual({ start: 0.42, end: 0.61 });
-    expect(back.thicknessPath).toEqual([0.3, 0.35, 0.4]);
+    expect(back.thicknessMid).toBe(0.35);
+    expectSameSpline(d.tipSection.outside, back.tipSection!.outside);
+    const none = readFinJson(writeFinJson(base)).design;
+    expect('tipSection' in none).toBe(false);
+    expect('thicknessMid' in none).toBe(false);
   });
 
-  it('rejects a damaged tip line or thickness path', () => {
+  it('rejects a damaged tip line, tip foil or thickness path', () => {
     const doc = JSON.parse(writeFinJson(defaultFinDesign('side', 'left')));
     expect(() => readFinJson(JSON.stringify({ ...doc, tipLine: { start: 0.4 } }))).toThrow(
       /tip line/,
     );
-    expect(() => readFinJson(JSON.stringify({ ...doc, thicknessPath: [0.3, 0.4] }))).toThrow(
+    expect(() => readFinJson(JSON.stringify({ ...doc, thicknessMid: 'x' }))).toThrow(
       /thickness path/,
     );
+    expect(() => readFinJson(JSON.stringify({ ...doc, tipSection: { outside: [] } }))).toThrow();
   });
 
   it('reads a version 1 file as a fin with no slices', () => {

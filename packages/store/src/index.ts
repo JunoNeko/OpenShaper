@@ -63,6 +63,8 @@ export {
   setTipLineEnd,
   resetThicknessPath,
   resetTipLine,
+  setFoilThickest,
+  TIP_FOIL,
   withFinCurve,
   withFoil,
   type FinCurve,

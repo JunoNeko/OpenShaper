@@ -8,19 +8,18 @@
 import {
   finReadouts,
   outlineFractionNear,
-  prepareBlade,
   sweepAlongNear,
   sweepGrid,
   sweepPointOn,
   sweepSectionLine,
   sweepTipEdge,
   thicknessPathAt,
+  thicknessPathOf,
   type FinDesign,
-  type FinThicknessPath,
   type Vec2,
 } from '@openshaper/kernel';
 import type { FinCurveMarker } from '@openshaper/render2d';
-import type { FinState } from '@openshaper/store';
+import { TIP_FOIL, type FinState } from '@openshaper/store';
 import type { StoreApi } from 'zustand/vanilla';
 
 export const SWEEP_LINE = 'rgba(34,197,94,0.95)';
@@ -40,12 +39,6 @@ export interface SweepOverlay {
   readonly sliceIntoTip: boolean;
   readonly markers: readonly FinCurveMarker[];
 }
-
-/** The thickness path's three points as the design has them, or the foil's own. */
-export const thicknessPathOf = (d: FinDesign): FinThicknessPath => {
-  const at = prepareBlade(d).thickestAt;
-  return d.thicknessPath ?? [at, at, at];
-};
 
 export const sweepOverlay = (d: FinDesign): SweepOverlay => {
   const g = sweepGrid(d);
@@ -102,4 +95,33 @@ export const sweepMarkerHandlers = (store: StoreApi<FinState>) => {
     },
     onMarkerDragEnd: () => s().endEdit(),
   };
+};
+
+/** How close (px) a click must come to a sweep line to pick it. */
+const PICK_PX = 8;
+
+const distToPolyline = (p: Vec2, pts: readonly Vec2[]): number => {
+  let best = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+    best = Math.min(best, Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy));
+  }
+  return best;
+};
+
+/**
+ * The sweep line a click at `at` picks, as a foil index (0 the base, TIP_FOIL the tip),
+ * or null for neither: the nearer, within a few pixels.
+ */
+export const pickSweepLine = (o: SweepOverlay, at: Vec2, unitsPerPx: number): number | null => {
+  const base = distToPolyline(at, o.base);
+  const tip = distToPolyline(at, o.tip);
+  const reach = PICK_PX * unitsPerPx;
+  if (Math.min(base, tip) > reach) return null;
+  return tip < base ? TIP_FOIL : 0;
 };

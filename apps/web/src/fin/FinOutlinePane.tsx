@@ -19,7 +19,7 @@ import {
   type Spline,
 } from '@openshaper/kernel';
 import { FinCurveEditor, boundsOf, sampleSpline, type Viewport } from '@openshaper/render2d';
-import type { FinState } from '@openshaper/store';
+import { TIP_FOIL, type FinState } from '@openshaper/store';
 import { memo, useCallback, useMemo } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
 import type { LengthUnit } from '../format';
@@ -29,6 +29,7 @@ import {
   PATH_COLOR,
   SWEEP_BAND,
   SWEEP_LINE,
+  pickSweepLine,
   sweepMarkerHandlers,
   sweepOverlay,
 } from './sweep-overlay';
@@ -154,15 +155,21 @@ export const FinOutlinePane = memo(function FinOutlinePane({
           ctx.fillStyle = SLICE_COLOR.replace('0.9)', '0.18)');
           ctx.fill();
         }
-        // The sweep's start and end: a soft band under a thin line.
+        // The sweep's start and end: thin lines; the one whose foil is being edited
+        // glows. Click either to edit its foil.
         ctx.lineCap = 'round';
-        for (const line of [sweep.base, sweep.tip]) {
+        for (const [foil, line] of [
+          [0, sweep.base],
+          [TIP_FOIL, sweep.tip],
+        ] as const) {
           path(line);
-          ctx.strokeStyle = SWEEP_BAND;
-          ctx.lineWidth = 10;
-          ctx.stroke();
+          if (activeFoil === foil) {
+            ctx.strokeStyle = SWEEP_BAND;
+            ctx.lineWidth = 10;
+            ctx.stroke();
+          }
           ctx.strokeStyle = SWEEP_LINE;
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = activeFoil === foil ? 2 : 1.25;
           ctx.stroke();
         }
         // The thickness path.
@@ -190,7 +197,15 @@ export const FinOutlinePane = memo(function FinOutlinePane({
         ctx.restore();
       }
     },
-    [design, tab, tabLen, kind, sweep],
+    [design, tab, tabLen, kind, sweep, activeFoil],
+  );
+
+  const onBackgroundClick = useCallback(
+    (at: { x: number; y: number }, unitsPerPx: number) => {
+      const foil = sweep && pickSweepLine(sweep, at, unitsPerPx);
+      if (foil !== null && foil !== undefined) store.getState().setActiveFoil(foil);
+    },
+    [sweep, store],
   );
 
   const handlers = useMemo(() => curveEditorHandlers(store), [store]);
@@ -207,6 +222,7 @@ export const FinOutlinePane = memo(function FinOutlinePane({
       onViewport={onViewport}
       guides={guides}
       markers={sweep?.markers}
+      onBackgroundClick={onBackgroundClick}
       {...markerHandlers}
       {...guideHandlers}
       {...handlers}

@@ -101,17 +101,17 @@ describe('the outside / inside split', () => {
     screen.getByLabelText('Inside share of the thickness (%)') as HTMLInputElement;
 
   it('shows for an asymmetric side fin, and not for a symmetric one', () => {
-    const { unmount } = render(<FinSectionPane store={finStore} />);
+    const { unmount } = render(<FinSectionPane store={finStore} units={lengthUnitByKey('mm')} />);
     expect(outside().value).toBe('100'); // the starting side fin is flat inside
     expect(inside().value).toBe('0');
     unmount();
     act(() => finStore.getState().setInsideFace('symmetric'));
-    render(<FinSectionPane store={finStore} />);
+    render(<FinSectionPane store={finStore} units={lengthUnitByKey('mm')} />);
     expect(screen.queryByLabelText('Outside share of the thickness (%)')).toBeNull();
   });
 
   it('fills in the other box as you type, and builds the foil on Enter, as one undo step', () => {
-    render(<FinSectionPane store={finStore} />);
+    render(<FinSectionPane store={finStore} units={lengthUnitByKey('mm')} />);
     const before = finStore.getState().past.length;
     fireEvent.change(outside(), { target: { value: '70' } });
     expect(inside().value).toBe('30');
@@ -128,7 +128,7 @@ describe('the outside / inside split', () => {
   });
 
   it('stops at 51 / 49, leaving an even split to Symmetric, and ignores what isn’t a percentage', () => {
-    render(<FinSectionPane store={finStore} />);
+    render(<FinSectionPane store={finStore} units={lengthUnitByKey('mm')} />);
     for (const [box, value] of [
       [outside, '50'],
       [outside, '30'],
@@ -203,7 +203,7 @@ describe('dragging in the panes', () => {
   });
 
   it('drags the outside face of the foil', () => {
-    render(<FinSectionPane store={finStore} />);
+    render(<FinSectionPane store={finStore} units={lengthUnitByKey('mm')} />);
     const canvas = screen.getByRole('img', { name: 'Foil section' });
     const before = design().section.outside.knots[1]!.end;
     const at = grab(canvas, 'outside', 1);

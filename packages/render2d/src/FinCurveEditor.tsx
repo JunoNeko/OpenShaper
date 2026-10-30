@@ -111,6 +111,11 @@ export interface FinCurveEditorProps {
   /** Where the pointer has dragged the marker to, in data space. */
   onMarkerDrag?: (id: string, to: Vec2) => void;
   onMarkerDragEnd?: () => void;
+  /**
+   * A click (press and release without dragging) on nothing else: where, in data space,
+   * and how many data units a screen pixel is, for the app's own picking.
+   */
+  onBackgroundClick?: (at: Vec2, unitsPerPx: number) => void;
   /** Reports the view whenever it changes (tests, overlays). */
   onViewport?: (vp: Viewport) => void;
   /** A fixed grid spacing (data units); the grid fits the zoom if unset. */
@@ -122,7 +127,7 @@ export interface FinCurveEditorProps {
 
 type Drag =
   | { kind: 'handle'; pick: FinCurvePick; grabbed: Vec2; pointerAt: Vec2; id: number }
-  | { kind: 'pan'; last: ScreenPoint; id: number }
+  | { kind: 'pan'; last: ScreenPoint; start: ScreenPoint; id: number }
   | { kind: 'guide'; guide: FinCurveGuide; id: number }
   | { kind: 'marker'; marker: string; grabbed: Vec2; pointerAt: Vec2; id: number };
 
@@ -155,6 +160,7 @@ export function FinCurveEditor({
   onMarkerDragStart,
   onMarkerDrag,
   onMarkerDragEnd,
+  onBackgroundClick,
 }: FinCurveEditorProps) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -294,7 +300,7 @@ export function FinCurveEditor({
         onGuideDragStart?.(guide.id);
         return;
       }
-      drag.current = { kind: 'pan', last: p, id: e.pointerId };
+      drag.current = { kind: 'pan', last: p, start: p, id: e.pointerId };
       // A shift-click that misses keeps the selection, so a slip doesn't lose it.
       if (!e.shiftKey) onSelect?.(null);
     }
@@ -334,6 +340,12 @@ export function FinCurveEditor({
     if (d.kind === 'handle') onDragEnd?.();
     if (d.kind === 'guide') onGuideDragEnd?.();
     if (d.kind === 'marker') onMarkerDragEnd?.();
+    if (d.kind === 'pan' && vp) {
+      const p = local(e);
+      if (Math.hypot(p.x - d.start.x, p.y - d.start.y) < 4) {
+        onBackgroundClick?.(fromView(screenToWorld(vp, p), yScale), 1 / vp.scale);
+      }
+    }
   };
 
   const onDoubleClick = (e: MouseEvent<HTMLCanvasElement>) => {

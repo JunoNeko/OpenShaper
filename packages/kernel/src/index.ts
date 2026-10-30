@@ -63,3 +63,4 @@ export {
   flatFace,
 } from './fin-design/fin-defaults';
 export * from './fin-design/swept-loft';
+export { yAtX } from './fin-design/curve-shape';
