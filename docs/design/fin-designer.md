@@ -341,7 +341,7 @@ relaxed (over-relaxed Gauss–Seidel, stopped at the last pass with no folded ce
 corner in a side fades within a few sections. The root foil is laid along each section by
 length, its thickest point on the thickness path (three points, base, halfway and tip line,
 quadratic between), as thick there as the taper at that point's height; past the tip line
-it rounds off (elliptically) to the minimum at the tip edge. `bladeSection` reads this
+it rounds off (a parabola, level where it meets the sweep) to the minimum at the tip edge; cap rows blend from the tip line out to the tip edge itself, so the whole tip is reached. A slice acts within `FIN_SLICE_REACH` (15% of the depth) of its height. `bladeSection` reads this
 thickness field along the horizontal chord, so the mesh, STEP fit, analysis and panel fit
 are unchanged. Horizontal slice foils blend in around their height (`sliceWeight`: from the
 base to the first slice, held between slices, back to the sweep at the tip line); a slice's

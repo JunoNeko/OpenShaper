@@ -9,18 +9,28 @@ import type { BoardMesh } from '../tessellate';
 import { cosineStations } from './blade';
 import { vec2 } from '../vec2';
 import {
+  FIN_SLICE_REACH,
   bladeSection,
+  chordAt,
   moveFoilThickest,
   prepareBlade,
   sectionThickest,
   sliceWeight,
+  thicknessAt,
   thicknessPathOf,
   tipLineEta,
 } from './blade';
 import { defaultFinDesign, defaultKeel, defaultSingleFin, defaultTwinFin } from './fin-defaults';
 import type { FinDesign, FinTwist } from './fin-design';
 import { finMesh } from './fin-mesh';
-import { defaultTipLine, outlineAtFraction, sweepFrame, sweepGrid, tipLineOf } from './swept-loft';
+import {
+  defaultTipLine,
+  outlineAtFraction,
+  sweepFrame,
+  sweepGrid,
+  sweepTipEdge,
+  tipLineOf,
+} from './swept-loft';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -194,5 +204,41 @@ describe('the swept loft', () => {
     expect(sliceWeight(d, 0, tip)).toBe(0);
     expect(sliceWeight(d, d.slices[0]!.height, tip)).toBe(1);
     expect(sliceWeight(d, tip, tip)).toBe(0);
+  });
+
+  it.each(FINS)('thins to the minimum right round the tip’s edge, not square: %s', (_, make) => {
+    // Owner testing: straight rows across the tip left the outline's bulge beyond them as
+    // thick as the row nearest it, a square end in a cut through the tip.
+    const d = make();
+    const b = prepareBlade(d);
+    const f = sweepFrame(d);
+    const mid = { x: (f.tipStart.x + f.tipEnd.x) / 2, y: (f.tipStart.y + f.tipEnd.y) / 2 };
+    const edge = sweepTipEdge(d);
+    for (let k = 1; k < 10; k++) {
+      const e = edge[Math.round((k / 10) * (edge.length - 1))]!;
+      const len = Math.hypot(mid.x - e.x, mid.y - e.y);
+      if (!(len > 0.05)) continue;
+      // Half a millimetre in from the edge, toward the tip line's middle.
+      const q = { x: e.x + ((mid.x - e.x) * 0.05) / len, y: e.y + ((mid.y - e.y) * 0.05) / len };
+      if (!(q.y > 0 && q.y < b.depth)) continue;
+      const c = chordAt(b, q.y);
+      const u = (q.x - c.leading) / (c.trailing - c.leading);
+      if (!(u > 0 && u < 1)) continue;
+      const s = bladeSection(b, q.y, [u]);
+      const t = Math.abs(s.outside[0]!.y - s.inside[0]!.y);
+      expect(t).toBeLessThan(0.4 * thicknessAt(b, f.tipStart.y) + 2 * b.minThickness);
+    }
+  });
+
+  it('keeps a slice’s foil to around its height', () => {
+    const d = {
+      ...defaultFinDesign('side', 'left'),
+      slices: [{ height: 0.8, section: defaultFinDesign('centre').section }],
+    };
+    const tip = tipLineEta(prepareBlade(d));
+    expect(sliceWeight(d, 0.8, tip)).toBe(1);
+    expect(sliceWeight(d, 0.8 - FIN_SLICE_REACH, tip)).toBe(0);
+    expect(sliceWeight(d, 0.3, tip)).toBe(0); // a third of the way up: untouched
+    expect(sliceWeight(d, 0.8 - FIN_SLICE_REACH / 2, tip)).toBeCloseTo(0.5, 9);
   });
 });

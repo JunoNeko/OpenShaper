@@ -529,9 +529,9 @@ export const hasTwist = (d: FinDesign): boolean => d.slices.some((sl) => sl.twis
 
 /**
  * Cant and toe (deg) at height `eta` (fraction of the depth): the fin's own at the root,
- * each slice's with a twist at its height, easing from one to the next over the whole
- * span between them (`smoother`, so the bend and twist have no crease where they start
- * or end). Above the last, the blade keeps its cant and toe.
+ * each slice's with a twist from its height up, easing in over {@link FIN_SLICE_REACH}
+ * below it (less if the root or the slice below is nearer) with no crease where it
+ * starts or ends (`smoother`).
  */
 export const twistAt = (d: FinDesign, eta: number): { cant: number; toe: number } => {
   let from = { height: 0, cant: d.cant, toe: d.toe ?? 0 };
@@ -539,7 +539,8 @@ export const twistAt = (d: FinDesign, eta: number): { cant: number; toe: number 
     if (!sl.twist) continue;
     const to = { height: sl.height, cant: sl.twist.cant, toe: sl.twist.toe };
     if (eta < to.height) {
-      const w = smoother(Math.max(0, (eta - from.height) / (to.height - from.height)));
+      const start = Math.max(from.height, to.height - FIN_SLICE_REACH);
+      const w = smoother(Math.max(0, (eta - start) / (to.height - start)));
       return {
         cant: from.cant + (to.cant - from.cant) * w,
         toe: from.toe + (to.toe - from.toe) * w,
@@ -650,19 +651,39 @@ const sweptBlade = (b: PreparedBlade): SweptBlade => {
 };
 
 /**
- * How much the horizontal slice foils count at height `eta`, 0 to 1: none at the base,
- * rising to all of it at the first slice, all of it between slices, and back to none at
- * the tip line (or the tip, for a slice above the tip line). A slice reshapes the blade
- * around its height and hands back to the sweep at the base and the tip.
+ * How far a slice reaches either side of its height (fraction of the depth): its foil
+ * blends in over this below it and out over this above it, and its cant and toe ease in
+ * over this below it (owner testing: blended over the whole span from the base, a slice
+ * high up bent and reshaped the blade a third of the way up). Less where the base, the
+ * tip line or another slice is nearer.
+ */
+export const FIN_SLICE_REACH = 0.15;
+
+/**
+ * How much the horizontal slice foils count at height `eta`, 0 to 1: all of it at a
+ * slice, easing to none over {@link FIN_SLICE_REACH} either side, or to the base below
+ * and the tip line (the tip, for a slice above it) above when they are nearer. Between
+ * two slices close enough that their reaches meet, all of it.
  */
 export const sliceWeight = (d: FinDesign, eta: number, tipEta: number): number => {
-  if (d.slices.length === 0) return 0;
-  const first = d.slices[0]!.height;
-  const last = d.slices[d.slices.length - 1]!.height;
-  if (eta <= first) return smoother(Math.max(0, eta / first));
-  if (eta <= last) return 1;
-  const top = tipEta > last ? tipEta : 1;
-  return 1 - smoother(Math.min(1, (eta - last) / (top - last)));
+  const sl = d.slices;
+  if (sl.length === 0) return 0;
+  let k = -1; // the last slice at or below eta
+  while (k < sl.length - 1 && sl[k + 1]!.height <= eta) k++;
+  const lo = k >= 0 ? sl[k]!.height : null;
+  const hi = k < sl.length - 1 ? sl[k + 1]!.height : null;
+  if (lo !== null && hi !== null && hi - lo <= 2 * FIN_SLICE_REACH) return 1;
+  let w = 0;
+  if (lo !== null) {
+    const top = tipEta > lo ? tipEta : 1;
+    const reach = Math.min(FIN_SLICE_REACH, top - lo);
+    w = Math.max(w, reach > 0 ? 1 - smoother(Math.min(1, (eta - lo) / reach)) : 0);
+  }
+  if (hi !== null) {
+    const reach = Math.min(FIN_SLICE_REACH, hi);
+    w = Math.max(w, reach > 0 ? smoother(Math.max(0, 1 - (hi - eta) / reach)) : 1);
+  }
+  return w;
 };
 
 /** The horizontal slice foil at height `eta`: a slice's, or a blend of the two either side. */

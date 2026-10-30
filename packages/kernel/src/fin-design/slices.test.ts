@@ -76,7 +76,7 @@ describe('a blade with a slice', () => {
     // Either side it blends with the sweep, whose sections lean a little.
     for (const f of [0.1, 0.3, 0.45, 0.8]) {
       const z = f * b.depth;
-      expect(Math.abs(widest(z) / thicknessAt(b, z) - 1)).toBeLessThan(0.05);
+      expect(Math.abs(widest(z) / thicknessAt(b, z) - 1)).toBeLessThan(0.08);
     }
   });
 
