@@ -143,20 +143,27 @@ export default function DocsFinDesigner() {
         <p>
           The fin is foiled the way a foiler works it: the foil starts along the base and sweeps up
           the blade, turning as it goes, until it lies across the tip. The profile shows where it
-          starts and ends as two soft green lines, <strong>Foil sweep start (base)</strong> along
+          starts and ends as two thin green lines, <strong>Foil sweep start (base)</strong> along
           the root and <strong>Foil sweep end (tip)</strong> across the tip. In between, every
           section runs from the leading edge to the trailing edge, so each edge is foiled straight
-          across, hooked tips and raised rears included. The root foil is the one laid along every
-          section; above the tip line it rounds off to the thinnest at the tip edge.
+          across, hooked tips and raised rears included, and the foil blends from the base foil to
+          the tip foil. Above the tip line the tip foil rounds off to the thinnest at the tip edge.
         </p>
         <p>
+          Click either green line to edit its foil: it glows, and the foil view shows that foil with
+          its name, the tip foil turned level. The foil view&apos;s <strong>Base</strong> and{' '}
+          <strong>Tip</strong> tabs do the same. Until you change it, the tip foil is the base foil.
           Drag either green dot at the ends of the tip line along the outline to move where the
-          sweep ends: it starts where the outline begins to curve tightly into the tip. The dashed
-          orange line is the <strong>thickness path</strong>: where each section is thickest, from
-          the base to the tip line. Drag its three orange dots (at the base, halfway and at the tip
-          line) along their sections to move it; the foil keeps its shape either side of its
-          thickest point. How thick the fin is there still comes from the thickness curve, at the
-          height of that point.
+          sweep ends: it starts where the outline begins to curve tightly into the tip.
+        </p>
+        <p>
+          The dashed orange line is the <strong>thickness path</strong>: where each section is
+          thickest, from the base to the tip line. Its ends are the base and tip foils&apos;
+          thickest points, so the two always agree: drag the path&apos;s end dot in the profile and
+          that foil is reshaped to match; drag the orange <strong>thickest point</strong> dot in the
+          foil view (or reshape the foil) and the path follows. The middle dot moves only the path.
+          How thick the fin is there still comes from the thickness curve, at the height of that
+          point.
         </p>
         <p>
           On a raised rear the sweep starts along the underside too, so the underside keeps the
@@ -168,10 +175,13 @@ export default function DocsFinDesigner() {
         <p>
           The foil view shows the foil being edited true to scale: as thick for its chord as the
           thickness curve makes it there, the outside face above the chord line and the inside face
-          below. Scroll to zoom in on a thin foil. The root foil is the one the sweep carries up the
-          blade; a slice&apos;s foil is a horizontal one (see{' '}
+          below, its name at the top right. Scroll to zoom in on a thin foil. Its tabs pick the
+          foil: <strong>Base</strong> and <strong>Tip</strong>, the sweep&apos;s two (see{' '}
+          <a href="#sweep">The foil sweep</a>), then each horizontal slice foil by height (see{' '}
           <a href="#slices">Foil slices and twist</a>). Its size follows the outline and the taper;
-          this pane sets only its shape.
+          this pane sets only its shape. With a panel set in <a href="#settings">File settings</a>,
+          the panel&apos;s two faces are drawn level and true to scale either side of the foil,
+          green when the fin fits it and orange when not.
         </p>
         <Terms>
           <Term name="Asymmetric">

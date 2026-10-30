@@ -363,7 +363,7 @@ function SliceSelect({ units }: { units: LengthUnit }) {
       <span className="text-muted-foreground">Slice (twist)</span>
       <select
         className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-        value={activeFoil}
+        value={activeFoil > 0 ? activeFoil : 0}
         aria-label="Slice (twist)"
         onChange={(e) => finStore.getState().setActiveFoil(Number(e.target.value))}
       >
@@ -1097,7 +1097,12 @@ export function FinApp() {
             <FinSectionTools store={finStore} units={units} minThickness={settings.exportMin} />
           }
         >
-          <FinSectionPane store={finStore} frameKey={sizeKey('foil')} />
+          <FinSectionPane
+            store={finStore}
+            units={units}
+            frameKey={sizeKey('foil')}
+            minThickness={settings.exportMin}
+          />
         </ViewPane>
         <ViewPane
           view="taper"

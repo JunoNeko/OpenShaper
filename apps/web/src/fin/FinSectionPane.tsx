@@ -13,46 +13,82 @@ import {
   FIN_EXPORT_MIN_THICKNESS,
   chordAt,
   finReadouts,
-  foilAt,
-  prepareBlade,
-  thicknessAt,
   foilShare,
   knot,
   parseNaca4,
+  prepareBlade,
+  sectionThickest,
   splineFromKnots,
+  sweepGrid,
+  sweepPointOn,
+  sweepSectionLine,
+  thicknessAt,
+  thicknessPathOf,
   vec2,
+  yAtX,
   type FinDesign,
   type Spline,
 } from '@openshaper/kernel';
 import { FinCurveEditor, type FinCurveLayer } from '@openshaper/render2d';
-import { getFoil, type FinState } from '@openshaper/store';
+import { getFoil, TIP_FOIL, type FinState } from '@openshaper/store';
 import { Button, Tooltip } from '@openshaper/ui';
 import { memo, useCallback, useMemo, useState } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
 import { DegField } from '../components/fields';
 import { NumericInput } from '../components/numeric-input';
-import { fmtLen, type LengthUnit } from '../format';
+import { fmtLen, fmtThick, type LengthUnit } from '../format';
 import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { PointTools } from './PointTools';
 import { useFinState } from './use-fin';
-import { FitToPanel } from './panel-tools';
+import { FitToPanel, PANEL_FIT, PANEL_OVER } from './panel-tools';
+import { PATH_COLOR } from './sweep-overlay';
+import { usePanelFit } from './use-panel-fit';
+
+/**
+ * The real chord and thickness a foil is drawn for: the base foil along the sweep's base,
+ * the tip foil across the tip line (turned level in the foil view), a horizontal slice
+ * foil along the chord at its height. Thickness from the taper at its thickest point.
+ */
+export const foilSize = (d: FinDesign, foil: number): { chord: number; thickness: number } => {
+  const b = prepareBlade(d);
+  if (foil === 0 || foil === TIP_FOIL) {
+    const g = sweepGrid(d);
+    const row = foil === 0 ? 0 : g.tipRow;
+    const line = sweepSectionLine(g, row);
+    let chord = 0;
+    for (let i = 1; i < line.length; i++) {
+      chord += Math.hypot(line[i]!.x - line[i - 1]!.x, line[i]!.y - line[i - 1]!.y);
+    }
+    const path = thicknessPathOf(d);
+    const at = sweepPointOn(g, row, foil === 0 ? path[0] : path[2]);
+    return { chord, thickness: thicknessAt(b, Math.min(b.depth, Math.max(0, at.y))) };
+  }
+  const sl = d.slices[foil - 1];
+  const h = sl ? sl.height * b.depth : 0;
+  const { leading, trailing } = chordAt(b, Math.min(b.depth, h));
+  return { chord: Math.abs(leading - trailing), thickness: thicknessAt(b, h) };
+};
 
 /**
  * How much taller than its drawn shape the foil really is, to draw it true to scale
- * (owner request): the thickness the taper gives it over the chord it has, against the
- * shape's own thickness in chords. The root foil along the root; a horizontal slice
- * foil along the chord at its height. Kept within a quarter to four times.
+ * (owner request): its thickness over its chord (foilSize), against the shape's own
+ * thickness in chords. Kept within a quarter to four times.
  */
 export const foilTrueScale = (d: FinDesign, foil: number): number => {
-  const b = prepareBlade(d);
-  const sl = foil > 0 ? d.slices[foil - 1] : undefined;
-  const h = sl ? sl.height * b.depth : 0;
-  const { leading, trailing } = chordAt(b, Math.min(b.depth, h));
-  const chord = Math.abs(leading - trailing);
-  const shape = foilAt(d, sl ? sl.height : 0).thickest.thickness;
+  const sec = getFoil(d, foil);
+  const { chord, thickness } = foilSize(d, foil);
+  const shape = sec ? sectionThickest(sec).thickness : 0;
   if (!(chord > 0) || !(shape > 0)) return 1;
-  return Math.min(4, Math.max(0.25, thicknessAt(b, h) / chord / shape));
+  return Math.min(4, Math.max(0.25, thickness / chord / shape));
 };
+
+/** What the foil view is showing, as the profile names it. */
+export const foilTitle = (d: FinDesign, foil: number, units: LengthUnit): string =>
+  foil === 0
+    ? 'Foil sweep start (base)'
+    : foil === TIP_FOIL
+      ? 'Foil sweep end (tip)'
+      : `Horizontal slice foil · ${fmtLen((d.slices[foil - 1]?.height ?? 0) * finReadouts(d).depth, units)}`;
 
 /** Keep the chord line and a strip under it (for the labels) in view; the faces add the rest. */
 const SECTION_FRAME = { minX: 0, maxX: 1, minY: -0.12, maxY: 0.02 };
@@ -234,19 +270,24 @@ export const FinSectionTools = memo(function FinSectionTools({
 function FoilTabs({ store, units }: { store: StoreApi<FinState>; units: LengthUnit }) {
   const design = useFinState(store, (s) => s.design);
   const activeFoil = useFinState(store, (s) => s.activeFoil);
-  if (!design || design.slices.length === 0) return null;
+  if (!design) return null;
   const depth = finReadouts(design).depth;
-  const tabs = ['Root', ...design.slices.map((sl) => fmtLen(sl.height * depth, units))];
+  // The sweep's two foils, then each horizontal slice foil by height.
+  const tabs: [number, string][] = [
+    [0, 'Base'],
+    [TIP_FOIL, 'Tip'],
+    ...design.slices.map((sl, i): [number, string] => [i + 1, fmtLen(sl.height * depth, units)]),
+  ];
   return (
     <div className="flex gap-1" role="tablist" aria-label="Foil">
-      {tabs.map((label, i) => (
+      {tabs.map(([foil, label]) => (
         <Button
-          key={i}
+          key={foil}
           size="sm"
           role="tab"
-          aria-selected={activeFoil === i}
-          variant={activeFoil === i ? 'default' : 'outline'}
-          onClick={() => store.getState().setActiveFoil(i)}
+          aria-selected={activeFoil === foil}
+          variant={activeFoil === foil ? 'default' : 'outline'}
+          onClick={() => store.getState().setActiveFoil(foil)}
         >
           {label}
         </Button>
@@ -328,10 +369,15 @@ function SplitFields({ store, share }: { store: StoreApi<FinState>; share: numbe
 /** The section canvas. `frameKey` re-fits the view (the pane moving large or small). */
 export const FinSectionPane = memo(function FinSectionPane({
   store,
+  units,
   frameKey = '',
+  minThickness = FIN_EXPORT_MIN_THICKNESS.default,
 }: {
   store: StoreApi<FinState>;
+  units: LengthUnit;
   frameKey?: string;
+  /** The exports' minimum thickness (cm): the panel holds the fin as exported. */
+  minThickness?: number;
 }) {
   const design = useFinState(store, (s) => s.design);
   const selection = useFinState(store, (s) => s.selection);
@@ -365,12 +411,53 @@ export const FinSectionPane = memo(function FinSectionPane({
         ];
   }, [section]);
 
-  // Where the taper's thickness applies: this foil's thickest point.
-  const thickestAt = useMemo(() => {
-    if (!design) return null;
-    const height = activeFoil === 0 ? 0 : (design.slices[activeFoil - 1]?.height ?? 0);
-    return foilAt(design, height).thickest.at;
-  }, [design, activeFoil]);
+  // Where the taper's thickness applies: this foil's thickest point. On the base and tip
+  // foils it is the thickness path's end too: drag it (or the path) and both follow.
+  const thickestAt = useMemo(() => (section ? sectionThickest(section).at : null), [section]);
+  const markers = useMemo(
+    () =>
+      thickestAt === null
+        ? []
+        : [
+            {
+              id: 'thickest',
+              at: { x: thickestAt, y: 0 },
+              color: PATH_COLOR,
+              label: 'Thickest point',
+            },
+          ],
+    [thickestAt],
+  );
+  const markerHandlers = useMemo(
+    () => ({
+      onMarkerDragStart: () => store.getState().beginEdit('Move the thickest point'),
+      onMarkerDrag: (_id: string, to: { x: number }) =>
+        store.getState().setFoilThickest(store.getState().activeFoil, to.x),
+      onMarkerDragEnd: () => store.getState().endEdit(),
+    }),
+    [store],
+  );
+
+  // The panel's faces, level and true to scale, either side of the foil's middle at its
+  // thickest: green if the whole fin fits the panel, orange if not.
+  const fit = usePanelFit(store, minThickness);
+  const panelLines = useMemo(() => {
+    if (!design?.panel || !section || thickestAt === null) return null;
+    const { chord } = foilSize(design, activeFoil);
+    if (!(chord > 0)) return null;
+    const [o, i] = [
+      yAtX(section.outside, thickestAt),
+      section.inside ? yAtX(section.inside, thickestAt) : -yAtX(section.outside, thickestAt),
+    ];
+    const half = design.panel.thickness / 2 / chord / trueScale;
+    const mid = (o + i) / 2;
+    return {
+      lo: mid - half,
+      hi: mid + half,
+      fits: fit?.fits ?? true,
+      thickness: design.panel.thickness,
+    };
+  }, [design, section, thickestAt, activeFoil, trueScale, fit]);
 
   const drawUnder = useCallback(
     (
@@ -411,9 +498,27 @@ export const FinSectionPane = memo(function FinSectionPane({
       label('Leading edge', 0, 16, 'left');
       label('Trailing edge', 1, 16, 'right');
       if (thickestAt !== null) label('thickest', thickestAt, 32, 'center');
+      if (panelLines) {
+        ctx.strokeStyle = panelLines.fits ? PANEL_FIT : PANEL_OVER;
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([7, 5]);
+        for (const y of [panelLines.lo, panelLines.hi]) {
+          const a = toScreen({ x: -0.1, y });
+          const b = toScreen({ x: 1.1, y });
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        ctx.textAlign = 'right';
+        const top = toScreen({ x: 1, y: panelLines.hi });
+        ctx.fillText(`Panel ${fmtThick(panelLines.thickness, units)}`, top.x, top.y - 4);
+      }
       ctx.restore();
     },
-    [thickestAt],
+    [thickestAt, panelLines, units],
   );
 
   if (!design || !section) return null;
@@ -431,10 +536,13 @@ export const FinSectionPane = memo(function FinSectionPane({
         </span>
       )}
       <span
-        className="pointer-events-none absolute right-2 top-1 z-10 text-xs text-muted-foreground"
-        aria-hidden
+        className="pointer-events-none absolute right-2 top-1 z-10 flex flex-col items-end text-xs"
+        data-testid="foil-title"
       >
-        True scale · scroll to zoom
+        <span className="font-medium text-foreground">{foilTitle(design, activeFoil, units)}</span>
+        <span className="text-muted-foreground" aria-hidden>
+          True scale · scroll to zoom
+        </span>
       </span>
       <FinCurveEditor
         label="Foil section"
@@ -445,6 +553,8 @@ export const FinSectionPane = memo(function FinSectionPane({
         frameBounds={SECTION_FRAME}
         frameKey={`${design.position}-${activeFoil}-${frameKey}`}
         drawUnder={drawUnder}
+        markers={markers}
+        {...markerHandlers}
         {...handlers}
       />
     </div>

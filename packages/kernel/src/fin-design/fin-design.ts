@@ -167,7 +167,8 @@ export interface FinTipLine {
 /**
  * The thickness path (swept-loft.ts): where each sweep section is thickest, as a fraction
  * of the section's length from the leading edge, at the base, halfway up and at the tip
- * line, curving smoothly between.
+ * line, curving smoothly between. Its ends are the base and tip foils' own thickest
+ * points; only the middle is set on its own ({@link FinDesign.thicknessMid}).
  */
 export type FinThicknessPath = readonly [number, number, number];
 
@@ -226,8 +227,16 @@ export interface FinDesign {
   readonly taper: Spline;
   /** Where the foil sweep ends; absent for the default (swept-loft.ts, defaultTipLine). */
   readonly tipLine?: FinTipLine;
-  /** Where the sweep's sections are thickest; absent for the base foil's own thickest point. */
-  readonly thicknessPath?: FinThicknessPath;
+  /**
+   * The foil at the tip line (foil sweep end): the sweep blends from {@link section} at
+   * the base to this. Absent: the base foil all the way.
+   */
+  readonly tipSection?: FinSection;
+  /**
+   * Where the sweep's section halfway up is thickest (fraction along it); absent for
+   * halfway between the base and tip foils' thickest points.
+   */
+  readonly thicknessMid?: number;
   /** The panel it's cut from, if the user has set one (File settings). */
   readonly panel?: FinPanel;
 }

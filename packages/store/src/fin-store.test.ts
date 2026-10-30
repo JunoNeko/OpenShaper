@@ -7,7 +7,8 @@ import {
   FIN_SLICE_MIN_GAP,
   FIN_THICKNESS_PATH_LIMITS,
   defaultFinDesign,
-  prepareBlade,
+  sectionThickest,
+  thicknessPathOf,
   tipApexFraction,
   tipLineOf,
   finReadouts,
@@ -17,6 +18,7 @@ import {
   vec2,
   type FinDesign,
 } from '@openshaper/kernel';
+import { TIP_FOIL } from './fin-edits';
 import { createFinStore } from './fin-store';
 
 const storeWith = (d: FinDesign = defaultFinDesign('side', 'right')) => {
@@ -601,14 +603,37 @@ describe('fin store: the foil sweep', () => {
     expect(design(s).tipLine).toBeUndefined();
   });
 
-  it('moves the thickness path within its limits, and resets it', () => {
+  it('moves the thickness path: its ends reshape the base and tip foils, its middle is its own', () => {
     const s = storeWith();
+    // The base point is the base foil's thickest point: moving it reshapes that foil.
     expect(s.getState().setThicknessPath(0, 0.45)).toBe(true);
-    const at = prepareBlade(design(s)).thickestAt;
-    expect(design(s).thicknessPath).toEqual([0.45, at, at]);
-    s.getState().setThicknessPath(2, 0.99);
-    expect(design(s).thicknessPath![2]).toBe(FIN_THICKNESS_PATH_LIMITS.max);
+    expect(sectionThickest(design(s).section).at).toBeCloseTo(0.45, 2);
+    expect(design(s).tipSection).toBeUndefined(); // the tip foil follows the base until set
+    // The tip point reshapes the tip foil, which now stands on its own.
+    s.getState().setThicknessPath(2, 0.3);
+    expect(sectionThickest(design(s).tipSection!).at).toBeCloseTo(0.3, 2);
+    expect(sectionThickest(design(s).section).at).toBeCloseTo(0.45, 2);
+    // The middle is stored on its own, within its limits.
+    s.getState().setThicknessPath(1, 0.99);
+    expect(design(s).thicknessMid).toBe(FIN_THICKNESS_PATH_LIMITS.max);
+    expect(thicknessPathOf(design(s))[1]).toBe(FIN_THICKNESS_PATH_LIMITS.max);
     expect(s.getState().resetThicknessPath()).toBe(true);
-    expect(design(s).thicknessPath).toBeUndefined();
+    expect(design(s).thicknessMid).toBeUndefined();
+    // And the other way round: moving a foil's thickest point moves the path's end.
+    s.getState().setFoilThickest(TIP_FOIL, 0.4);
+    expect(thicknessPathOf(design(s))[2]).toBeCloseTo(0.4, 2);
+    expect(s.getState().past.at(-1)!.label).toBe('Move the thickest point');
+  });
+
+  it('edits the tip foil as its own foil', () => {
+    const s = storeWith();
+    const base = design(s).section;
+    s.getState().setActiveFoil(TIP_FOIL);
+    expect(s.getState().activeFoil).toBe(TIP_FOIL);
+    s.getState().applyNaca('2410');
+    expect(design(s).tipSection).toBeDefined();
+    expect(design(s).section).toBe(base); // the base foil is left as it was
+    s.getState().undo();
+    expect(design(s).tipSection).toBeUndefined();
   });
 });

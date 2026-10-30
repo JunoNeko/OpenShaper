@@ -43,6 +43,8 @@ import {
   newFin,
   moveSlice,
   resetThicknessPath,
+  setFoilThickest,
+  TIP_FOIL,
   resetTipLine,
   setThicknessPath,
   setTipLineEnd,
@@ -196,8 +198,10 @@ export interface FinState {
    * its section. Wrap a drag in beginEdit / endEdit.
    */
   setThicknessPath: (index: 0 | 1 | 2, fraction: number) => boolean;
-  /** The thickness path back to the foil's own thickest point. */
+  /** The thickness path's middle back to halfway between its ends. */
   resetThicknessPath: () => boolean;
+  /** Reshape foil `foil` so it is thickest at `fraction` of its chord. Wrap a drag in beginEdit / endEdit. */
+  setFoilThickest: (foil: number, fraction: number) => boolean;
   /** Arrow buttons: move the fin along the tab (cm, + toward the nose). */
   nudgeFore: (dx: number) => boolean;
   /** Arrow buttons: slide the blade across the tab (cm, + outboard). */
@@ -212,7 +216,8 @@ export interface FinState {
 const MAX_HISTORY = 200;
 
 /** The active foil, or the root if an undo took its slice away. */
-const validFoil = (d: FinDesign, foil: number): number => (foil <= d.slices.length ? foil : 0);
+const validFoil = (d: FinDesign, foil: number): number =>
+  foil === TIP_FOIL || (foil >= 0 && foil <= d.slices.length) ? foil : 0;
 
 /** Keep a selection only while the point it names still exists. */
 const validSelection = (
@@ -589,6 +594,10 @@ export const createFinStore = (): StoreApi<FinState> =>
         return (
           !!d && commitChecked(setThicknessPath(d, index, fraction), 'Move the thickness path')
         );
+      },
+      setFoilThickest: (foil, fraction) => {
+        const d = get().design;
+        return !!d && commitChecked(setFoilThickest(d, foil, fraction), 'Move the thickest point');
       },
       resetThicknessPath: () => {
         const d = get().design;

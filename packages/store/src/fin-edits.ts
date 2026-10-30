@@ -16,6 +16,9 @@ import {
   FIN_SLICE_MIN_GAP,
   FIN_THICKNESS_PATH_LIMITS,
   chordAt,
+  moveFoilThickest,
+  sectionThickest,
+  tipFoilOf,
   tipApexFraction,
   tipLineOf,
   defaultCanard,
@@ -53,20 +56,26 @@ import { setKnotContinuous } from './edits';
 export type FinCurve = 'outline' | 'outside' | 'inside' | 'taper';
 
 /**
- * Which foil the section curves (`outside`, `inside`) mean: 0 the root foil, k the k-th
- * slice ({@link FinDesign.slices}, 1-based here so the root needs no special case).
+ * Which foil the section curves (`outside`, `inside`) mean: 0 the root foil (foil sweep
+ * start), {@link TIP_FOIL} the tip foil (foil sweep end), k the k-th horizontal slice
+ * ({@link FinDesign.slices}, 1-based here so the root needs no special case).
  */
 export type FinFoilIndex = number;
 
+/** The tip foil's index: where the foil sweep ends (FinDesign.tipSection). */
+export const TIP_FOIL = -1;
+
 /** The foil `foil` names, or null if there is no such slice. */
 export const getFoil = (d: FinDesign, foil: FinFoilIndex = 0): FinSection | null =>
-  foil === 0 ? d.section : (d.slices[foil - 1]?.section ?? null);
+  foil === 0 ? d.section : foil === TIP_FOIL ? tipFoilOf(d) : (d.slices[foil - 1]?.section ?? null);
 
 /** The design with foil `foil` replaced. */
 export const withFoil = (d: FinDesign, foil: FinFoilIndex, sec: FinSection): FinDesign =>
   foil === 0
     ? { ...d, section: sec }
-    : { ...d, slices: d.slices.map((sl, i) => (i === foil - 1 ? { ...sl, section: sec } : sl)) };
+    : foil === TIP_FOIL
+      ? { ...d, tipSection: sec }
+      : { ...d, slices: d.slices.map((sl, i) => (i === foil - 1 ? { ...sl, section: sec } : sl)) };
 
 export const getFinCurve = (d: FinDesign, c: FinCurve, foil: FinFoilIndex = 0): Spline | null => {
   switch (c) {
@@ -499,24 +508,36 @@ export const resetTipLine = (d: FinDesign): FinDesign => {
 };
 
 /**
- * Point `index` of the thickness path (0 at the base, 1 halfway, 2 at the tip line)
- * moved to `fraction` of its section, within FIN_THICKNESS_PATH_LIMITS.
+ * Foil `foil` reshaped so it is thickest at `fraction` of its chord (kernel
+ * moveFoilThickest). The base and tip foils' thickest points are the thickness path's
+ * ends, so this moves the path too.
+ */
+export const setFoilThickest = (d: FinDesign, foil: FinFoilIndex, fraction: number): FinDesign => {
+  const sec = getFoil(d, foil);
+  if (!sec || !Number.isFinite(fraction)) return d;
+  const { min, max } = FIN_THICKNESS_PATH_LIMITS;
+  const to = Math.min(max, Math.max(min, fraction));
+  if (Math.abs(sectionThickest(sec).at - to) < 5e-4) return d;
+  return withFoil(d, foil, moveFoilThickest(sec, to));
+};
+
+/**
+ * Point `index` of the thickness path moved to `fraction` of its section: its ends
+ * (0 the base, 2 the tip line) are the base and tip foils' thickest points, so those
+ * foils are reshaped; the middle (1) is set on its own, within FIN_THICKNESS_PATH_LIMITS.
  */
 export const setThicknessPath = (d: FinDesign, index: 0 | 1 | 2, fraction: number): FinDesign => {
   if (!Number.isFinite(fraction)) return d;
-  const at = prepareBlade(d).thickestAt;
-  const now: [number, number, number] = d.thicknessPath ? [...d.thicknessPath] : [at, at, at];
+  if (index !== 1) return setFoilThickest(d, index === 0 ? 0 : TIP_FOIL, fraction);
   const { min, max } = FIN_THICKNESS_PATH_LIMITS;
   const f = Math.round(Math.min(max, Math.max(min, fraction)) * 1e4) / 1e4;
-  if (now[index] === f) return d;
-  now[index] = f;
-  return { ...d, thicknessPath: now };
+  return d.thicknessMid === f ? d : { ...d, thicknessMid: f };
 };
 
-/** The thickness path back to the base foil's own thickest point all the way up. */
+/** The thickness path's middle back to halfway between its ends. */
 export const resetThicknessPath = (d: FinDesign): FinDesign => {
-  if (!d.thicknessPath) return d;
-  const { thicknessPath: _old, ...rest } = d;
+  if (d.thicknessMid === undefined) return d;
+  const { thicknessMid: _old, ...rest } = d;
   void _old;
   return rest;
 };

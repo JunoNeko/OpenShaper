@@ -6,12 +6,13 @@ import {
   sweepGrid,
   sweepPointOn,
   thicknessAt,
+  thicknessPathOf,
   tipLineOf,
 } from '@openshaper/kernel';
-import { createFinStore } from '@openshaper/store';
+import { createFinStore, TIP_FOIL } from '@openshaper/store';
 import { describe, expect, it } from 'vitest';
-import { foilTrueScale } from './FinSectionPane';
-import { sweepMarkerHandlers, sweepOverlay, thicknessPathOf } from './sweep-overlay';
+import { foilSize, foilTrueScale } from './FinSectionPane';
+import { pickSweepLine, sweepMarkerHandlers, sweepOverlay } from './sweep-overlay';
 
 describe('the foil sweep over the profile', () => {
   it('draws the base, the tip line and the thickness path between them, with handles', () => {
@@ -72,5 +73,26 @@ describe('the foil view, true to scale', () => {
     // The drawn shape, stretched by the scale, has the root's real thickness over chord.
     const k = foilTrueScale(d, 0);
     expect(k * b.shapeThickness).toBeCloseTo(thicknessAt(b, 0) / (leading - trailing), 9);
+  });
+});
+
+describe('picking the sweep lines in the profile', () => {
+  it('picks the base or the tip line near a click, nothing between', () => {
+    const o = sweepOverlay(defaultFinDesign('side', 'left'));
+    const px = 0.01; // cm per pixel
+    const mid = (pts: readonly { x: number; y: number }[]) => pts[Math.floor(pts.length / 2)]!;
+    expect(pickSweepLine(o, { x: mid(o.base).x, y: mid(o.base).y + 0.03 }, px)).toBe(0);
+    expect(pickSweepLine(o, mid(o.tip), px)).toBe(TIP_FOIL);
+    expect(pickSweepLine(o, { x: mid(o.base).x, y: 3 }, px)).toBeNull();
+  });
+
+  it('draws the tip foil true to scale across the tip line', () => {
+    const d = defaultFinDesign('side', 'left');
+    const tip = foilSize(d, TIP_FOIL);
+    const base = foilSize(d, 0);
+    // A short tip line, thinner than the root.
+    expect(tip.chord).toBeLessThan(base.chord / 3);
+    expect(tip.thickness).toBeLessThan(base.thickness);
+    expect(foilTrueScale(d, TIP_FOIL)).toBeGreaterThan(0);
   });
 });

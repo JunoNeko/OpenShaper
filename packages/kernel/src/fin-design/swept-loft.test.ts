@@ -8,7 +8,15 @@ import { knot } from '../knot';
 import type { BoardMesh } from '../tessellate';
 import { cosineStations } from './blade';
 import { vec2 } from '../vec2';
-import { bladeSection, prepareBlade, sliceWeight, tipLineEta } from './blade';
+import {
+  bladeSection,
+  moveFoilThickest,
+  prepareBlade,
+  sectionThickest,
+  sliceWeight,
+  thicknessPathOf,
+  tipLineEta,
+} from './blade';
 import { defaultFinDesign, defaultKeel, defaultSingleFin, defaultTwinFin } from './fin-defaults';
 import type { FinDesign, FinTwist } from './fin-design';
 import { finMesh } from './fin-mesh';
@@ -146,8 +154,29 @@ describe('the swept loft', () => {
       const w = s.outside.map((p, j) => p.y - s.inside[j]!.y);
       return s.stations[w.indexOf(Math.max(...w))]!;
     };
-    expect(thickestAt({ ...d, thicknessPath: [0.45, 0.4, 0.4] })).toBeCloseTo(0.45, 2);
-    expect(thickestAt({ ...d, thicknessPath: [0.25, 0.4, 0.4] })).toBeCloseTo(0.25, 2);
+    // The path's base end is the base foil's thickest point: reshape the foil, it moves.
+    expect(thickestAt({ ...d, section: moveFoilThickest(d.section, 0.45) })).toBeCloseTo(0.45, 2);
+    expect(thickestAt({ ...d, section: moveFoilThickest(d.section, 0.25) })).toBeCloseTo(0.25, 2);
+  });
+
+  it('blends from the base foil to the tip foil, each section thickest on the path', () => {
+    const d = defaultFinDesign('side', 'left');
+    const tip = moveFoilThickest(d.section, 0.25);
+    const path = thicknessPathOf({ ...d, tipSection: tip });
+    expect(path[0]).toBeCloseTo(sectionThickest(d.section).at, 9);
+    expect(path[2]).toBeCloseTo(0.25, 2);
+    expect(path[1]).toBeCloseTo((path[0] + path[2]) / 2, 9);
+    expect(thicknessPathOf({ ...d, tipSection: tip, thicknessMid: 0.5 })[1]).toBe(0.5);
+  });
+
+  it('moves a foil’s thickest point, keeping its ends', () => {
+    const d = defaultFinDesign('side', 'left');
+    for (const to of [0.2, 0.3, 0.5, 0.6]) {
+      const m = moveFoilThickest(d.section, to);
+      expect(sectionThickest(m).at).toBeCloseTo(to, 2);
+      expect(m.outside.knots[0]!.end).toEqual(d.section.outside.knots[0]!.end);
+      expect(m.outside.knots.at(-1)!.end).toEqual(d.section.outside.knots.at(-1)!.end);
+    }
   });
 
   it('rounds the tip off past the tip line, to the minimum at the edge', () => {

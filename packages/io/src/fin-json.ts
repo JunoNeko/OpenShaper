@@ -26,8 +26,9 @@
  *   3 — the swept loft (swept-loft.ts): the same fields, read the same way, but the
  *       blade is foiled along sections swept from the base to a tip line, so an older
  *       file comes out a little differently. Adds `tipLine` (`{ start, end }`, fractions
- *       of the outline's length) and `thicknessPath` (three fractions of a section),
- *       absent for the defaults. A slice's `transition` is gone: read and dropped.
+ *       of the outline's length), `tipSection` (the tip foil, as `section`) and
+ *       `thicknessMid` (where the sweep's middle section is thickest), absent for the
+ *       defaults. A slice's `transition` is gone: read and dropped.
  *       Always written as version 3.
  */
 import {
@@ -83,8 +84,10 @@ export interface FinJson {
   toe?: number;
   /** Version 3: where the foil sweep ends (fractions of the outline). Absent: the default. */
   tipLine?: { start: number; end: number };
-  /** Version 3: where the sweep's sections are thickest (fractions). Absent: the foil's own. */
-  thicknessPath?: [number, number, number];
+  /** Version 3: the foil at the tip line. Absent: the base foil (`section`) all the way. */
+  tipSection?: SectionJson;
+  /** Version 3: where the sweep's middle section is thickest. Absent: halfway along the path. */
+  thicknessMid?: number;
   /** Version 2: the panel it's cut from (thickness in mm, angle and tilt in deg). Absent: none. */
   panel?: { thickness: number; angle: number; tilt?: number };
   /** Version 2: the tab. Absent means the position's default Futures tab. */
@@ -142,7 +145,8 @@ export const writeFinJson = (d: FinDesign, metadata?: Record<string, unknown>): 
     ...(d.base !== defaultFinBase(d.position) ? { base: d.base } : {}),
     ...(d.toe ? { toe: d.toe } : {}),
     ...(d.tipLine ? { tipLine: { start: d.tipLine.start, end: d.tipLine.end } } : {}),
-    ...(d.thicknessPath ? { thicknessPath: [...d.thicknessPath] } : {}),
+    ...(d.tipSection ? { tipSection: sectionToJson(d.tipSection) } : {}),
+    ...(d.thicknessMid !== undefined ? { thicknessMid: d.thicknessMid } : {}),
     ...(d.panel
       ? {
           panel: {
@@ -204,10 +208,10 @@ const assertStructure = (doc: Record<string, unknown>): void => {
   if (tip !== undefined && (!isObject(tip) || !isNumber(tip.start) || !isNumber(tip.end))) {
     fail('Malformed fin: the tip line needs a start and an end');
   }
-  const path = doc.thicknessPath;
-  if (path !== undefined && (!Array.isArray(path) || path.length !== 3 || !path.every(isNumber))) {
-    fail('Malformed fin: the thickness path needs three numbers');
+  if (doc.thicknessMid !== undefined && !isNumber(doc.thicknessMid)) {
+    fail('Malformed fin: the thickness path needs a number for its middle');
   }
+  if (doc.tipSection !== undefined) assertSection(doc.tipSection, 'tip section');
   if (doc.base !== undefined && !(FIN_BASES as readonly unknown[]).includes(doc.base)) {
     fail('Malformed fin: unknown base');
   }
@@ -272,15 +276,8 @@ export const readFinJson = (
     })),
     taper: scaleSpline(splineFromJson(doc.taper), same, toCm),
     ...(doc.tipLine ? { tipLine: { start: doc.tipLine.start, end: doc.tipLine.end } } : {}),
-    ...(doc.thicknessPath
-      ? {
-          thicknessPath: [
-            doc.thicknessPath[0],
-            doc.thicknessPath[1],
-            doc.thicknessPath[2],
-          ] as const,
-        }
-      : {}),
+    ...(doc.tipSection ? { tipSection: sectionFromJson(doc.tipSection) } : {}),
+    ...(doc.thicknessMid !== undefined ? { thicknessMid: doc.thicknessMid } : {}),
     ...(doc.panel
       ? {
           panel: {
