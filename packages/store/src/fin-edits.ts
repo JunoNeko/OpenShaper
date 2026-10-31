@@ -15,7 +15,11 @@ import {
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
   FIN_THICKNESS_PATH_LIMITS,
+  FIN_TIP_SCALE_LIMITS,
+  bladeFoilAt,
   chordAt,
+  sliceFreeSpan,
+  sliceTipPoint,
   moveFoilThickest,
   sectionThickest,
   tipFoilOf,
@@ -110,10 +114,11 @@ export const withFinCurve = (
 };
 
 /**
- * A new foil slice at `height` (fraction of the depth), starting as a copy of the foil
- * at or below it, so the blade doesn't change until it is edited. Its height is clamped
- * into the room between its neighbours ({@link FIN_SLICE_MIN_GAP}); null if there is none.
- * Returns the design and the new slice's foil index.
+ * A new foil slice at `height` (fraction of the depth), starting as the fin's own
+ * section there (kernel bladeFoilAt), so the blade doesn't change until it is edited
+ * (owner's rules). Its height is clamped into the room between its neighbours
+ * ({@link FIN_SLICE_MIN_GAP}); null if there is none. Returns the design and the new
+ * slice's foil index.
  */
 export const addSlice = (
   d: FinDesign,
@@ -125,8 +130,8 @@ export const addSlice = (
   const hi = (pos === d.slices.length ? 1 : d.slices[pos]!.height) - FIN_SLICE_MIN_GAP;
   if (hi < lo) return null;
   const h = Math.min(hi, Math.max(lo, height));
-  const below = pos === 0 ? d.section : d.slices[pos - 1]!.section;
-  const slices = [...d.slices.slice(0, pos), { height: h, section: below }, ...d.slices.slice(pos)];
+  const section = bladeFoilAt(d, h);
+  const slices = [...d.slices.slice(0, pos), { height: h, section }, ...d.slices.slice(pos)];
   return { design: { ...d, slices }, foil: pos + 1 };
 };
 
@@ -540,4 +545,82 @@ export const resetThicknessPath = (d: FinDesign): FinDesign => {
   const { thicknessMid: _old, ...rest } = d;
   void _old;
   return rest;
+};
+
+/**
+ * The part of slice `foil`'s chord (fractions, 0 the leading edge) that is the tip's:
+ * past where its chord crosses the tip line (kernel sliceFreeSpan). Locked: the tip is
+ * the tip foil's, scaled from the slice's point on the tip line ({@link setSliceTipPoint}).
+ * Null for the base and tip foils, and a slice whose chord doesn't reach the tip line.
+ */
+export const lockedSpan = (d: FinDesign, foil: FinFoilIndex): readonly [number, number] | null => {
+  const sl = foil >= 1 ? d.slices[foil - 1] : undefined;
+  if (!sl) return null;
+  const [a, c] = sliceFreeSpan(d, sl.height);
+  if (a <= 0 && c >= 1) return null;
+  return a > 0 ? [0, a] : [c, 1];
+};
+
+/** How far clear of the locked span (chord fractions) a slice's own points stay. */
+const LOCK_CLEARANCE = 0.005;
+
+/** Whether `x` (chord fraction) is in `span`: a point there is the tip's, not the slice's. */
+export const inLockedSpan = (span: readonly [number, number] | null, x: number): boolean =>
+  !!span && x >= span[0] - 1e-6 && x <= span[1] + 1e-6;
+
+/** `p` moved along the chord to stay clear of `span`, on the slice's side of it. */
+export const clearOfLockedSpan = (span: readonly [number, number] | null, p: Vec2): Vec2 => {
+  if (!span) return p;
+  if (span[0] <= 0 && span[1] < 1) return vec2(Math.max(p.x, span[1] + LOCK_CLEARANCE), p.y);
+  if (span[1] >= 1 && span[0] > 0) return vec2(Math.min(p.x, span[0] - LOCK_CLEARANCE), p.y);
+  return p;
+};
+
+/**
+ * Slice `foil`'s point on the tip line dragged to `outside` (its outside face, in the
+ * slice foil's units): the tip foil's thickness scaled to match (FinDesign.tipScale),
+ * within FIN_TIP_SCALE_LIMITS, and each slice's locked tip part scaled with it so its
+ * foil view keeps showing the fin.
+ */
+export const setSliceTipPoint = (d: FinDesign, foil: FinFoilIndex, outside: number): FinDesign => {
+  const sl = d.slices[foil - 1];
+  const tp = sliceTipPoint(d, foil - 1);
+  if (!sl || !tp || !Number.isFinite(outside)) return d;
+  // A symmetric slice's inside face mirrors its outside.
+  const inside = (o: number) => (sl.section.inside ? tp.inside : -o);
+  const was = tp.outside - inside(tp.outside);
+  const now = outside - inside(outside);
+  if (!(was > 0) || !(now > 0)) return d;
+  const old = d.tipScale ?? 1;
+  const { min, max } = FIN_TIP_SCALE_LIMITS;
+  const scale = Math.round(Math.min(max, Math.max(min, (old * now) / was)) * 1e4) / 1e4;
+  if (scale === old) return d;
+  const k = scale / old;
+  const scaled = (span: readonly [number, number] | null, s: Spline): Spline => {
+    if (!span) return s;
+    const y = (p: Vec2) => vec2(p.x, p.y * k);
+    return splineFromKnots(
+      s.knots.map((kn) =>
+        inLockedSpan(span, kn.end.x)
+          ? knot(y(kn.end), y(kn.tangentToPrev), y(kn.tangentToNext), kn.continuous)
+          : kn,
+      ),
+    );
+  };
+  const next = { ...d, tipScale: scale };
+  return {
+    ...next,
+    slices: d.slices.map((s, i) => {
+      const span = lockedSpan(d, i + 1);
+      if (!span) return s;
+      const sec = s.section;
+      return {
+        ...s,
+        section: {
+          outside: scaled(span, sec.outside),
+          inside: sec.inside ? scaled(span, sec.inside) : null,
+        },
+      };
+    }),
+  };
 };

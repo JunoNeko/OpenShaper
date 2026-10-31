@@ -70,9 +70,13 @@ describe('a blade with a slice', () => {
       const s = bladeSection(b, h, cosineStations(2000));
       return Math.max(...s.outside.map((p, j) => p.y - s.inside[j]!.y));
     };
-    // At the slice, all horizontal slice foil, scaled to the taper.
+    // At the slice, all horizontal slice foil, as thick as the fin without it there: the
+    // thickness curve's, to within the sweep's sections leaning a little.
     const h = 0.6 * b.depth;
-    expect(widest(h)).toBeCloseTo(thicknessAt(b, h), 4);
+    const plain = prepareBlade({ ...d, slices: [] });
+    const s = bladeSection(plain, h, cosineStations(2000));
+    expect(widest(h)).toBeCloseTo(Math.max(...s.outside.map((p, j) => p.y - s.inside[j]!.y)), 4);
+    expect(Math.abs(widest(h) / thicknessAt(b, h) - 1)).toBeLessThan(0.01);
     // Either side it blends with the sweep, whose sections lean a little.
     for (const f of [0.1, 0.3, 0.45, 0.8]) {
       const z = f * b.depth;
@@ -89,7 +93,8 @@ describe('a blade with a slice', () => {
 
   it('takes the slice’s shape at the slice: symmetric about the centre plane', () => {
     const s = bladeSection(b, 0.6 * b.depth);
-    s.outside.forEach((p, j) => expect(s.inside[j]!.y).toBeCloseTo(-p.y, 12));
+    // To a few microns: the fin the slice is measured against is read off a table.
+    s.outside.forEach((p, j) => expect(s.inside[j]!.y).toBeCloseTo(-p.y, 3));
   });
 });
 

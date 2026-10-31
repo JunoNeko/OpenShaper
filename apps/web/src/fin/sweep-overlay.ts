@@ -35,7 +35,7 @@ export interface SweepOverlay {
   readonly path: readonly Vec2[];
   /** The tip past the tip line: its edge round from one end of the tip line to the other. */
   readonly cap: readonly Vec2[];
-  /** Whether a horizontal slice sits above the lower end of the tip line: it blends into the tip. */
+  /** Whether a horizontal slice sits above the lower end of the tip line: past it, the chord is the tip's. */
   readonly sliceIntoTip: boolean;
   readonly markers: readonly FinCurveMarker[];
 }

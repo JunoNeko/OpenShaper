@@ -10,11 +10,14 @@ import { cosineStations } from './blade';
 import { vec2 } from '../vec2';
 import {
   FIN_SLICE_REACH,
+  bladeFoilAt,
   bladeSection,
   chordAt,
   moveFoilThickest,
   prepareBlade,
   sectionThickest,
+  sliceFreeSpan,
+  sliceTipPoint,
   sliceWeight,
   thicknessAt,
   thicknessPathOf,
@@ -48,6 +51,7 @@ const ownerFin = (name: string): FinDesign => {
     section: Section;
     slices?: { height: number; section: Section; twist?: FinTwist }[];
     taper: Row[];
+    tipLine?: { start: number; end: number };
   };
   const spline = (rows: Row[], fx: number, fy: number) =>
     splineFromKnots(
@@ -75,6 +79,7 @@ const ownerFin = (name: string): FinDesign => {
       ...(sl.twist ? { twist: sl.twist } : {}),
     })),
     taper: spline(file.taper, 1, 0.1),
+    ...(file.tipLine ? { tipLine: file.tipLine } : {}),
   };
 };
 
@@ -88,6 +93,7 @@ const FINS: [string, () => FinDesign][] = [
   ['hatchet', () => ownerFin('hatchet_hook.fin.json')],
   ['A4C', () => ownerFin('a4c_raised_rear.fin.json')],
   ['corner test fin', () => ownerFin('corner_creases.fin.json')],
+  ['steep tip line', () => ownerFin('steep_tip_line.fin.json')],
 ];
 
 const volume = ({ positions: P, indices: I }: BoardMesh): number => {
@@ -198,13 +204,13 @@ describe('the swept loft', () => {
     expect(widest).toBeLessThan(2 * b.minThickness);
   });
 
-  it('hands the slices back to the sweep at the base and the tip line', () => {
+  it('hands the slices back to the sweep at the base and over their reach above', () => {
     const d = ownerFin('a4c_raised_rear.fin.json');
     const b = prepareBlade(d);
-    const tip = tipLineEta(b);
-    expect(sliceWeight(d, 0, tip)).toBe(0);
-    expect(sliceWeight(d, d.slices[0]!.height, tip)).toBe(1);
-    expect(sliceWeight(d, tip, tip)).toBe(0);
+    expect(sliceWeight(d, 0)).toBe(0);
+    expect(sliceWeight(d, d.slices[0]!.height)).toBe(1);
+    expect(sliceWeight(d, Math.min(1, d.slices.at(-1)!.height + FIN_SLICE_REACH))).toBe(0);
+    expect(tipLineEta(b)).toBeGreaterThan(0.5);
   });
 
   it.each(FINS)('thins to the minimum right round the tip’s edge, not square: %s', (_, make) => {
@@ -237,35 +243,10 @@ describe('the swept loft', () => {
       ...defaultFinDesign('side', 'left'),
       slices: [{ height: 0.8, section: defaultFinDesign('centre').section }],
     };
-    const tip = tipLineEta(prepareBlade(d));
-    expect(sliceWeight(d, 0.8, tip)).toBe(1);
-    expect(sliceWeight(d, 0.8 - FIN_SLICE_REACH, tip)).toBe(0);
-    expect(sliceWeight(d, 0.3, tip)).toBe(0); // a third of the way up: untouched
-    expect(sliceWeight(d, 0.8 - FIN_SLICE_REACH / 2, tip)).toBeCloseTo(0.5, 9);
-  });
-
-  it('lays a slice near the tip thickest where the sweep is, the right way round', () => {
-    // Owner testing: a slice added at 92.8 mm, not edited, put its thickest point at its
-    // own 35% of the chord, toward the leading edge, where the sweep is thickest toward
-    // the hook: the tip's foil turned round.
-    const plain = defaultFinDesign('side', 'left');
-    const sliced = { ...plain, slices: [{ height: 0.928, section: plain.section }] };
-    const thickestU = (d: FinDesign, h: number): number => {
-      const b = prepareBlade(d);
-      const st = Array.from({ length: 201 }, (_, i) => i / 200);
-      const s = bladeSection(b, h, st);
-      let k = 0;
-      st.forEach((_, i) => {
-        const t = s.outside[i]!.y - s.inside[i]!.y;
-        if (t > s.outside[k]!.y - s.inside[k]!.y) k = i;
-      });
-      return st[k]!;
-    };
-    const depth = prepareBlade(plain).depth;
-    const h = 0.928 * depth;
-    // The sweep is thickest well back toward the hook here; the slice now agrees.
-    expect(thickestU(plain, h)).toBeGreaterThan(0.5);
-    expect(Math.abs(thickestU(sliced, h) - thickestU(plain, h))).toBeLessThan(0.1);
+    expect(sliceWeight(d, 0.8)).toBe(1);
+    expect(sliceWeight(d, 0.8 - FIN_SLICE_REACH)).toBe(0);
+    expect(sliceWeight(d, 0.3)).toBe(0); // a third of the way up: untouched
+    expect(sliceWeight(d, 0.8 - FIN_SLICE_REACH / 2)).toBeCloseTo(0.5, 9);
   });
 
   it.each(FINS)(
@@ -329,5 +310,105 @@ describe('the swept loft', () => {
         else if (fell) expect(ts[i]!).toBeLessThanOrEqual(ts[i - 1]! + 3e-3);
       }
     }
+  });
+});
+
+describe('slices and the tip line (owner’s rules)', () => {
+  /** The owner's side fin with a long, steep tip line, and its slice at 90.2 mm. */
+  const steep = ownerFin('steep_tip_line.fin.json');
+  const plain = { ...steep, slices: [] };
+  const eta = steep.slices[0]!.height;
+  const derived = { ...plain, slices: [{ height: eta, section: bladeFoilAt(plain, eta) }] };
+  const width = (s: ReturnType<typeof bladeSection>, j: number) =>
+    Math.abs(s.outside[j]!.y - s.inside[j]!.y);
+
+  it('meets the sweep level along the tip line: no crease in a cut across it', () => {
+    // Owner testing: cuts across a long, steep tip line turned a corner there (the tip
+    // was lofted from its high point, at an angle to the sweep along most of the line).
+    // Now the slope eases round: at 0.2 mm steps it turns by no more than 0.008 mm a
+    // step (it turned by up to 0.024).
+    const b = prepareBlade(plain);
+    const g = sweepGrid(plain);
+    const s = sweepPointOn(g, g.tipRow, 0);
+    const e = sweepPointOn(g, g.tipRow, 1);
+    for (const h of [8.7, 9.02, 9.2, 9.4, 9.6]) {
+      const x = s.x + ((e.x - s.x) * (h - s.y)) / (e.y - s.y);
+      const c = chordAt(b, h);
+      const dir = Math.sign(c.trailing - c.leading);
+      const us = Array.from(
+        { length: 9 },
+        (_, k) => (x + dir * (k - 3) * 0.02 - c.leading) / (c.trailing - c.leading),
+      );
+      const sec = bladeSection(b, h, us);
+      const t = us.map((_, j) => width(sec, j));
+      for (let j = 1; j < t.length - 1; j++) {
+        expect(Math.abs(t[j + 1]! - 2 * t[j]! + t[j - 1]!)).toBeLessThan(8e-4);
+      }
+    }
+  });
+
+  it('changes nothing for a slice made from the fin', () => {
+    const a = prepareBlade(derived);
+    const c = prepareBlade(plain);
+    const st = cosineStations(80);
+    for (let h = 7.4; h < 9.95; h += 0.15) {
+      const p = bladeSection(a, h, st);
+      const q = bladeSection(c, h, st);
+      // To 0.05 mm: the slice is fitted with a few points, to a percent of its thickness.
+      st.forEach((_, j) => expect(Math.abs(width(p, j) - width(q, j))).toBeLessThan(5e-3));
+    }
+  });
+
+  it('leaves the tip past the tip line to the tip foil', () => {
+    // The owner's slice is the base foil, not the fin's section: it reshapes the chord up
+    // to the tip line, and not past it.
+    const h = eta * prepareBlade(plain).depth;
+    const [from, to] = sliceFreeSpan(steep, eta);
+    expect(from).toBe(0);
+    expect(to).toBeGreaterThan(0.8);
+    expect(to).toBeLessThan(1);
+    const st = Array.from({ length: 41 }, (_, k) => to + ((1 - to) * k) / 40);
+    const p = bladeSection(prepareBlade(steep), h, st);
+    const q = bladeSection(prepareBlade(plain), h, st);
+    st.forEach((_, j) => expect(width(p, j)).toBeCloseTo(width(q, j), 9));
+    // Short of it, the slice counts.
+    const mid = bladeSection(prepareBlade(steep), h, [to / 5]);
+    const was = bladeSection(prepareBlade(plain), h, [to / 5]);
+    expect(Math.abs(width(mid, 0) - width(was, 0))).toBeGreaterThan(5e-3);
+  });
+
+  it('hands the slice back to the sweep over its reach above, not at the tip line', () => {
+    // Owner testing: eased out by the tip line's height, 1.7 mm above it, a kink. Now
+    // over its reach, or to the top where that is nearer: here 9.8 mm.
+    const reach = Math.min(FIN_SLICE_REACH, 1 - eta);
+    expect(reach).toBeGreaterThan(0.09);
+    expect(sliceWeight(steep, eta + reach / 2)).toBeCloseTo(0.5, 9);
+  });
+
+  it('shows where a slice crosses the tip line, as thick as the fin there', () => {
+    const tp = sliceTipPoint(derived, 0)!;
+    expect(tp.at).toBeCloseTo(sliceFreeSpan(derived, eta)[1], 12);
+    expect(tp.outside).toBeGreaterThan(0);
+    expect(tp.inside).toBe(0); // the flat inside face
+    expect(sliceTipPoint(defaultFinDesign('side', 'left'), 0)).toBeNull();
+  });
+
+  it('scales the tip foil’s thickness, easing in from the base', () => {
+    const b = prepareBlade(plain);
+    const g = sweepGrid(plain);
+    const high = sweepPointOn(g, g.tipRow, thicknessPathOf(plain)[2]);
+    const m = b.minThickness;
+    const at = (d: FinDesign, x: number, z: number) => {
+      const bb = prepareBlade(d);
+      const c = chordAt(bb, z);
+      return width(bladeSection(bb, z, [(x - c.leading) / (c.trailing - c.leading)]), 0);
+    };
+    const half = { ...plain, tipScale: 0.5 };
+    // At the tip foil's high point: half as thick, less the minimum.
+    expect(at(half, high.x, high.y) - m).toBeCloseTo((at(plain, high.x, high.y) - m) / 2, 3);
+    // At the root, as it was.
+    const root = bladeSection(prepareBlade(half), 0);
+    const was = bladeSection(b, 0);
+    root.outside.forEach((_, j) => expect(width(root, j)).toBeCloseTo(width(was, j), 12));
   });
 });

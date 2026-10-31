@@ -448,6 +448,11 @@ export interface SweepHit {
   readonly row: number;
   /** Fraction of the section's length from the leading edge. */
   readonly along: number;
+  /**
+   * Fractional column, 0 the leading edge to 1 the trailing edge: over the tip cap, the
+   * fraction along the tip line (and the tip edge) the point's row runs out from.
+   */
+  readonly col: number;
 }
 
 /**
@@ -531,7 +536,11 @@ export const locateOnSweep = (
   const alongAt =
     (1 - a) * ((1 - b) * al[best]! + b * al[best + 1]!) +
     a * ((1 - b) * al[best + cols]! + b * al[best + cols + 1]!);
-  return { row: Math.floor(best / cols) + a, along: alongAt };
+  return {
+    row: Math.floor(best / cols) + a,
+    along: alongAt,
+    col: ((best % cols) + b) / (cols - 1),
+  };
 };
 
 /** The thickness path's fraction along the section at `t` (0 the base, 1 the tip line). */
