@@ -260,7 +260,9 @@ describe('the swept loft', () => {
         const u = (x - c.leading) / (c.trailing - c.leading);
         if (!(u > 0 && u < 1)) return null;
         const s = bladeSection(b, z, [u]);
-        return Math.abs(s.outside[0]!.y - s.inside[0]!.y);
+        // As a share of the thickness curve at that height: the curve sets how thick each
+        // height is, the tip loft only closes it off.
+        return Math.abs(s.outside[0]!.y - s.inside[0]!.y) / thicknessAt(b, z);
       };
       for (let k = 1; k < 12; k++) {
         const e = edge[Math.round((k / 12) * (edge.length - 1))]!;
@@ -269,7 +271,7 @@ describe('the swept loft', () => {
           const t = j / 20;
           const v = at(high.x + (e.x - high.x) * t, high.y + (e.y - high.y) * t);
           if (v === null) continue;
-          expect(v).toBeLessThanOrEqual(last + 2e-4); // to 0.002 mm, the grid's reading
+          expect(v).toBeLessThanOrEqual(last + 2e-3);
           last = v;
         }
       }

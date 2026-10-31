@@ -600,14 +600,13 @@ export const toeTurn = (
   };
 };
 
-/** What the swept loft needs per blade: its grid, and each section's thickness and path. */
+/** What the swept loft needs per blade: its grid, each section's foil and path, and the tip. */
 interface SweptBlade {
   readonly grid: SweepGrid;
   /** Per grid row: the foil laid along it, blended from the base foil to the tip foil. */
   readonly foils: readonly Foil[];
-  /** Per grid row: where the section is thickest (fraction along it), and how much (cm). */
+  /** Per grid row: where the section is thickest (fraction along it). */
   readonly path: Float64Array;
-  readonly scale: Float64Array;
   /** The tip line's height, as a fraction of the depth: where slices hand back to the sweep. */
   readonly tipEta: number;
   /** The tip past the tip line (tipFaces). */
@@ -624,8 +623,6 @@ interface SweptBlade {
      */
     readonly edgeAngle: Float64Array | null;
     readonly foil: Foil;
-    /** The tip foil's scale (cm of thickness per unit of its shape). */
-    readonly scale: number;
   };
 }
 
@@ -641,18 +638,9 @@ const sweptBlade = (b: PreparedBlade): SweptBlade => {
     blendFoils(d.section, tip, smoother(Math.min(1, i / grid.tipRow))),
   );
   const path = new Float64Array(grid.rows);
-  const scale = new Float64Array(grid.rows);
-  const m = b.minThickness;
-  const taper = (z: number) => thicknessAt(b, Math.min(b.depth, Math.max(0, z)));
   const way = thicknessPathOf(d);
   // Up to the tip line; past it the tip is built on its own (tipFaces).
-  for (let i = 0; i <= grid.tipRow; i++) {
-    path[i] = thicknessPathAt(way, i / grid.tipRow);
-    // As thick as the taper says at the height of the section's thickest point.
-    const thickness = taper(sweepPointOn(grid, i, path[i]!).y);
-    const most = foils[i]!.thickest.thickness;
-    scale[i] = most > 0 ? Math.max(0, thickness - m) / most : 0;
-  }
+  for (let i = 0; i <= grid.tipRow; i++) path[i] = thicknessPathAt(way, i / grid.tipRow);
   // The tip edge for finding where spokes land: every few samples is plenty (within
   // a few thousandths of a millimetre on a tip a few millimetres round).
   const fine = sweepTipEdge(d);
@@ -673,7 +661,6 @@ const sweptBlade = (b: PreparedBlade): SweptBlade => {
     grid,
     foils,
     path,
-    scale,
     tipEta: b.depth > 0 ? tipZ / b.depth : 1,
     tip: {
       high,
@@ -681,7 +668,6 @@ const sweptBlade = (b: PreparedBlade): SweptBlade => {
       edge,
       edgeFrac,
       foil: tipFoil,
-      scale: scale[grid.tipRow]!,
     },
   };
   sweptCache.set(b, swept);
@@ -786,12 +772,21 @@ const TIP_NOSE_FROM = 0.2;
  * blade thins from the tip foil's full thickness to the minimum at the edge: toward the
  * tip line's leading-edge end as the tip foil's front half does, toward its trailing-edge
  * end as its back half does, and round the middle of the tip along a quarter cosine,
- * level at the high point and rounding down to the edge. So the tip meets the tip foil
- * along the tip line, and only ever thins going out: no shoulder, no divot. Null for a
- * point no spoke reaches.
+ * level at the high point and rounding down to the edge. How thick it is at each height
+ * is the thickness curve's (`thickness`). So the tip meets the tip foil along the tip
+ * line, and only ever thins going out: no shoulder, no divot. Null for a point no spoke
+ * reaches.
  */
-const tipFaces = (sw: SweptBlade, m: number, x: number, z: number): [number, number] | null => {
-  const { high, edge, edgeFrac, foil, scale } = sw.tip;
+const tipFaces = (
+  sw: SweptBlade,
+  m: number,
+  x: number,
+  z: number,
+  thickness: number,
+): [number, number] | null => {
+  const { high, edge, edgeFrac, foil } = sw.tip;
+  const scale =
+    foil.thickest.thickness > 0 ? Math.max(0, thickness - m) / foil.thickest.thickness : 0;
   const dx = x - high.x;
   const dz = z - high.y;
   const dist = Math.hypot(dx, dz);
@@ -853,8 +848,10 @@ const tipFaces = (sw: SweptBlade, m: number, x: number, z: number): [number, num
   const [fo, fi] = foil.shapeAt(at * (1 - r));
   const [bo, bi] = foil.shapeAt(at + (1 - at) * r);
   const [ho, hi] = foil.shapeAt(at);
-  // Level at the high point, rounding down to the edge: a cosine rather than an ellipse,
-  // which meets the edge upright, more than a smooth surface (STEP) can follow cheaply.
+  // The thickness curve sets how thick each height is; this closes the tip off to the
+  // edge: level at the high point, rounding down. A cosine, which meets the edge at an
+  // angle a smooth surface (STEP) can follow; steeper there, the A4C's fit took twice as
+  // long.
   const round = Math.cos((Math.PI / 2) * r);
   const o = front * fo + back * bo + nose * ho * round;
   const i = front * fi + back * bi + nose * hi * round;
@@ -898,20 +895,23 @@ export const bladeSection = (
     {
       const x = leading + (trailing - leading) * u;
       const hit = locateOnSweep(grid, x, h, cells);
-      const cap = hit && hit.row > grid.tipRow ? tipFaces(sw, m, x, h) : null;
+      const cap = hit && hit.row > grid.tipRow ? tipFaces(sw, m, x, h, thickness) : null;
       if (cap) [out, ins] = cap;
       const onBase = (hit: SweepHit) => hit.row < 1 && hit.along > 1e-3 && hit.along < 1 - 1e-3;
       if (!cap && hit && (u > 0 && u < 1 ? true : onBase(hit))) {
         const alongAt = hit.along;
         const i0 = Math.min(grid.rows - 2, Math.floor(hit.row));
         const a = hit.row - i0;
+        // The foil's shape from the section, its thickness from the thickness curve at
+        // this height: so on the thickness path the blade is the curve's thickness, and
+        // a slanting section's upper end isn't carried up thicker than the curve allows
+        // there (owner testing: a fuller curve near the tip fattened the tip).
         const row = (i: number): [number, number] => {
           const f = foils[i]!;
+          const k =
+            f.thickest.thickness > 0 ? Math.max(0, thickness - m) / f.thickest.thickness : 0;
           const [o, n] = f.shapeAt(foilFractionAt(alongAt, sw.path[i]!, f.thickest.at));
-          return [
-            o * sw.scale[i]! + m * f.outsideShare,
-            n * sw.scale[i]! - m * (1 - f.outsideShare),
-          ];
+          return [o * k + m * f.outsideShare, n * k - m * (1 - f.outsideShare)];
         };
         const [o0, n0] = row(i0);
         const [o1, n1] = row(i0 + 1);

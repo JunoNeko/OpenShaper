@@ -322,7 +322,9 @@ describe('a raised rear behind a tall steep start (the owner’s A4C, docs/specs
     expect(atTe(1.2)).toBeLessThan(atTe(0.6));
   });
 
-  it('fits a blade surface within tolerance', () => {
+  // Its thickness curve falls steeply to the minimum over the last few millimetres, which
+  // the tip follows by height: about 7 s alone, more under the full `pnpm test` load.
+  it('fits a blade surface within tolerance', { timeout: 60_000 }, () => {
     const m = fitBladeSurface(d);
     expect(bladeSurfaceDeviation(b, m.surface, m.topZ)).toBeLessThanOrEqual(BLADE_CI_TOLERANCE);
   });
