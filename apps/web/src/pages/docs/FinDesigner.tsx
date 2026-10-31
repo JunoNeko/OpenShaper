@@ -147,7 +147,9 @@ export default function DocsFinDesigner() {
           the root and <strong>Foil sweep end (tip)</strong> across the tip. In between, every
           section runs from the leading edge to the trailing edge, so each edge is foiled straight
           across, hooked tips and raised rears included, and the foil blends from the base foil to
-          the tip foil. Above the tip line the tip foil rounds off to the thinnest at the tip edge.
+          the tip foil. Above the tip line the tip foil rounds off to the thinnest at the tip edge,
+          and close to that edge (even a little below the tip line, where it runs near it) the blade
+          thins steadily into it, about 7° all in, so the tip never ends in a shoulder.
         </p>
         <p>
           Click either green line to edit its foil: it glows, and the foil view shows that foil with
