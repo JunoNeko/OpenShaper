@@ -24,6 +24,7 @@ import {
   raisedRearDesign,
 } from '../test-support/fin-designs';
 import { FIN_MIN_THICKNESS, FIN_POSITIONS } from './fin-design';
+import { FIN_RAISED_REAR_MAX } from './raised-rear';
 import { defaultFinDesign, defaultKeel, defaultTwinFin } from './fin-defaults';
 import { finMesh } from './fin-mesh';
 import {
@@ -250,6 +251,25 @@ describe('a raised rear behind a steep start at the root (the owner’s twin fin
   it('fits a blade surface within tolerance', () => {
     const m = fitBladeSurface(d);
     expect(bladeSurfaceDeviation(b, m.surface, m.topZ)).toBeLessThanOrEqual(BLADE_CI_TOLERANCE);
+  });
+
+  it('isn’t found on a trailing edge that sweeps back gently high up', () => {
+    // Owner testing: a trailing edge that leaves the root steeply, bulges forward, then
+    // sweeps back gently a long way to a hooked tip read as an underside up to 80% of
+    // the depth, and the base ran up it: a section standing almost upright.
+    const outline = splineFromKnots([
+      knot(vec2(19, 0), vec2(19, 0), vec2(18.6, 6), false),
+      knot(vec2(-12, 20), vec2(5, 20.5), vec2(-15, 19.8), true),
+      knot(vec2(-15, 16), vec2(-15.5, 18.5), vec2(-12, 14.5), true),
+      knot(vec2(3, 9), vec2(-3, 11.5), vec2(6, 7.5), true),
+      knot(vec2(0, 0), vec2(2.6, 3), vec2(0, 0), false),
+    ]);
+    expect(findRaisedRear(outline)).toBeNull();
+    // The owners' raised rears are all well under the limit.
+    for (const d of [ownerFin('a4c_raised_rear.fin.json'), defaultKeel(), defaultTwinFin()]) {
+      const r = findRaisedRear(d.outline)!;
+      expect(r.cornerZ).toBeLessThan(FIN_RAISED_REAR_MAX * prepareBlade(d).depth);
+    }
   });
 
   it('still isn’t found where the trailing edge rises from the root for longer', () => {

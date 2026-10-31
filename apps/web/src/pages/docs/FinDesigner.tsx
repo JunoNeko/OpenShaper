@@ -404,7 +404,10 @@ export default function DocsFinDesigner() {
             rear. The dashed orange line behind the tab is the clearance it needs. The raised rear
             keeps the base&apos;s foil: its underside is as thick as the foil is there, thinning to
             the minimum where it turns up into the trailing edge. The outline may leave the base
-            steeply at first, as long as the underside then runs further back than that rise.
+            steeply at first, as long as the underside then runs further back than that rise. It
+            counts as a raised rear only if it turns up into the trailing edge within the lowest
+            quarter of the fin: higher up, a trailing edge sweeping gently back to a hooked tip is a
+            trailing edge.
           </Term>
           <Term name="Minimum thickness">
             Nowhere thinner than {mm(FIN_MIN_THICKNESS)} — edges and tip included — so the fin is
