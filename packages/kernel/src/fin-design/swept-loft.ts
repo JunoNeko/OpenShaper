@@ -312,14 +312,6 @@ const capPoint = (f: SweepFrame, v: number, u: number): Vec2 => {
   return vec2(t.x + (e.x - t.x) * v, t.y + (e.y - t.y) * v);
 };
 
-/**
- * The thickness factor over the tip cap: 1 at the tip line, level there so it joins the
- * sweep without a crease, curving down to 0 at the tip edge. A parabola (1 − v²), not an
- * ellipse: an ellipse falls away vertically at the edge, a blunt round nose that read as a
- * square end where the tip is shallow (owner testing).
- */
-export const capRounding = (v: number): number => Math.max(0, 1 - v * v);
-
 /** Sections from the base to the tip line, and over the tip cap; points across each. */
 export const SWEEP_ROWS = 96;
 export const CAP_ROWS = 24;
@@ -364,12 +356,6 @@ export interface SweepGrid {
   readonly tipRow: number;
   /** v over the tip cap for each row past the tip line (0 at and below it). */
   readonly capV: Float64Array;
-  /**
-   * How far each point is from the tip edge, going up its column of the grid (cm): a
-   * smooth measure of nearness to the edge, unlike the straight-line distance, which
-   * creases wherever the nearest point jumps (a corner in the outline).
-   */
-  readonly toTip: Float64Array;
 }
 
 const gridCache = new WeakMap<Spline, Map<string, SweepGrid>>();
@@ -451,14 +437,7 @@ export const sweepGrid = (d: FinDesign): SweepGrid => {
       alongs[k] = total > 0 ? alongs[k]! / total : j / SWEEP_COLUMNS;
     }
   }
-  const toTip = new Float64Array(rows * cols);
-  for (let i = rows - 2; i >= 0; i--) {
-    for (let j = 0; j < cols; j++) {
-      const k = i * cols + j;
-      toTip[k] = toTip[k + cols]! + Math.hypot(x[k + cols]! - x[k]!, z[k + cols]! - z[k]!);
-    }
-  }
-  const grid = { rows, cols, x, z, along: alongs, tipRow: SWEEP_ROWS, capV, toTip };
+  const grid = { rows, cols, x, z, along: alongs, tipRow: SWEEP_ROWS, capV };
   byLine.set(key, grid);
   return grid;
 };
@@ -469,8 +448,6 @@ export interface SweepHit {
   readonly row: number;
   /** Fraction of the section's length from the leading edge. */
   readonly along: number;
-  /** How far up its column from the tip edge (cm; see {@link SweepGrid.toTip}). */
-  readonly toTip: number;
 }
 
 /**
@@ -554,11 +531,7 @@ export const locateOnSweep = (
   const alongAt =
     (1 - a) * ((1 - b) * al[best]! + b * al[best + 1]!) +
     a * ((1 - b) * al[best + cols]! + b * al[best + cols + 1]!);
-  const tt = g.toTip;
-  const toTipAt =
-    (1 - a) * ((1 - b) * tt[best]! + b * tt[best + 1]!) +
-    a * ((1 - b) * tt[best + cols]! + b * tt[best + cols + 1]!);
-  return { row: Math.floor(best / cols) + a, along: alongAt, toTip: toTipAt };
+  return { row: Math.floor(best / cols) + a, along: alongAt };
 };
 
 /** The thickness path's fraction along the section at `t` (0 the base, 1 the tip line). */
