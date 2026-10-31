@@ -645,7 +645,13 @@ const sweptBlade = (b: PreparedBlade): SweptBlade => {
   }
   const tipBase = grid.tipRow * grid.cols;
   const tipZ = (grid.z[tipBase]! + grid.z[tipBase + grid.cols - 1]!) / 2;
-  const swept = { grid, foils, path, scale, tipEta: b.depth > 0 ? tipZ / b.depth : 1 };
+  const swept = {
+    grid,
+    foils,
+    path,
+    scale,
+    tipEta: b.depth > 0 ? tipZ / b.depth : 1,
+  };
   sweptCache.set(b, swept);
   return swept;
 };
@@ -712,6 +718,28 @@ export const sliceFoilAt = (d: FinDesign, eta: number): Foil | null => {
   };
 };
 
+/**
+ * How fast the blade may thicken going in from the tip edge (thickness per unit of
+ * distance up the sweep, both faces together): about 7° all in. Short of the tip line the sweep
+ * carries the taper's thickness right up to it, and where the rounded tip past it is
+ * only a few millimetres deep that thickness fell away in a shoulder at the edge, a
+ * bulge round the tip (owner testing). Within reach of the tip edge the blade is no
+ * thicker than this slope allows, blended in over {@link TIP_EDGE_BLEND}.
+ */
+export const FIN_TIP_EDGE_SLOPE = 0.12;
+
+/**
+ * How wide (cm of thickness) the blend between the sweep's thickness and the tip-edge
+ * slope is: where they differ by less, the join is rounded off.
+ */
+const TIP_EDGE_BLEND = 0.015;
+
+/** The smaller of a and b, rounded off over `w` so the join has no corner. */
+const smoothMin = (a: number, b: number, w: number): number => {
+  const h = Math.min(1, Math.max(0, 0.5 + (0.5 * (b - a)) / w));
+  return b + (a - b) * h - w * h * (1 - h);
+};
+
 /** The tip line's height as a fraction of the depth (see {@link sliceWeight}). */
 export const tipLineEta = (b: PreparedBlade): number => sweptBlade(b).tipEta;
 
@@ -739,14 +767,29 @@ export const bladeSection = (
     sliceFoil && sliceFoil.thickest.thickness > 0
       ? Math.max(0, thickness - m) / sliceFoil.thickest.thickness
       : 0;
+  // Near the tip edge, no thicker than FIN_TIP_EDGE_SLOPE allows: the faces drawn in
+  // toward the minimum together, keeping their shares of it.
+  const share = base.outsideShare;
+  const limitAtTip = (toTip: number | null, out: number, ins: number): [number, number] => {
+    const t = out - ins;
+    if (toTip === null || !(t > m)) return [out, ins];
+    const t2 = Math.max(m, smoothMin(t, m + FIN_TIP_EDGE_SLOPE * toTip, TIP_EDGE_BLEND));
+    if (t2 >= t) return [out, ins];
+    const r = (t2 - m) / (t - m);
+    const lo = -m * (1 - share);
+    const hi = m * share;
+    return [hi + (out - hi) * r, lo + (ins - lo) * r];
+  };
   const faces = (u: number): [number, number] => {
     // The sweep's: each section's foil, read where this point falls on it.
     // The edges are the minimum, except along the base: a raised rear's underside is the
     // base's foil cut off, as thick as the foil there.
     let out = m * base.outsideShare;
     let ins = -m * (1 - base.outsideShare);
+    let toTip: number | null = null;
     {
       const hit = locateOnSweep(grid, leading + (trailing - leading) * u, h, cells);
+      if (hit) toTip = hit.toTip;
       const onBase = (hit: SweepHit) => hit.row < 1 && hit.along > 1e-3 && hit.along < 1 - 1e-3;
       if (hit && (u > 0 && u < 1 ? true : onBase(hit))) {
         const alongAt = hit.along;
@@ -766,12 +809,12 @@ export const bladeSection = (
         ins = n0 + (n1 - n0) * a;
       }
     }
-    if (!sliceFoil) return [out, ins];
+    if (!sliceFoil) return limitAtTip(toTip, out, ins);
     // A horizontal slice foil: along the chord here, as the taper says.
     const [o, n] = sliceFoil.shapeAt(u);
     const sOut = o * sliceScale + m * sliceFoil.outsideShare;
     const sIns = n * sliceScale - m * (1 - sliceFoil.outsideShare);
-    return [out + (sOut - out) * weight, ins + (sIns - ins) * weight];
+    return limitAtTip(toTip, out + (sOut - out) * weight, ins + (sIns - ins) * weight);
   };
   const { outside: lamOut, inside: lamIn } = b.laminate;
   const lam = lamOut + lamIn;

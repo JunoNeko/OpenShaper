@@ -10,6 +10,7 @@ import { cosineStations } from './blade';
 import { vec2 } from '../vec2';
 import {
   FIN_SLICE_REACH,
+  FIN_TIP_EDGE_SLOPE,
   bladeSection,
   chordAt,
   moveFoilThickest,
@@ -241,4 +242,34 @@ describe('the swept loft', () => {
     expect(sliceWeight(d, 0.3, tip)).toBe(0); // a third of the way up: untouched
     expect(sliceWeight(d, 0.8 - FIN_SLICE_REACH / 2, tip)).toBeCloseTo(0.5, 9);
   });
+
+  it.each(FINS)(
+    'thins steadily into the tip, with no shoulder at the trailing edge: %s',
+    (_, make) => {
+      // Owner testing: the sweep carried the taper's thickness right up to a tip line a few
+      // millimetres from the edge, then dropped to the minimum in the last millimetre, a
+      // bulge round the tip. Near the tip a cut now thins at most FIN_TIP_EDGE_SLOPE (and a
+      // little for the blend) per unit going out to the trailing edge.
+      const d = make();
+      const b = prepareBlade(d);
+      const f = sweepFrame(d);
+      const low = Math.min(f.tipStart.y, f.tipEnd.y);
+      // Up to the tip line's upper end: above it a hooked tip's cut ends on the hook's
+      // upper edge, which is leading edge, a foil's round nose.
+      const high = Math.min(b.depth - 0.05, Math.max(f.tipStart.y, f.tipEnd.y));
+      for (let h = low; h <= high + 1e-9; h += (high - low) / 6) {
+        const c = chordAt(b, h);
+        const chord = Math.abs(c.leading - c.trailing);
+        const st = Array.from({ length: 41 }, (_, i) => 0.8 + (0.2 * i) / 40);
+        const s = bladeSection(b, h, st);
+        const t = st.map((_, i) => Math.abs(s.outside[i]!.y - s.inside[i]!.y));
+        for (let i = 1; i < t.length; i++) {
+          const drop = (t[i - 1]! - t[i]!) / (chord * (st[i]! - st[i - 1]!));
+          // The slope holds along the sweep; a level cut crosses it at a slant, so a little
+          // more. Without it the default fins dropped 0.8 and the hatchet 1.9 here.
+          expect(drop).toBeLessThan(2.5 * FIN_TIP_EDGE_SLOPE);
+        }
+      }
+    },
+  );
 });
