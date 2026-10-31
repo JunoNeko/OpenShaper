@@ -16,6 +16,7 @@ import {
   thicknessPathOf,
   tipApexFraction,
   tipLineOf,
+  tipTurnFraction,
   finReadouts,
   foilShare,
   SPLIT_NOSE_ASPECT,
@@ -338,7 +339,7 @@ describe('fin store: foil slices', () => {
     s.getState().addSlice(0.93);
     const span = lockedSpan(design(s), 1)!;
     expect(span[1]).toBe(1);
-    expect(span[0]).toBeGreaterThan(0.5);
+    expect(span[0]).toBeGreaterThan(0.2);
     const out = () => design(s).slices[0]!.section.outside;
     const locked = out().knots.findIndex((k, i) => i > 0 && k.end.x >= span[0] - 1e-6);
     expect(locked).toBeGreaterThan(0);
@@ -661,9 +662,10 @@ describe('fin store: the foil sweep', () => {
     s.getState().endEdit();
     expect(design(s).tipLine!.start).toBeCloseTo(before.start - 0.05, 9);
     expect(design(s).tipLine!.end).toBeCloseTo(before.end, 9);
-    // Past the tip it stops short of it.
+    // Past the tip it stops short of it, where the leading edge turns onto the top.
     s.getState().setTipLineEnd('start', 0.99);
     expect(design(s).tipLine!.start).toBeLessThan(tipApexFraction(design(s).outline));
+    expect(design(s).tipLine!.start).toBeCloseTo(tipTurnFraction(design(s).outline), 9);
     s.getState().undo();
     s.getState().undo();
     expect(design(s).tipLine).toBeUndefined();

@@ -314,12 +314,14 @@ describe('foil slices in the panes', () => {
   it('drags a slice line in the profile up the blade, picking its foil', () => {
     render(<FinOutlinePane store={finStore} units={lengthUnitByKey('mm')} />);
     const canvas = screen.getByRole('img', { name: 'Fin outline' });
-    // Find the line by probing down the middle of the pane.
+    // Find the line by probing down the pane, clear of where the thickness path crosses it.
     let hit: { clientX: number; clientY: number } | null = null;
-    for (let y = 0; y < pane.h && !hit; y += 2) {
-      fireEvent.pointerDown(canvas, { ...MOUSE, clientX: pane.w / 2, clientY: y });
-      if (finStore.getState().activeFoil === 1) hit = { clientX: pane.w / 2, clientY: y };
-      else fireEvent.pointerUp(canvas, { ...MOUSE, clientX: pane.w / 2, clientY: y });
+    for (const x of [pane.w / 2, pane.w * 0.3, pane.w * 0.7]) {
+      for (let y = 0; y < pane.h && !hit; y += 2) {
+        fireEvent.pointerDown(canvas, { ...MOUSE, clientX: x, clientY: y });
+        if (finStore.getState().activeFoil === 1) hit = { clientX: x, clientY: y };
+        else fireEvent.pointerUp(canvas, { ...MOUSE, clientX: x, clientY: y });
+      }
     }
     expect(hit).not.toBeNull();
     fireEvent.pointerMove(canvas, { ...MOUSE, clientX: hit!.clientX, clientY: hit!.clientY - 40 });

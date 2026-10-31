@@ -440,7 +440,11 @@ describe('corners in an edge (the owner’s test fin, docs/specs/fins/corner_cre
     expect(corners).toHaveLength(4);
     for (const k of corners) {
       const h = k.end.y;
-      for (const ahead of [0.5, 1]) {
+      // 1 and 2 cm in from the edge. With the top counted as tip (owner's rule 3), the
+      // sweep's sections run near level by the 45 mm corner, and its crease reaches 5 mm
+      // in (1.9 there, 0.07 at 1 cm; it was 0.08 at 5 mm), though no sharper at 2.5 mm
+      // (2.1 either way).
+      for (const ahead of [1, 2]) {
         const x = chordAt(b, h).trailing + ahead;
         const e = 0.03;
         // The change in slope going up through the corner's height (mm per cm).

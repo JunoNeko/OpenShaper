@@ -1003,27 +1003,21 @@ const sliceRef = (b: PreparedBlade, sw: SweptBlade, i: number): SliceRef | null 
 };
 
 /**
- * How much of a slice's free span, next to the tip line, it fades out over toward the tip
- * (sliceDiff). Pinned there by taking off its difference at the tip line instead, a
- * slice much thinner than the fin there (an old one, copied from the base foil) thickened
- * the chord to make up, or over a shorter stretch, rippled.
+ * How far from the tip line (a fraction of the depth: 5 mm on a 100 mm fin) the slices
+ * fade out toward it (slicesAt), so a slice meets the tip, which is the tip foil's,
+ * exactly. Squeezed into the part of each chord short of the tip line instead, a slice
+ * changed sharply up a nearly level tip line, where that part shrinks to nothing within
+ * a millimetre or so of height (the A4C, owner's rule 3).
  */
-const SLICE_PIN_REACH = 0.3;
+const SLICE_TIP_FADE = 0.05;
 
 /**
  * Slice `i`'s difference to the fin at its chord fraction `u` (cm, at its own height),
- * and its share of the minimum's ({@link SliceRef.shift}): both fading out toward where
- * its free span ends at the tip line ({@link SLICE_PIN_REACH}), so the slice meets the
- * tip there exactly, and in between lies between its own foil and the fin.
+ * and its share of the minimum's ({@link SliceRef.shift}).
  */
 const sliceDiff = (r: SliceRef, sec: FinSection, u: number): [number, number, number] => {
-  const [a, c] = r.free;
-  const reach = SLICE_PIN_REACH * (c - a);
-  // 0 at an end on the tip line, easing to 1 over the reach in from it.
-  const away = (end: number) => smoother(Math.min(1, Math.abs(u - end) / reach));
-  const w = (a > 0 ? away(a) : 1) * (c < 1 ? away(c) : 1);
   const [o, n] = rawDiff(r, sec, u);
-  return [o * w, n * w, r.shift * w];
+  return [o, n, r.shift];
 };
 
 /**
@@ -1079,15 +1073,32 @@ const slicesAt = (
   const asDiff = (u: number) =>
     (1 - lead * (1 - smoother(Math.min(1, u / SLICE_EDGE_FADE)))) *
     (1 - trail * (1 - smoother(Math.min(1, (1 - u) / SLICE_EDGE_FADE))));
+  // How far toward the tip line each point is: the slices fade out over the last of it.
+  const { leading, trailing } = chordAt(b, h);
+  const [ts, te] = sw.tipLine;
+  const lx = te.x - ts.x;
+  const lz = te.y - ts.y;
+  const fadeOver = SLICE_TIP_FADE * b.depth;
+  const nearTip = (u: number) => {
+    const x = leading + (trailing - leading) * u;
+    const t = Math.min(
+      1,
+      Math.max(0, ((x - ts.x) * lx + (h - ts.y) * lz) / (lx * lx + lz * lz || 1)),
+    );
+    const dist = Math.hypot(x - (ts.x + lx * t), h - (ts.y + lz * t));
+    return smoother(Math.min(1, dist / fadeOver));
+  };
   return (u) => {
     if (u < a || u > c) return [0, 0];
+    const tipFade = nearTip(u);
+    if (!(tipFade > 0)) return [0, 0];
     const f = lead > 0 || trail > 0 ? asDiff(u) : 1;
     const [fo, fi] = f < 1 ? swept(u) : [0, 0];
     let o = 0;
     let n = 0;
-    for (const { r, sec, w, k } of used) {
-      const [ra, rc] = r.free;
-      const su = ra + ((u - a) / (c - a)) * (rc - ra);
+    for (const { r, sec, w: w0, k } of used) {
+      const su = u;
+      const w = w0 * tipFade;
       const [dO, dI, shift] = sliceDiff(r, sec, su);
       let eo = dO * k + shift;
       let ei = dI * k + shift;
