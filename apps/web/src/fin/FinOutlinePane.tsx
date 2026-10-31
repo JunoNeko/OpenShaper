@@ -148,13 +148,6 @@ export const FinOutlinePane = memo(function FinOutlinePane({
             else ctx.lineTo(q.x, q.y);
           });
         };
-        // A slice above the tip line's low end blends into the rounded tip: shade it.
-        if (sweep.sliceIntoTip) {
-          path([...sweep.cap, ...[...sweep.tip].reverse()]);
-          ctx.closePath();
-          ctx.fillStyle = SLICE_COLOR.replace('0.9)', '0.18)');
-          ctx.fill();
-        }
         // The sweep's start and end: thin lines; the one whose foil is being edited
         // glows. Click either to edit its foil.
         ctx.lineCap = 'round';
@@ -192,7 +185,7 @@ export const FinOutlinePane = memo(function FinOutlinePane({
         ctx.fillText('Foil sweep end (tip)', t.x + 12, t.y + 4);
         if (sweep.sliceIntoTip) {
           ctx.fillStyle = SLICE_COLOR;
-          ctx.fillText('Slice blends into the tip', t.x + 12, t.y + 18);
+          ctx.fillText('Slice meets the tip line', t.x + 12, t.y + 18);
         }
         ctx.restore();
       }

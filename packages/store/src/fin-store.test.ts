@@ -6,7 +6,11 @@ import {
   FIN_PANEL_MAX_ANGLE,
   FIN_SLICE_MIN_GAP,
   FIN_THICKNESS_PATH_LIMITS,
+  bladeSection,
+  cosineStations,
   defaultFinDesign,
+  prepareBlade,
+  sliceTipPoint,
   sectionThickest,
   thicknessPathOf,
   tipApexFraction,
@@ -18,7 +22,7 @@ import {
   vec2,
   type FinDesign,
 } from '@openshaper/kernel';
-import { TIP_FOIL } from './fin-edits';
+import { lockedSpan, TIP_FOIL } from './fin-edits';
 import { createFinStore } from './fin-store';
 
 const storeWith = (d: FinDesign = defaultFinDesign('side', 'right')) => {
@@ -291,12 +295,22 @@ describe('fin store: foil slices', () => {
   const outsideAt = (s: ReturnType<typeof storeWith>, foil: number) =>
     foil === 0 ? design(s).section.outside : design(s).slices[foil - 1]!.section.outside;
 
-  it('adds a slice as a copy of the foil below, and edits it', () => {
+  it('adds a slice as the fin’s own section there, and edits it', () => {
     const s = storeWith();
+    const before = design(s);
     expect(s.getState().addSlice(0.5)).toBe(true);
     expect(design(s).slices).toHaveLength(1);
     expect(design(s).slices[0]!.height).toBe(0.5);
-    expect(design(s).slices[0]!.section).toBe(design(s).section); // a copy: nothing changes yet
+    // The fin's section there: nothing changes yet, to the fit (0.05 mm).
+    const width = (d: FinDesign, h: number) => {
+      const b = prepareBlade(d);
+      const sec = bladeSection(b, h * b.depth, cosineStations(40));
+      return sec.outside.map((p, j) => Math.abs(p.y - sec.inside[j]!.y));
+    };
+    for (const h of [0.4, 0.5, 0.6]) {
+      const was = width(before, h);
+      width(design(s), h).forEach((t, j) => expect(Math.abs(t - was[j]!)).toBeLessThan(5e-3));
+    }
     expect(s.getState().activeFoil).toBe(1);
     // NACA and the inside face now act on the slice, not the root.
     expect(s.getState().applyNaca('0010')).toBe(true);
@@ -315,6 +329,40 @@ describe('fin store: foil slices', () => {
     s.getState().endEdit();
     expect(outsideAt(s, 1).knots[1]!.end.y).toBeLessThan(k.y);
     expect(design(s).section).toBe(root);
+  });
+
+  it('locks the tip past where a slice crosses the tip line', () => {
+    // Owner's rules: the chord past the tip line is the tip foil's, not the slice's.
+    const s = storeWith();
+    s.getState().addSlice(0.93);
+    const span = lockedSpan(design(s), 1)!;
+    expect(span[1]).toBe(1);
+    expect(span[0]).toBeGreaterThan(0.5);
+    const out = () => design(s).slices[0]!.section.outside;
+    const locked = out().knots.findIndex((k, i) => i > 0 && k.end.x >= span[0] - 1e-6);
+    expect(locked).toBeGreaterThan(0);
+    const k = out().knots[locked]!.end;
+    expect(s.getState().moveControlPoint('outside', locked, vec2(k.x, k.y * 0.5))).toBe(false);
+    expect(s.getState().addControlPoint('outside', vec2((span[0] + 1) / 2, 0.01))).toBe(false);
+    // A point short of it may move, but not into it.
+    const free = locked - 1;
+    const f = out().knots[free]!.end;
+    s.getState().moveControlPoint('outside', free, vec2(0.999, f.y));
+    expect(out().knots[free]!.end.x).toBeLessThan(span[0]);
+  });
+
+  it('scales the tip foil from a slice’s point on the tip line, as one undo step', () => {
+    const s = storeWith();
+    s.getState().addSlice(0.93);
+    const tp = sliceTipPoint(design(s), 0)!;
+    s.getState().beginEdit('Scale the tip');
+    expect(s.getState().setSliceTipPoint(1, tp.outside * 0.6)).toBe(true);
+    s.getState().endEdit();
+    expect(design(s).tipScale).toBeCloseTo(0.6, 2);
+    // The point now sits where it was dragged to, near enough.
+    expect(sliceTipPoint(design(s), 0)!.outside).toBeCloseTo(tp.outside * 0.6, 2);
+    s.getState().undo();
+    expect(design(s).tipScale).toBeUndefined();
   });
 
   it('moves a slice past another, keeping it selected, as one undo step per drag', () => {

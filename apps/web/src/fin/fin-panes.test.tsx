@@ -215,6 +215,41 @@ describe('dragging in the panes', () => {
   });
 });
 
+describe('a slice that crosses the tip line, in the foil view', () => {
+  beforeEach(() =>
+    act(() => {
+      finStore.getState().load(defaultFinDesign('side', 'right'));
+      finStore.getState().addSlice(0.93); // made the active foil
+    }),
+  );
+
+  it(
+    'drags the slice’s point on the tip line down, thinning the tip, as one undo step',
+    () => {
+      render(<FinSectionPane store={finStore} units={lengthUnitByKey('mm')} />);
+      const canvas = screen.getByRole('img', { name: 'Foil section' });
+      const pastBefore = finStore.getState().past.length;
+      // Find the dot: a press on it starts scaling the tip.
+      let at: { clientX: number; clientY: number } | null = null;
+      for (let y = 0; y < pane.h && !at; y += 3) {
+        for (let x = 0; x < pane.w && !at; x += 3) {
+          fireEvent.pointerDown(canvas, { ...MOUSE, clientX: x, clientY: y });
+          const st = finStore.getState();
+          if (st.editing && st.past.at(-1)?.label === 'Scale the tip')
+            at = { clientX: x, clientY: y };
+          else fireEvent.pointerUp(canvas, { ...MOUSE, clientX: x, clientY: y });
+        }
+      }
+      expect(at).not.toBeNull();
+      fireEvent.pointerMove(canvas, { ...MOUSE, clientX: at!.clientX, clientY: at!.clientY + 6 });
+      fireEvent.pointerUp(canvas, { ...MOUSE, clientX: at!.clientX, clientY: at!.clientY + 6 });
+      expect(design().tipScale).toBeLessThan(1);
+      expect(finStore.getState().past).toHaveLength(pastBefore + 1);
+    },
+    HEAVY,
+  );
+});
+
 describe('selecting several points in a pane', () => {
   beforeEach(() => act(() => finStore.getState().load(defaultFinDesign('side', 'right'))));
 

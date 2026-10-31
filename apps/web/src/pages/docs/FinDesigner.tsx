@@ -147,11 +147,11 @@ export default function DocsFinDesigner() {
           the root and <strong>Foil sweep end (tip)</strong> across the tip. In between, every
           section runs from the leading edge to the trailing edge, so each edge is foiled straight
           across, hooked tips and raised rears included, and the foil blends from the base foil to
-          the tip foil. Above the tip line the tip is lofted from the tip foil&apos;s high point
-          (its thickest point on the tip line) out to every point of the tip edge: round the middle
-          of the tip along a rounded curve, level at the high point and curving down to the edge,
-          and toward each end of the tip line changing into the tip foil&apos;s own front or back
-          half, so the tip meets the tip foil there and only ever thins going out.
+          the tip foil. Past the tip line, the tip foil carries on out to the tip edge, rounding
+          down from the tip line to the edge, level where it leaves the tip line so the tip meets
+          the sweep without a crease. So the tip is thickest at the tip foil&apos;s high point (its
+          thickest point on the tip line), rounds off from there to the edge round the middle of the
+          tip, and toward each end of the tip line is the tip foil&apos;s own front or back half.
         </p>
         <p>
           Click either green line to edit its foil: it glows, and the foil view shows that foil with
@@ -224,17 +224,19 @@ export default function DocsFinDesigner() {
           to set its height — in the profile or the thickness view. A slice can be dragged past
           another: it waits just short of it, then hops to the other side. Each slice has its own
           foil: pick its tab in the foil view (Root, then each slice by height) and shape it with
-          the same tools, NACA presets included. A new slice starts as a copy of the foil below it.
+          the same tools, NACA presets included. A new slice starts as the fin&apos;s own section at
+          its height, so adding one changes nothing until you reshape it.
         </p>
         <p>
-          A slice&apos;s foil holds at its height and blends smoothly into the sweep over 15% of the
-          fin&apos;s depth below and above it — less where the base, the tip line or the next slice
-          is nearer — easing in and out so no line forms. Two slices closer than that hold their
-          foils all the way between them. A slice above the tip line blends into the rounded tip,
-          which the profile shades. The thickness still comes from the thickness curve, and a
-          slice&apos;s thickest point sits where the swept fin is thickest at its height, so a slice
-          you haven&apos;t reshaped leaves the fin much as it was; near the tip that is well back
-          toward the trailing edge. A slice&apos;s foil therefore has no thickest-point handle.{' '}
+          What you change in a slice&apos;s foil holds at its height and blends smoothly into the
+          sweep over 15% of the fin&apos;s depth below and above it — less where the base, the top
+          or the next slice is nearer — easing in and out so no line forms. Two slices closer than
+          that hold their changes all the way between them. The thickness still comes from the
+          thickness curve, so a slice changes the foil&apos;s shape, not how thick it is; it has no
+          thickest-point handle. Where a slice&apos;s chord crosses the tip line (the profile notes
+          it), the part past the tip line is the tip&apos;s: the foil view shades it and locks its
+          points. A green dot sits where the slice crosses the tip line: drag it up or down to make
+          the tip foil thicker or thinner, and the sweep eases to it from the base.{' '}
           <strong>Remove slice</strong>, next to Add slice, takes the selected slice away: click a
           slice&apos;s line (or its foil tab) to select it. Slices keep at least 2% of the depth
           from each other and from the root and tip.
@@ -260,8 +262,9 @@ export default function DocsFinDesigner() {
           straight run that curves in near the tip is the usual shape: that curve is what controls
           how the tip flexes. The curve holds all the way up: past the tip line the tip is no
           thicker than the curve says at each height, the loft rounding it off to the edge, so a
-          fuller curve near the tip gives a fuller tip and no more. <strong>Root thickness</strong>{' '}
-          scales the whole curve.
+          fuller curve near the tip gives a fuller tip and no more. A slice&apos;s tip-line dot (see{' '}
+          <a href="#slices">Foil slices and twist</a>) scales the tip foil against the curve.{' '}
+          <strong>Root thickness</strong> scales the whole curve.
         </p>
       </Section>
 

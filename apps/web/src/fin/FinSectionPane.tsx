@@ -5,7 +5,9 @@
  * 10%-thick foil can be shaped by hand. A symmetric foil (every centre fin) has one
  * face; the other is shown mirrored, dashed. NACA 4-digit presets replace both faces,
  * which stay editable afterwards. The dashed vertical marks the thickest point, where
- * the taper's thickness applies. An asymmetric foil shows how its thickness is shared
+ * the taper's thickness applies. A horizontal slice whose chord crosses the tip line
+ * shows the tip past it shaded and locked, with a point on the tip line to drag up or
+ * down: the tip foil's thickness follows. An asymmetric foil shows how its thickness is shared
  * (outside / inside, top left); typing a share rebuilds the foil as leading-edge radii
  * and straight lines (split-foil.ts).
  */
@@ -18,6 +20,7 @@ import {
   parseNaca4,
   prepareBlade,
   sectionThickest,
+  sliceTipPoint,
   splineFromKnots,
   sweepGrid,
   sweepPointOn,
@@ -30,7 +33,7 @@ import {
   type Spline,
 } from '@openshaper/kernel';
 import { FinCurveEditor, type FinCurveLayer } from '@openshaper/render2d';
-import { getFoil, TIP_FOIL, type FinState } from '@openshaper/store';
+import { getFoil, lockedSpan, TIP_FOIL, type FinState } from '@openshaper/store';
 import { Button, Tooltip } from '@openshaper/ui';
 import { memo, useCallback, useMemo, useState } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
@@ -41,7 +44,7 @@ import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './cur
 import { PointTools } from './PointTools';
 import { useFinState } from './use-fin';
 import { FitToPanel, PANEL_FIT, PANEL_OVER } from './panel-tools';
-import { PATH_COLOR } from './sweep-overlay';
+import { PATH_COLOR, SWEEP_LINE } from './sweep-overlay';
 import { usePanelFit } from './use-panel-fit';
 
 /**
@@ -101,6 +104,11 @@ const SECTION_CURVES = ['outside', 'inside'] as const;
 const OUTSIDE = '#22D3EE';
 const INSIDE = '#A78BFA';
 const GUIDE = 'rgba(138,155,179,0.7)';
+/** The tip past the tip line on a slice: shaded, locked. */
+const LOCKED = 'rgba(138,155,179,0.16)';
+/** The slice's point on the tip line, in the profile's tip-line green. */
+const TIP_COLOR = SWEEP_LINE;
+const TIP_POINT = 'tip-point';
 
 const mirrored = (s: Spline): Spline =>
   splineFromKnots(
@@ -413,27 +421,51 @@ export const FinSectionPane = memo(function FinSectionPane({
 
   // Where the taper's thickness applies: this foil's thickest point. On the base and tip
   // foils it is the thickness path's end too: drag it (or the path) and both follow. A
-  // horizontal slice's sits where the sweep is thickest at its height, so it has no handle.
+  // horizontal slice starts as the fin's own section, thickest where the fin is, so it
+  // has no handle.
   const thickestAt = useMemo(() => (section ? sectionThickest(section).at : null), [section]);
+  // A slice's chord past the tip line is the tip's (owner's rules): shaded and locked,
+  // with the point where it crosses the tip line to drag, scaling the tip foil.
+  const locked = useMemo(
+    () => (design && activeFoil > 0 ? lockedSpan(design, activeFoil) : null),
+    [design, activeFoil],
+  );
+  const tipPoint = useMemo(
+    () => (design && locked ? sliceTipPoint(design, activeFoil - 1) : null),
+    [design, locked, activeFoil],
+  );
   const markers = useMemo(
     () =>
-      thickestAt === null || activeFoil > 0
-        ? []
-        : [
+      tipPoint
+        ? [
             {
-              id: 'thickest',
-              at: { x: thickestAt, y: 0 },
-              color: PATH_COLOR,
-              label: 'Thickest point',
+              id: TIP_POINT,
+              at: { x: tipPoint.at, y: tipPoint.outside },
+              color: TIP_COLOR,
+              label: 'Tip thickness at the tip line: drag up or down',
             },
-          ],
-    [thickestAt, activeFoil],
+          ]
+        : thickestAt === null || activeFoil > 0
+          ? []
+          : [
+              {
+                id: 'thickest',
+                at: { x: thickestAt, y: 0 },
+                color: PATH_COLOR,
+                label: 'Thickest point',
+              },
+            ],
+    [thickestAt, activeFoil, tipPoint],
   );
   const markerHandlers = useMemo(
     () => ({
-      onMarkerDragStart: () => store.getState().beginEdit('Move the thickest point'),
-      onMarkerDrag: (_id: string, to: { x: number }) =>
-        store.getState().setFoilThickest(store.getState().activeFoil, to.x),
+      onMarkerDragStart: (id: string) =>
+        store.getState().beginEdit(id === TIP_POINT ? 'Scale the tip' : 'Move the thickest point'),
+      onMarkerDrag: (id: string, to: { x: number; y: number }) => {
+        const st = store.getState();
+        if (id === TIP_POINT) st.setSliceTipPoint(st.activeFoil, to.y);
+        else st.setFoilThickest(st.activeFoil, to.x);
+      },
       onMarkerDragEnd: () => store.getState().endEdit(),
     }),
     [store],
@@ -475,6 +507,13 @@ export const FinSectionPane = memo(function FinSectionPane({
         ctx.stroke();
       };
       ctx.save();
+      if (locked) {
+        // The tip past the tip line, full height: the slice doesn't shape it.
+        const a = toScreen({ x: locked[0], y: 0 }).x;
+        const b = toScreen({ x: locked[1], y: 0 }).x;
+        ctx.fillStyle = LOCKED;
+        ctx.fillRect(a, 0, b - a, ctx.canvas.height);
+      }
       ctx.strokeStyle = GUIDE;
       ctx.fillStyle = GUIDE;
       ctx.lineWidth = 1;
@@ -498,6 +537,13 @@ export const FinSectionPane = memo(function FinSectionPane({
       };
       label('Leading edge', 0, 16, 'left');
       label('Trailing edge', 1, 16, 'right');
+      if (locked)
+        label(
+          'Tip past the tip line · locked',
+          locked[1] >= 1 ? 1 : 0,
+          32,
+          locked[1] >= 1 ? 'right' : 'left',
+        );
       if (thickestAt !== null) label('thickest', thickestAt, 32, 'center');
       if (panelLines) {
         ctx.strokeStyle = panelLines.fits ? PANEL_FIT : PANEL_OVER;
@@ -519,7 +565,7 @@ export const FinSectionPane = memo(function FinSectionPane({
       }
       ctx.restore();
     },
-    [thickestAt, panelLines, units],
+    [thickestAt, panelLines, units, locked],
   );
 
   if (!design || !section) return null;

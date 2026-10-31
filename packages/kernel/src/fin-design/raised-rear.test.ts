@@ -26,7 +26,16 @@ import {
 import { FIN_MIN_THICKNESS, FIN_POSITIONS } from './fin-design';
 import { defaultFinDesign, defaultKeel, defaultTwinFin } from './fin-defaults';
 import { finMesh } from './fin-mesh';
-import { bladeSection, chordAt, findRaisedRear, foilAt, prepareBlade, thicknessAt } from './blade';
+import {
+  bladeFoilAt,
+  bladeSection,
+  chordAt,
+  cosineStations,
+  findRaisedRear,
+  foilAt,
+  prepareBlade,
+  thicknessAt,
+} from './blade';
 import { BLADE_CI_TOLERANCE, bladeSurfaceDeviation, fitBladeSurface } from './blade-surface';
 import { splineExtremes } from './curve-shape';
 import type { FinDesign, FinTwist } from './fin-design';
@@ -500,10 +509,33 @@ describe('the underside of a hooked tip (the owner’s hatchet, docs/specs/fins/
     );
   };
 
-  it('keeps the back of each section to its foil up the hook, with no thin band across it', () => {
-    // Was 0.73 at 95% of the chord 105 mm up: the trailing third a quarter too thin.
-    for (let h = 10.3; h <= 11.2; h += 0.05) {
-      for (const u of [0.9, 0.95]) expect(share(h, u)).toBeGreaterThan(0.9);
+  it('keeps the back of the section to its foil at the slice up the hook', () => {
+    // Was 0.73 at 95% of the chord 105 mm up: the trailing third a quarter too thin. At its
+    // height a slice is its foil, as thick as the fin without it.
+    const h = d.slices[1]!.height * b.depth;
+    for (const u of [0.1, 0.3, 0.5, 0.7, 0.9, 0.95]) {
+      expect(share(h, u)).toBeGreaterThan(0.97);
+      expect(share(h, u)).toBeLessThan(1.04);
+    }
+  });
+
+  it('leaves the hook as it was under a slice made from it', () => {
+    // A slice starts as the fin's own section (bladeFoilAt) and adds only what it is
+    // edited to: added there, unedited, the hook keeps its shape all round it.
+    const plain = { ...d, slices: [] };
+    const eta = d.slices[1]!.height;
+    const sliced = prepareBlade({
+      ...plain,
+      slices: [{ height: eta, section: bladeFoilAt(plain, eta) }],
+    });
+    const pb = prepareBlade(plain);
+    const st = cosineStations(60);
+    for (let h = 9.0; h <= 12.4; h += 0.2) {
+      const a = bladeSection(sliced, h, st);
+      const c = bladeSection(pb, h, st);
+      // To 0.05 mm: the slice is fitted with a few points, to a percent of its thickness.
+      a.outside.forEach((p, j) => expect(Math.abs(p.y - c.outside[j]!.y)).toBeLessThan(5e-3));
+      a.inside.forEach((p, j) => expect(Math.abs(p.y - c.inside[j]!.y)).toBeLessThan(5e-3));
     }
   });
 });
