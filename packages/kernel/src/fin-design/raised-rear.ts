@@ -33,6 +33,15 @@ const REAR_SAMPLES = 64;
  */
 const REAR_LEAD = 0.3;
 
+/**
+ * How high (a fraction of the fin's depth) a raised rear's corner may be: an underside
+ * is a low thing, next to the tab. The owners' sit 3–13% up. Higher, a trailing edge
+ * that leaves the root steeply and then sweeps back gently to a hooked tip read as an
+ * underside all the way up, and the base ran up the trailing edge almost to the tip
+ * (owner testing: a section standing almost upright from the base).
+ */
+export const FIN_RAISED_REAR_MAX = 0.25;
+
 const isUnderside = (dx: number, dz: number): boolean => dx < 0 && dz >= 0 && dz < -dx;
 
 /** The raised rear of an outline (see {@link RaisedRear}), or null if it has none. */
@@ -49,7 +58,10 @@ export const findRaisedRear = (outline: Spline): RaisedRear | null => {
   // Where the underside starts: the top of the steep lead-in, if there is one.
   let start: { x: number; y: number } | null = null;
   const corner = (x: number, z: number): RaisedRear | null =>
-    z > 0 && start && (start.y <= REAR_LEAD || start.x - x > start.y)
+    z > 0 &&
+    z <= FIN_RAISED_REAR_MAX * top.point.y &&
+    start &&
+    (start.y <= REAR_LEAD || start.x - x > start.y)
       ? { cornerX: x, cornerZ: z }
       : null;
   for (let seg = k.length - 1; seg >= 0; seg--) {
