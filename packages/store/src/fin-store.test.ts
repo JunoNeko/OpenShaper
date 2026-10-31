@@ -662,10 +662,11 @@ describe('fin store: the foil sweep', () => {
     s.getState().endEdit();
     expect(design(s).tipLine!.start).toBeCloseTo(before.start - 0.05, 9);
     expect(design(s).tipLine!.end).toBeCloseTo(before.end, 9);
-    // Past the tip it stops short of it, where the leading edge turns onto the top.
+    // Past the tip it stops short of it. Up round the top it goes where it is put (owner
+    // testing: held where the leading edge turns onto the top, it seemed frozen).
     s.getState().setTipLineEnd('start', 0.99);
     expect(design(s).tipLine!.start).toBeLessThan(tipApexFraction(design(s).outline));
-    expect(design(s).tipLine!.start).toBeCloseTo(tipTurnFraction(design(s).outline), 9);
+    expect(design(s).tipLine!.start).toBeGreaterThan(tipTurnFraction(design(s).outline));
     s.getState().undo();
     s.getState().undo();
     expect(design(s).tipLine).toBeUndefined();

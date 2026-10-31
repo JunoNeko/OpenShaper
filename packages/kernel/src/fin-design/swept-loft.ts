@@ -168,9 +168,10 @@ const tipApex = (s: OutlineSamples): number => {
 };
 
 /**
- * How near level (deg) the leading edge runs where it turns onto the top. The tip line's
- * leading-edge end is never further round the tip than that: the top above it is part of
- * the tip (owner's rules). Left on the leading edge, a long, flat top swept steep
+ * How near level (deg) the leading edge runs where it turns onto the top. The default tip
+ * line's leading-edge end is no further round the tip than that: the top above it is
+ * part of the tip (owner's rules). The user may still drag it round (owner testing: held
+ * there, the end seemed frozen). Left on the leading edge, a long, flat top swept steep
  * sections from it down to the hook, and every cut near the top came out thickest toward
  * its trailing edge (owner testing).
  */
@@ -198,7 +199,9 @@ const leadingTurn = (s: OutlineSamples): number => {
 /** The tip line's ends as sample indices, from the design's tip line or the default. */
 const tipLineIndices = (d: FinDesign, s: OutlineSamples): [number, number] => {
   const [a, b] = tipLineEnds(d, s);
-  // Its leading-edge end no further round than where the leading edge turns onto the top.
+  // A moved tip line is where it was put (owner's rules). The default's leading-edge end
+  // goes no further round than where the leading edge turns onto the top.
+  if (d.tipLine) return [a, b];
   const start = Math.max(1, Math.min(a, leadingTurn(s)));
   return [start, Math.max(start + 1, b)];
 };
@@ -227,7 +230,7 @@ const tipLineEnds = (d: FinDesign, s: OutlineSamples): [number, number] => {
 
 /**
  * Where the leading edge turns onto the top, as a fraction of the outline: the furthest
- * round the tip line's leading-edge end may go ({@link FIN_TIP_TURN}).
+ * round the default tip line's leading-edge end goes ({@link FIN_TIP_TURN}).
  */
 export const tipTurnFraction = (outline: Spline): number => {
   const s = sampleOutline(outline);

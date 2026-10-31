@@ -26,7 +26,6 @@ import {
   tipFoilOf,
   tipApexFraction,
   tipLineOf,
-  tipTurnFraction,
   defaultCanard,
   finHasToe,
   prepareBlade,
@@ -495,8 +494,7 @@ const TIP_LINE_FROM_ROOT = 0.15;
 /**
  * The tip line with one end (`start`, on the leading edge's side, or `end`, on the
  * trailing edge's) moved to `fraction` of the outline's length. Each end stays on its
- * own side of the tip and clear of the roots, and the leading-edge end no further round
- * than where the leading edge turns onto the top.
+ * own side of the tip and clear of the roots.
  */
 export const setTipLineEnd = (
   d: FinDesign,
@@ -506,12 +504,9 @@ export const setTipLineEnd = (
   if (!Number.isFinite(fraction)) return d;
   const now = tipLineOf(d);
   const apex = tipApexFraction(d.outline);
-  // The leading-edge end no further round than where the leading edge turns onto the top
-  // (kernel FIN_TIP_TURN): the top above it is the tip's.
-  const turn = Math.min(apex - TIP_LINE_GAP, tipTurnFraction(d.outline));
   const f =
     which === 'start'
-      ? Math.min(turn, Math.max(TIP_LINE_FROM_ROOT, fraction))
+      ? Math.min(apex - TIP_LINE_GAP, Math.max(TIP_LINE_FROM_ROOT, fraction))
       : Math.min(1 - TIP_LINE_FROM_ROOT, Math.max(apex + TIP_LINE_GAP, fraction));
   if (Math.abs(f - now[which]) < 1e-9) return d;
   return { ...d, tipLine: { ...now, [which]: f } };
