@@ -8,6 +8,7 @@ import { knot } from '../knot';
 import type { BoardMesh } from '../tessellate';
 import { cosineStations } from './blade';
 import { vec2 } from '../vec2';
+import { yAtX } from './curve-shape';
 import {
   FIN_SLICE_REACH,
   bladeFoilAt,
@@ -16,6 +17,7 @@ import {
   moveFoilThickest,
   prepareBlade,
   sectionThickest,
+  sliceFoilMovedTo,
   sliceFreeSpan,
   sliceTipPoint,
   sliceWeight,
@@ -356,6 +358,46 @@ describe('slices and the tip line (owner’s rules)', () => {
       const q = bladeSection(c, h, st);
       // To 0.05 mm: the slice is fitted with a few points, to a percent of its thickness.
       st.forEach((_, j) => expect(Math.abs(width(p, j) - width(q, j))).toBeLessThan(5e-3));
+    }
+  });
+
+  it('moves a slice made from the fin as the fin’s section at its new height', () => {
+    // Owner testing: dragged from where it was added up to the tip, a slice carried the
+    // section from down there. Moving a slice repositions it, as the analysis cut moves.
+    const low = { ...plain, slices: [{ height: 0.6, section: bladeFoilAt(plain, 0.6) }] };
+    const moved = {
+      ...plain,
+      slices: [{ height: eta, section: sliceFoilMovedTo(low, 0, eta) }],
+    };
+    const a = prepareBlade(moved);
+    const c = prepareBlade(plain);
+    const st = cosineStations(60);
+    for (const h of [8.0, 8.6, 9.02, 9.4]) {
+      const p = bladeSection(a, h, st);
+      const q = bladeSection(c, h, st);
+      st.forEach((_, j) => expect(Math.abs(width(p, j) - width(q, j))).toBeLessThan(5e-3));
+    }
+    const tp = sliceTipPoint(moved, 0)!;
+    expect(yAtX(moved.slices[0]!.section.outside, tp.at)).toBeCloseTo(tp.outside, 3);
+  });
+
+  it('carries what a slice was reshaped by when it moves, and back again', () => {
+    const at = 0.6;
+    const made = bladeFoilAt(plain, at);
+    // Reshaped: its thickest point moved well forward.
+    const reshaped = moveFoilThickest(made, 0.2);
+    const d = { ...plain, slices: [{ height: at, section: reshaped }] };
+    const up = { ...plain, slices: [{ height: 0.7, section: sliceFoilMovedTo(d, 0, 0.7) }] };
+    // Still reshaped up there: not the fin's section.
+    const b = prepareBlade(up);
+    const h = 0.7 * b.depth;
+    const p = bladeSection(b, h, [0.15]);
+    const q = bladeSection(prepareBlade(plain), h, [0.15]);
+    expect(Math.abs(width(p, 0) - width(q, 0))).toBeGreaterThan(1e-2);
+    // And back where it was, as it was, to the fit.
+    const back = sliceFoilMovedTo(up, 0, at);
+    for (const u of [0.1, 0.3, 0.5, 0.7]) {
+      expect(yAtX(back.outside, u)).toBeCloseTo(yAtX(reshaped.outside, u), 3);
     }
   });
 

@@ -300,6 +300,9 @@ export const createFinStore = (): StoreApi<FinState> =>
       return commitChecked(fn(s), label);
     };
 
+    /** Where the slice being dragged started: its design and index (moveSlice). */
+    let sliceDrag: { design: FinDesign; index: number } | null = null;
+
     /**
      * The part of the active slice's chord that is the tip's (fin-edits lockedSpan), for
      * a section curve: its points there can't be moved, added or deleted.
@@ -636,9 +639,14 @@ export const createFinStore = (): StoreApi<FinState> =>
         return !!d && commit(resetThicknessPath(d), 'Reset the thickness path');
       },
       moveSlice: (foil, height) => {
-        const d = get().design;
+        const { design: d, editing, past } = get();
         if (!d) return false;
-        const r = moveSlice(d, foil, height);
+        // Mid-drag, the slice as the drag found it (see moveSlice).
+        const start = editing ? past[past.length - 1]?.design : undefined;
+        if (!sliceDrag || sliceDrag.design !== (start ?? d)) {
+          sliceDrag = { design: start ?? d, index: foil - 1 };
+        }
+        const r = moveSlice(d, foil, height, sliceDrag);
         if (!commitChecked(r.design, 'Move foil slice')) return false;
         // Passing another slice changes its place in the order: keep it selected.
         if (r.foil !== get().activeFoil) set({ activeFoil: r.foil });

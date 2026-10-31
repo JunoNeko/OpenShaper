@@ -66,6 +66,7 @@ import {
   finOutward,
   type FinDesign,
   type FinSection,
+  type FinSlice,
   type FinThicknessPath,
 } from './fin-design';
 import { findRaisedRear, type RaisedRear } from './raised-rear';
@@ -1141,13 +1142,20 @@ export const sliceTipPoint = (
   return { at, outside: lerpStations(r.out, at) * k, inside: lerpStations(r.ins, at) * k };
 };
 
-/**
- * The fin's horizontal section at `eta` (fraction of the depth) as a foil, chord
- * fractions both ways, less the minimum thickness: what a new slice starts as, so adding
- * it changes nothing (owner's rules). Fitted with as few points as follow it to within
- * half a percent of its thickness, with a point where it crosses the tip line.
- */
-export const bladeFoilAt = (d: FinDesign, eta: number): FinSection => {
+/** The fin's horizontal section sampled as a foil (bladeShapeAt). */
+interface BladeShape {
+  /** Chord stations, 0 the leading edge. */
+  readonly us: readonly number[];
+  /** The faces there, chord fractions, less the minimum thickness. */
+  readonly out: readonly number[];
+  readonly ins: readonly number[];
+  /** The part of the chord short of the tip line (sliceFreeSpan). */
+  readonly free: readonly [number, number];
+  /** Every foil of the fin is symmetric: so is its section. */
+  readonly symmetric: boolean;
+}
+
+const bladeShapeAt = (d: FinDesign, eta: number): BladeShape => {
   const b = prepareBlade(d);
   const sw = sweptBlade(b);
   const h = Math.min(b.depth, Math.max(0, eta * b.depth));
@@ -1157,8 +1165,7 @@ export const bladeFoilAt = (d: FinDesign, eta: number): FinSection => {
   const s0 = sw.foils[0]!.outsideShare;
   const base = sweptFacesAt(b, sw, h);
   const extra = slicesAt(b, sw, h);
-  const n = 400;
-  const us = cosineStations(n);
+  const us = FOIL_STATIONS;
   const out: number[] = [];
   const ins: number[] = [];
   for (const u of us) {
@@ -1167,15 +1174,92 @@ export const bladeFoilAt = (d: FinDesign, eta: number): FinSection => {
     out.push((o + eo - m * s0) / chord);
     ins.push((i + ei + m * (1 - s0)) / chord);
   }
-  const [a, c] = freeSpanAt(b, sw.grid, h);
-  const must = [a, c].filter((x) => x > 1e-3 && x < 1 - 1e-3);
   const symmetric = [d.section, tipFoilOf(d), ...d.slices.map((s) => s.section)].every(
     (s) => s.inside === null,
   );
-  const outside = fitFace(us, out, must);
-  if (symmetric) return { outside, inside: null };
-  const flat = ins.every((y) => Math.abs(y) < 1e-7);
-  return { outside, inside: flat ? straightFace() : fitFace(us, ins, must) };
+  return { us, out, ins, free: freeSpanAt(b, sw.grid, h), symmetric };
+};
+
+/** Chord stations a section is sampled at to fit a foil to it. */
+const FOIL_STATIONS = cosineStations(200);
+
+/** A foil fitted to a sampled section, with a point where it crosses the tip line. */
+const fitShape = (s: BladeShape): FinSection => {
+  const must = s.free.filter((x) => x > 1e-3 && x < 1 - 1e-3);
+  const outside = fitFace(s.us, s.out, must);
+  if (s.symmetric) return { outside, inside: null };
+  const flat = s.ins.every((y) => Math.abs(y) < 1e-7);
+  return { outside, inside: flat ? straightFace() : fitFace(s.us, s.ins, must) };
+};
+
+/**
+ * The fin's horizontal section at `eta` (fraction of the depth) as a foil, chord
+ * fractions both ways, less the minimum thickness: what a new slice starts as, so adding
+ * it changes nothing (owner's rules). Fitted with as few points as follow it to within
+ * a percent of its thickness, with a point where it crosses the tip line.
+ */
+export const bladeFoilAt = (d: FinDesign, eta: number): FinSection =>
+  fitShape(bladeShapeAt(d, eta));
+
+/**
+ * How far (a fraction of its thickest) a slice must differ from the fin's section to
+ * count as reshaped: less is the fit's own error (a percent).
+ */
+const RESHAPED = 0.015;
+
+const sliceEditsCache = new WeakMap<FinSlice, { o: Float64Array; i: Float64Array } | null>();
+
+/**
+ * What slice `index` has been reshaped by: its foil less the fin's section (without it)
+ * at its height, both as fractions of their thickest, at FOIL_STATIONS, up to the tip
+ * line. Null if it hasn't been. Cached per slice.
+ */
+const sliceEdits = (d: FinDesign, index: number): { o: Float64Array; i: Float64Array } | null => {
+  const sl = d.slices[index]!;
+  if (sliceEditsCache.has(sl)) return sliceEditsCache.get(sl)!;
+  const others = { ...d, slices: d.slices.filter((_, j) => j !== index) };
+  const fin = bladeShapeAt(others, sl.height);
+  const n = fin.us.length;
+  const finMax = Math.max(...fin.out.map((o, j) => o - fin.ins[j]!)) || 1;
+  let own = 0;
+  const shape = fin.us.map((u) => {
+    const [o, i] = sectionShapeAt(sl.section, u);
+    own = Math.max(own, o - i);
+    return [o, i] as const;
+  });
+  const o = new Float64Array(n);
+  const i = new Float64Array(n);
+  let most = 0;
+  fin.us.forEach((u, j) => {
+    if (u < fin.free[0] || u > fin.free[1]) return; // the tip's: never the slice's
+    o[j] = shape[j]![0] / (own || 1) - fin.out[j]! / finMax;
+    i[j] = shape[j]![1] / (own || 1) - fin.ins[j]! / finMax;
+    most = Math.max(most, Math.abs(o[j]!), Math.abs(i[j]!));
+  });
+  const edits = most > RESHAPED ? { o, i } : null;
+  sliceEditsCache.set(sl, edits);
+  return edits;
+};
+
+/**
+ * Slice `index`'s foil moved to `eta` (owner's rules: dragging a slice repositions it,
+ * as the horizontal analysis cut moves): the fin's own section there, and whatever the
+ * slice was reshaped by at its old height on top, as fractions of the thickest. A slice
+ * not reshaped comes out as the fin's section at its new height.
+ */
+export const sliceFoilMovedTo = (d: FinDesign, index: number, eta: number): FinSection => {
+  const others = { ...d, slices: d.slices.filter((_, j) => j !== index) };
+  const at = bladeShapeAt(others, eta);
+  const edits = sliceEdits(d, index);
+  if (!edits) return fitShape(at);
+  const max = Math.max(...at.out.map((o, j) => o - at.ins[j]!));
+  return fitShape({
+    ...at,
+    out: at.out.map((o, j) => o + edits.o[j]! * max),
+    ins: at.ins.map((v, j) => v + edits.i[j]! * max),
+    // A symmetric slice stays symmetric, the faces either side of its chord line alike.
+    symmetric: d.slices[index]!.section.inside === null,
+  });
 };
 
 /** The straight face y = 0, as a flat inside face. */
@@ -1213,7 +1297,8 @@ const fitFace = (us: readonly number[], ys: readonly number[], must: readonly nu
   const peak = Math.abs(ys[far]!);
   const golden = (lo: number, hi: number, err: (v: number) => number): number => {
     const g = (Math.sqrt(5) - 1) / 2;
-    for (let i = 0; i < 20; i++) {
+    // To a thousandth of the range: finer moves the face by less than the fit's error.
+    for (let i = 0; i < 14; i++) {
       const p = hi - g * (hi - lo);
       const q = lo + g * (hi - lo);
       if (err(p) < err(q)) hi = q;
@@ -1265,8 +1350,16 @@ const fitFace = (us: readonly number[], ys: readonly number[], must: readonly nu
     }
     return [a, c];
   };
+  // A stretch's fit depends only on its ends: kept as points are added between others.
+  const fitted = new Map<string, [number, number]>();
+  const fitOf = (xs: readonly number[], k: number): [number, number] => {
+    const key = `${xs[k]},${xs[k + 1]}`;
+    let f = fitted.get(key);
+    if (!f) fitted.set(key, (f = fitStretch(xs, k)));
+    return f;
+  };
   const build = (xs: readonly number[]): Spline => {
-    const hs = xs.slice(0, -1).map((_, k) => handles(xs, k, ...fitStretch(xs, k)));
+    const hs = xs.slice(0, -1).map((_, k) => handles(xs, k, ...fitOf(xs, k)));
     return splineFromKnots(
       xs.map((_, k) => {
         const p = pointAt(xs, k);

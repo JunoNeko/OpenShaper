@@ -18,6 +18,7 @@ import {
   FIN_TIP_SCALE_LIMITS,
   bladeFoilAt,
   chordAt,
+  sliceFoilMovedTo,
   sliceFreeSpan,
   sliceTipPoint,
   moveFoilThickest,
@@ -177,11 +178,17 @@ export const removeSlice = (d: FinDesign, foil: FinFoilIndex): FinDesign =>
  * them and from the root and tip: dragged up to a neighbour it waits just short of it,
  * and hops to the far side once the drag is past the neighbour. Slices are kept in
  * order up the blade, so its index may change: returns the design and its new index.
+ *
+ * Moving a slice repositions it, as the horizontal analysis cut moves (owner testing): it
+ * takes the fin's section at its new height, with whatever it was reshaped by on top
+ * (kernel sliceFoilMovedTo). `from` is the design and slice index a drag started from, so
+ * every step carries the slice as it was then, not as the last step left it.
  */
 export const moveSlice = (
   d: FinDesign,
   foil: FinFoilIndex,
   height: number,
+  from?: { design: FinDesign; index: number },
 ): { design: FinDesign; foil: FinFoilIndex } => {
   const i = foil - 1;
   const sl = d.slices[i];
@@ -209,7 +216,8 @@ export const moveSlice = (
     }
   }
   if (h === sl.height) return { design: d, foil };
-  const moved = { ...sl, height: h };
+  const src = from ?? { design: d, index: i };
+  const moved = { ...sl, height: h, section: sliceFoilMovedTo(src.design, src.index, h) };
   const at = others.findIndex((o) => o.height > h);
   const pos = at === -1 ? others.length : at;
   const slices = [...others.slice(0, pos), moved, ...others.slice(pos)];
