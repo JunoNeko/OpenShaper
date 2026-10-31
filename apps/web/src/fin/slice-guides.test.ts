@@ -13,7 +13,6 @@ describe('sliceGuideHandlers', () => {
     store.getState().addSlice(0.7);
     store.getState().setActiveFoil(0);
     const depth = finReadouts(store.getState().design!).depth;
-    const grabbed = store.getState().design!.slices[0]!.section;
     const on = sliceGuideHandlers(store, 'y');
     // The editor reports the guide it grabbed ('1') for the whole drag.
     on.onGuideSelect('1');
@@ -23,7 +22,9 @@ describe('sliceGuideHandlers', () => {
     on.onGuideDragEnd();
     const slices = store.getState().design!.slices;
     expect(slices.map((sl) => sl.height)).toEqual([0.7, 0.9]);
-    expect(slices[1]!.section).toBe(grabbed); // the slice grabbed, not the one it passed
+    // The slice grabbed, not the one it passed: its symmetric 0008 went with it.
+    expect(slices[1]!.section.inside).toBeNull();
+    expect(slices[0]!.section.inside).not.toBeNull();
     expect(store.getState().activeFoil).toBe(2);
   });
 });

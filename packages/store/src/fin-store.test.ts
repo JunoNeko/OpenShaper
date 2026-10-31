@@ -11,10 +11,12 @@ import {
   defaultFinDesign,
   prepareBlade,
   sliceTipPoint,
+  yAtX,
   sectionThickest,
   thicknessPathOf,
   tipApexFraction,
   tipLineOf,
+  tipTurnFraction,
   finReadouts,
   foilShare,
   SPLIT_NOSE_ASPECT,
@@ -337,7 +339,7 @@ describe('fin store: foil slices', () => {
     s.getState().addSlice(0.93);
     const span = lockedSpan(design(s), 1)!;
     expect(span[1]).toBe(1);
-    expect(span[0]).toBeGreaterThan(0.5);
+    expect(span[0]).toBeGreaterThan(0.2);
     const out = () => design(s).slices[0]!.section.outside;
     const locked = out().knots.findIndex((k, i) => i > 0 && k.end.x >= span[0] - 1e-6);
     expect(locked).toBeGreaterThan(0);
@@ -349,6 +351,24 @@ describe('fin store: foil slices', () => {
     const f = out().knots[free]!.end;
     s.getState().moveControlPoint('outside', free, vec2(0.999, f.y));
     expect(out().knots[free]!.end.x).toBeLessThan(span[0]);
+  });
+
+  it('drags a new slice up into the tip as the fin’s section there, not the one it was added with', () => {
+    // Owner testing: added halfway up and dragged to 93 mm, the slice carried the section
+    // from halfway up, its point on the tip line well off its foil.
+    const s = storeWith();
+    s.getState().addSlice(0.5);
+    s.getState().beginEdit('Move foil slice');
+    const t0 = performance.now();
+    for (const h of [0.6, 0.7, 0.8, 0.9, 0.93]) s.getState().moveSlice(1, h);
+    const perStep = (performance.now() - t0) / 5;
+    s.getState().endEdit();
+    expect(design(s).slices[0]!.height).toBe(0.93);
+    const tp = sliceTipPoint(design(s), 0)!;
+    const sec = design(s).slices[0]!.section;
+    expect(yAtX(sec.outside, tp.at)).toBeCloseTo(tp.outside, 3);
+    expect(s.getState().past).toHaveLength(2); // add, and one drag
+    expect(perStep).toBeLessThan(2000); // a drag step stays usable
   });
 
   it('scales the tip foil from a slice’s point on the tip line, as one undo step', () => {
@@ -407,7 +427,9 @@ describe('fin store: foil slices', () => {
     expect(s.getState().moveSlice(1, 0.9)).toBe(true);
     const [a, b] = design(s).slices;
     expect(a!.height).toBe(0.7);
-    expect(b!.section).toBe(moving.section);
+    // Its reshaping goes with it: still symmetric, the 0008 laid on the fin up there.
+    expect(b!.section.inside).toBeNull();
+    expect(moving.section.inside).toBeNull();
     expect(b!.twist).toEqual(moving.twist);
     s.getState().moveSlice(2, 0.1);
     const low = design(s).slices[0]!;
@@ -640,9 +662,10 @@ describe('fin store: the foil sweep', () => {
     s.getState().endEdit();
     expect(design(s).tipLine!.start).toBeCloseTo(before.start - 0.05, 9);
     expect(design(s).tipLine!.end).toBeCloseTo(before.end, 9);
-    // Past the tip it stops short of it.
+    // Past the tip it stops short of it, where the leading edge turns onto the top.
     s.getState().setTipLineEnd('start', 0.99);
     expect(design(s).tipLine!.start).toBeLessThan(tipApexFraction(design(s).outline));
+    expect(design(s).tipLine!.start).toBeCloseTo(tipTurnFraction(design(s).outline), 9);
     s.getState().undo();
     s.getState().undo();
     expect(design(s).tipLine).toBeUndefined();

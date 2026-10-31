@@ -8,6 +8,7 @@ import { knot } from '../knot';
 import type { BoardMesh } from '../tessellate';
 import { cosineStations } from './blade';
 import { vec2 } from '../vec2';
+import { yAtX } from './curve-shape';
 import {
   FIN_SLICE_REACH,
   bladeFoilAt,
@@ -16,6 +17,7 @@ import {
   moveFoilThickest,
   prepareBlade,
   sectionThickest,
+  sliceFoilMovedTo,
   sliceFreeSpan,
   sliceTipPoint,
   sliceWeight,
@@ -34,6 +36,7 @@ import {
   sweepPointOn,
   sweepTipEdge,
   tipLineOf,
+  tipTurnFraction,
 } from './swept-loft';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -150,8 +153,28 @@ describe('the swept loft', () => {
     const [a, b] = defaultTipLine(d);
     const depth = prepareBlade(d).depth;
     for (const p of [a, b]) expect(p.y).toBeGreaterThan(0.6 * depth);
-    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThan(0.35 * depth);
+    // Its leading-edge end no further round than where the leading edge turns onto the top.
+    expect(tipLineOf(d).start).toBeLessThanOrEqual(tipTurnFraction(d.outline) + 1e-9);
     expect(sweepFrame(d).base.pts[0]!.y).toBeCloseTo(0, 9);
+  });
+
+  it('counts a flat top as tip: cuts near the top are thickest toward the front', () => {
+    // Owner testing (rule 3): with the top on the leading edge, the sections up there
+    // slanted steeply down to the hook, and every cut near the top was thickest toward
+    // its trailing edge, at 74% of the chord 94 mm up.
+    const d = { ...ownerFin('steep_tip_line.fin.json'), slices: [] };
+    const turn = outlineAtFraction(d.outline, tipTurnFraction(d.outline));
+    expect(turn.y).toBeGreaterThan(9); // 95 mm up, where the top begins
+    expect(turn.y).toBeLessThan(9.8);
+    const b = prepareBlade(d);
+    const st = Array.from({ length: 101 }, (_, i) => i / 100);
+    for (const h of [9.0, 9.42, 9.7]) {
+      const s = bladeSection(b, h, st);
+      const t = st.map((_, j) => Math.abs(s.outside[j]!.y - s.inside[j]!.y));
+      const at = st[t.indexOf(Math.max(...t))]!;
+      expect(at).toBeGreaterThan(0.25);
+      expect(at).toBeLessThan(0.5);
+    }
   });
 
   it('follows a tip line the user has moved', () => {
@@ -359,13 +382,55 @@ describe('slices and the tip line (owner’s rules)', () => {
     }
   });
 
+  it('moves a slice made from the fin as the fin’s section at its new height', () => {
+    // Owner testing: dragged from where it was added up to the tip, a slice carried the
+    // section from down there. Moving a slice repositions it, as the analysis cut moves.
+    const low = { ...plain, slices: [{ height: 0.6, section: bladeFoilAt(plain, 0.6) }] };
+    const moved = {
+      ...plain,
+      slices: [{ height: eta, section: sliceFoilMovedTo(low, 0, eta) }],
+    };
+    const a = prepareBlade(moved);
+    const c = prepareBlade(plain);
+    const st = cosineStations(60);
+    for (const h of [8.0, 8.6, 9.02, 9.4]) {
+      const p = bladeSection(a, h, st);
+      const q = bladeSection(c, h, st);
+      st.forEach((_, j) => expect(Math.abs(width(p, j) - width(q, j))).toBeLessThan(5e-3));
+    }
+    const tp = sliceTipPoint(moved, 0)!;
+    expect(yAtX(moved.slices[0]!.section.outside, tp.at)).toBeCloseTo(tp.outside, 3);
+  });
+
+  it('carries what a slice was reshaped by when it moves, and back again', () => {
+    const at = 0.6;
+    const made = bladeFoilAt(plain, at);
+    // Reshaped: its thickest point moved well forward.
+    const reshaped = moveFoilThickest(made, 0.2);
+    const d = { ...plain, slices: [{ height: at, section: reshaped }] };
+    const up = { ...plain, slices: [{ height: 0.7, section: sliceFoilMovedTo(d, 0, 0.7) }] };
+    // Still reshaped up there: not the fin's section.
+    const b = prepareBlade(up);
+    const h = 0.7 * b.depth;
+    const p = bladeSection(b, h, [0.15]);
+    const q = bladeSection(prepareBlade(plain), h, [0.15]);
+    expect(Math.abs(width(p, 0) - width(q, 0))).toBeGreaterThan(1e-2);
+    // And back where it was, as it was, to the fit (twice over: a percent each way).
+    const back = sliceFoilMovedTo(up, 0, at);
+    for (const u of [0.1, 0.3, 0.5, 0.7]) {
+      expect(Math.abs(yAtX(back.outside, u) - yAtX(reshaped.outside, u))).toBeLessThan(
+        0.03 * sectionThickest(reshaped).thickness,
+      );
+    }
+  });
+
   it('leaves the tip past the tip line to the tip foil', () => {
     // The owner's slice is the base foil, not the fin's section: it reshapes the chord up
     // to the tip line, and not past it.
     const h = eta * prepareBlade(plain).depth;
     const [from, to] = sliceFreeSpan(steep, eta);
     expect(from).toBe(0);
-    expect(to).toBeGreaterThan(0.8);
+    expect(to).toBeGreaterThan(0.3);
     expect(to).toBeLessThan(1);
     const st = Array.from({ length: 41 }, (_, k) => to + ((1 - to) * k) / 40);
     const p = bladeSection(prepareBlade(steep), h, st);

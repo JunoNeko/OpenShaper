@@ -18,6 +18,7 @@ import {
   FIN_TIP_SCALE_LIMITS,
   bladeFoilAt,
   chordAt,
+  sliceFoilMovedTo,
   sliceFreeSpan,
   sliceTipPoint,
   moveFoilThickest,
@@ -25,6 +26,7 @@ import {
   tipFoilOf,
   tipApexFraction,
   tipLineOf,
+  tipTurnFraction,
   defaultCanard,
   finHasToe,
   prepareBlade,
@@ -177,11 +179,17 @@ export const removeSlice = (d: FinDesign, foil: FinFoilIndex): FinDesign =>
  * them and from the root and tip: dragged up to a neighbour it waits just short of it,
  * and hops to the far side once the drag is past the neighbour. Slices are kept in
  * order up the blade, so its index may change: returns the design and its new index.
+ *
+ * Moving a slice repositions it, as the horizontal analysis cut moves (owner testing): it
+ * takes the fin's section at its new height, with whatever it was reshaped by on top
+ * (kernel sliceFoilMovedTo). `from` is the design and slice index a drag started from, so
+ * every step carries the slice as it was then, not as the last step left it.
  */
 export const moveSlice = (
   d: FinDesign,
   foil: FinFoilIndex,
   height: number,
+  from?: { design: FinDesign; index: number },
 ): { design: FinDesign; foil: FinFoilIndex } => {
   const i = foil - 1;
   const sl = d.slices[i];
@@ -209,7 +217,8 @@ export const moveSlice = (
     }
   }
   if (h === sl.height) return { design: d, foil };
-  const moved = { ...sl, height: h };
+  const src = from ?? { design: d, index: i };
+  const moved = { ...sl, height: h, section: sliceFoilMovedTo(src.design, src.index, h) };
   const at = others.findIndex((o) => o.height > h);
   const pos = at === -1 ? others.length : at;
   const slices = [...others.slice(0, pos), moved, ...others.slice(pos)];
@@ -486,7 +495,8 @@ const TIP_LINE_FROM_ROOT = 0.15;
 /**
  * The tip line with one end (`start`, on the leading edge's side, or `end`, on the
  * trailing edge's) moved to `fraction` of the outline's length. Each end stays on its
- * own side of the tip and clear of the roots.
+ * own side of the tip and clear of the roots, and the leading-edge end no further round
+ * than where the leading edge turns onto the top.
  */
 export const setTipLineEnd = (
   d: FinDesign,
@@ -496,9 +506,12 @@ export const setTipLineEnd = (
   if (!Number.isFinite(fraction)) return d;
   const now = tipLineOf(d);
   const apex = tipApexFraction(d.outline);
+  // The leading-edge end no further round than where the leading edge turns onto the top
+  // (kernel FIN_TIP_TURN): the top above it is the tip's.
+  const turn = Math.min(apex - TIP_LINE_GAP, tipTurnFraction(d.outline));
   const f =
     which === 'start'
-      ? Math.min(apex - TIP_LINE_GAP, Math.max(TIP_LINE_FROM_ROOT, fraction))
+      ? Math.min(turn, Math.max(TIP_LINE_FROM_ROOT, fraction))
       : Math.min(1 - TIP_LINE_FROM_ROOT, Math.max(apex + TIP_LINE_GAP, fraction));
   if (Math.abs(f - now[which]) < 1e-9) return d;
   return { ...d, tipLine: { ...now, [which]: f } };

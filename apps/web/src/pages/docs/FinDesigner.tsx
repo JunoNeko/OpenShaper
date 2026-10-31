@@ -158,7 +158,11 @@ export default function DocsFinDesigner() {
           its name, the tip foil turned level. The foil view&apos;s <strong>Base</strong> and{' '}
           <strong>Tip</strong> tabs do the same. Until you change it, the tip foil is the base foil.
           Drag either green dot at the ends of the tip line along the outline to move where the
-          sweep ends: it starts where the outline begins to curve tightly into the tip.
+          sweep ends: it starts where the outline begins to curve tightly into the tip. The top of
+          the fin counts as tip: the dot on the leading edge&apos;s side goes no further round than
+          where the leading edge turns onto the top (within 20° of level), so the sections near the
+          top run level, and a cut near the top is thickest toward its front, as a foil is. You can
+          drag it lower down the leading edge.
         </p>
         <p>
           The dashed orange line is the <strong>thickness path</strong>: where each section is
@@ -225,7 +229,10 @@ export default function DocsFinDesigner() {
           another: it waits just short of it, then hops to the other side. Each slice has its own
           foil: pick its tab in the foil view (Root, then each slice by height) and shape it with
           the same tools, NACA presets included. A new slice starts as the fin&apos;s own section at
-          its height, so adding one changes nothing until you reshape it.
+          its height, so adding one changes nothing until you reshape it. Dragging a slice moves it
+          the way the analysis cut moves: one you haven&apos;t reshaped shows the fin&apos;s section
+          at its new height, and one you have keeps your changes, laid on the fin&apos;s section
+          there.
         </p>
         <p>
           What you change in a slice&apos;s foil holds at its height and blends smoothly into the

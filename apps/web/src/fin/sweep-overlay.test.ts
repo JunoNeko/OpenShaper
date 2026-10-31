@@ -90,8 +90,8 @@ describe('picking the sweep lines in the profile', () => {
     const d = defaultFinDesign('side', 'left');
     const tip = foilSize(d, TIP_FOIL);
     const base = foilSize(d, 0);
-    // A short tip line, thinner than the root.
-    expect(tip.chord).toBeLessThan(base.chord / 3);
+    // A tip line across the top, shorter and thinner than the root.
+    expect(tip.chord).toBeLessThan(base.chord * 0.6);
     expect(tip.thickness).toBeLessThan(base.thickness);
     expect(foilTrueScale(d, TIP_FOIL)).toBeGreaterThan(0);
   });
