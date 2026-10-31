@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
- * The fin's side profile, editable, drawn over its tab: the base line and the tab
+ * The fin's side profile, editable, front on the left, drawn over its tab: the base line and the tab
  * itself, and on a Futures tab the 4 mm front-overhang limit and the
  * insertion-clearance line behind the tab (fin-clearance.ts). Over the fin, the foil
  * sweep (sweep-overlay.ts): its start along the base and its end across the tip, each a
@@ -34,6 +34,12 @@ import {
   sweepOverlay,
 } from './sweep-overlay';
 import { useFinState } from './use-fin';
+
+/**
+ * The profile drawn front on the left, rear on the right, as fin designers draw it and as
+ * the foil view runs (owner request): the outline's x (+ toward the nose) mirrored.
+ */
+const FRONT_LEFT = { a: -1, b: 0, c: 0, d: 1 } as const;
 
 const TAB_FILL = 'rgba(138,155,179,0.18)';
 const TAB_LINE = 'rgba(138,155,179,0.7)';
@@ -210,6 +216,7 @@ export const FinOutlinePane = memo(function FinOutlinePane({
       selection={pickFromSelection(selection, ['outline'])}
       alsoSelected={alsoFromSelection(selection, ['outline'])}
       frameBounds={frameBounds}
+      yScale={FRONT_LEFT}
       frameKey={`${position}-${base}-${frameKey}`}
       drawUnder={drawUnder}
       onViewport={onViewport}
