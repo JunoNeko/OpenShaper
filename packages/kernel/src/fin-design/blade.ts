@@ -77,7 +77,6 @@ import {
   sweepTipEdge,
   thicknessPathAt,
   type SweepGrid,
-  type SweepHit,
 } from './swept-loft';
 
 /** Chord stations from leading edge (0) to trailing edge (1), clustered at both edges. */
@@ -607,6 +606,8 @@ interface SweptBlade {
   readonly foils: readonly Foil[];
   /** Per grid row: where the section is thickest (fraction along it). */
   readonly path: Float64Array;
+  /** Per grid row up to the tip line: the height of that thickest point (cm). */
+  readonly pathZ: Float64Array;
   /** The tip line's height, as a fraction of the depth: where slices hand back to the sweep. */
   readonly tipEta: number;
   /** The tip past the tip line (tipFaces). */
@@ -640,7 +641,11 @@ const sweptBlade = (b: PreparedBlade): SweptBlade => {
   const path = new Float64Array(grid.rows);
   const way = thicknessPathOf(d);
   // Up to the tip line; past it the tip is built on its own (tipFaces).
-  for (let i = 0; i <= grid.tipRow; i++) path[i] = thicknessPathAt(way, i / grid.tipRow);
+  const pathZ = new Float64Array(grid.tipRow + 1);
+  for (let i = 0; i <= grid.tipRow; i++) {
+    path[i] = thicknessPathAt(way, i / grid.tipRow);
+    pathZ[i] = sweepPointOn(grid, i, path[i]!).y;
+  }
   // The tip edge for finding where spokes land: every few samples is plenty (within
   // a few thousandths of a millimetre on a tip a few millimetres round).
   const fine = sweepTipEdge(d);
@@ -661,6 +666,7 @@ const sweptBlade = (b: PreparedBlade): SweptBlade => {
     grid,
     foils,
     path,
+    pathZ,
     tipEta: b.depth > 0 ? tipZ / b.depth : 1,
     tip: {
       high,
@@ -765,6 +771,113 @@ const anglesRound = (
  * runs across the horizontal sections out here and took the STEP fit twice as long.
  */
 const TIP_NOSE_FROM = 0.2;
+
+/** How soft (cm) the turn in {@link sectionThickness} is: about a millimetre. */
+const THICKNESS_EASE = 0.1;
+
+/**
+ * How thick (cm, the thickness curve's) a section thickest at height `peak` is at height
+ * `z`: the curve at its thickest point, thinning with the curve above it, never thicker
+ * below it. Near the tip the sections slant steeply, so read at each point's own height
+ * the low end of one came out much thicker than its thickest point (owner testing: a
+ * bulge along the hook), and read at the thickest point's height the high end came out
+ * thicker than the curve allows up there (a fuller curve fattened the tip). The turn
+ * between is eased over {@link THICKNESS_EASE}, so the surface doesn't crease along the
+ * thickness path.
+ */
+const sectionThickness = (b: PreparedBlade, peak: number, z: number): number => {
+  const d = z - peak;
+  // Level below, the curve's slope from the peak up, eased in tangent at the peak.
+  return thicknessAt(b, d > 0 ? peak + (d * d) / (d + THICKNESS_EASE) : peak);
+};
+
+/**
+ * The sweep's faces at (x, z) (tab frame, cm): each section's foil, read where the point
+ * falls on it, or the tip past the tip line. Null off the sweep. `edge` lets a point on
+ * the outline count: only along the base, where a raised rear's underside is the base's
+ * foil cut off, as thick as the foil there.
+ */
+const sweepFaces = (
+  b: PreparedBlade,
+  sw: SweptBlade,
+  x: number,
+  z: number,
+  cells: ReturnType<typeof cellsAtHeight>,
+  edge: boolean,
+): [number, number] | null => {
+  const { grid, foils } = sw;
+  const m = b.minThickness;
+  const hit = locateOnSweep(grid, x, z, cells);
+  if (!hit) return null;
+  if (hit.row > grid.tipRow) {
+    const cap = tipFaces(sw, m, x, z, sectionThickness(b, sw.tip.high.y, z));
+    if (cap) return cap;
+  }
+  if (edge && !(hit.row < 1 && hit.along > 1e-3 && hit.along < 1 - 1e-3)) return null;
+  const i0 = Math.min(grid.rows - 2, Math.floor(hit.row));
+  const a = hit.row - i0;
+  // The foil's shape from the section, its thickness from the thickness curve
+  // (sectionThickness): on the thickness path the blade is the curve's thickness.
+  const row = (i: number): [number, number] => {
+    const f = foils[i]!;
+    const t = sectionThickness(b, sw.pathZ[Math.min(i, grid.tipRow)]!, z);
+    const k = f.thickest.thickness > 0 ? Math.max(0, t - m) / f.thickest.thickness : 0;
+    const [o, n] = f.shapeAt(foilFractionAt(hit.along, sw.path[i]!, f.thickest.at));
+    return [o * k + m * f.outsideShare, n * k - m * (1 - f.outsideShare)];
+  };
+  const [o0, n0] = row(i0);
+  const [o1, n1] = row(i0 + 1);
+  return [o0 + (o1 - o0) * a, n0 + (n1 - n0) * a];
+};
+
+/** Heights the sweep's thickest point across the chord is tabled at ({@link sweepThickestU}). */
+const THICKEST_TABLE = 100;
+const sweepThickestCache = new WeakMap<SweptBlade, Float64Array>();
+
+/**
+ * Where across the chord at height `z` the sweep is thickest (fraction of the chord):
+ * where a horizontal slice foil puts its thickest point, so a slice keeps the sweep's
+ * shape until it is edited (owner testing: near the tip, a slice laid with its own
+ * thickest point turned the tip's foil round). Tabled once per blade, centred on the
+ * thickest part rather than its single highest point, which jumps about where the
+ * sweep is flat across.
+ */
+const sweepThickestU = (b: PreparedBlade, sw: SweptBlade, z: number): number => {
+  let table = sweepThickestCache.get(sw);
+  if (!table) {
+    const n = THICKEST_TABLE;
+    table = new Float64Array(n + 1);
+    const across = 48;
+    for (let k = 0; k <= n; k++) {
+      const h = (b.depth * Math.min(n - 0.5, Math.max(0.5, k))) / n;
+      const { leading, trailing } = chordAt(b, h);
+      const cells = cellsAtHeight(sw.grid, h);
+      const t: number[] = [];
+      for (let j = 1; j < across; j++) {
+        const f = sweepFaces(b, sw, leading + ((trailing - leading) * j) / across, h, cells, false);
+        t.push(f ? f[0] - f[1] : 0);
+      }
+      const top = Math.max(...t);
+      let sum = 0;
+      let at = 0;
+      t.forEach((v, j) => {
+        const w = Math.max(0, v - 0.9 * top) ** 2;
+        sum += w;
+        at += w * ((j + 1) / across);
+      });
+      table[k] = sum > 0 ? at / sum : 0.5;
+    }
+    // Eased between heights, so a slice's foil turns smoothly up the blade.
+    for (let pass = 0; pass < 2; pass++) {
+      const prev = table.slice();
+      for (let k = 1; k < n; k++) table[k] = (prev[k - 1]! + 2 * prev[k]! + prev[k + 1]!) / 4;
+    }
+    sweepThickestCache.set(sw, table);
+  }
+  const f = Math.min(1, Math.max(0, b.depth > 0 ? z / b.depth : 0)) * THICKEST_TABLE;
+  const k = Math.min(THICKEST_TABLE - 1, Math.floor(f));
+  return Math.min(0.95, Math.max(0.05, table[k]! + (table[k + 1]! - table[k]!) * (f - k)));
+};
 
 /**
  * The faces past the tip line (owner's tip loft): spokes from the tip foil's high point
@@ -876,9 +989,8 @@ export const bladeSection = (
   const thickness = thicknessAt(b, h);
   const m = b.minThickness;
   const sw = sweptBlade(b);
-  const { grid, foils } = sw;
-  const base = foils[0]!;
-  const cells = cellsAtHeight(grid, h);
+  const base = sw.foils[0]!;
+  const cells = cellsAtHeight(sw.grid, h);
   const eta = b.depth > 0 ? h / b.depth : 0;
   const weight = sliceWeight(b.design, eta, sw.tipEta);
   const sliceFoil = weight > 0 ? sliceFoilAt(b.design, eta) : null;
@@ -886,42 +998,19 @@ export const bladeSection = (
     sliceFoil && sliceFoil.thickest.thickness > 0
       ? Math.max(0, thickness - m) / sliceFoil.thickest.thickness
       : 0;
+  const sliceThickestU = sliceFoil ? sweepThickestU(b, sw, h) : 0.5;
   const faces = (u: number): [number, number] => {
-    // The sweep's: each section's foil, read where this point falls on it.
-    // The edges are the minimum, except along the base: a raised rear's underside is the
-    // base's foil cut off, as thick as the foil there.
-    let out = m * base.outsideShare;
-    let ins = -m * (1 - base.outsideShare);
-    {
-      const x = leading + (trailing - leading) * u;
-      const hit = locateOnSweep(grid, x, h, cells);
-      const cap = hit && hit.row > grid.tipRow ? tipFaces(sw, m, x, h, thickness) : null;
-      if (cap) [out, ins] = cap;
-      const onBase = (hit: SweepHit) => hit.row < 1 && hit.along > 1e-3 && hit.along < 1 - 1e-3;
-      if (!cap && hit && (u > 0 && u < 1 ? true : onBase(hit))) {
-        const alongAt = hit.along;
-        const i0 = Math.min(grid.rows - 2, Math.floor(hit.row));
-        const a = hit.row - i0;
-        // The foil's shape from the section, its thickness from the thickness curve at
-        // this height: so on the thickness path the blade is the curve's thickness, and
-        // a slanting section's upper end isn't carried up thicker than the curve allows
-        // there (owner testing: a fuller curve near the tip fattened the tip).
-        const row = (i: number): [number, number] => {
-          const f = foils[i]!;
-          const k =
-            f.thickest.thickness > 0 ? Math.max(0, thickness - m) / f.thickest.thickness : 0;
-          const [o, n] = f.shapeAt(foilFractionAt(alongAt, sw.path[i]!, f.thickest.at));
-          return [o * k + m * f.outsideShare, n * k - m * (1 - f.outsideShare)];
-        };
-        const [o0, n0] = row(i0);
-        const [o1, n1] = row(i0 + 1);
-        out = o0 + (o1 - o0) * a;
-        ins = n0 + (n1 - n0) * a;
-      }
-    }
+    // The edges are the minimum, except along the base (sweepFaces).
+    const x = leading + (trailing - leading) * u;
+    const [out, ins] = sweepFaces(b, sw, x, h, cells, !(u > 0 && u < 1)) ?? [
+      m * base.outsideShare,
+      -m * (1 - base.outsideShare),
+    ];
     if (!sliceFoil) return [out, ins];
-    // A horizontal slice foil: along the chord here, as the taper says.
-    const [o, n] = sliceFoil.shapeAt(u);
+    // A horizontal slice foil: along the chord here, as the taper says, its thickest
+    // point where the sweep's is (owner testing: near the tip, a slice laid with its own
+    // thickest point turned the tip's foil round).
+    const [o, n] = sliceFoil.shapeAt(foilFractionAt(u, sliceThickestU, sliceFoil.thickest.at));
     const sOut = o * sliceScale + m * sliceFoil.outsideShare;
     const sIns = n * sliceScale - m * (1 - sliceFoil.outsideShare);
     return [out + (sOut - out) * weight, ins + (sIns - ins) * weight];
