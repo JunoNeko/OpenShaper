@@ -154,7 +154,9 @@ describe('the swept loft', () => {
     const depth = prepareBlade(d).depth;
     for (const p of [a, b]) expect(p.y).toBeGreaterThan(0.6 * depth);
     // Its leading-edge end no further round than where the leading edge turns onto the top.
-    expect(tipLineOf(d).start).toBeLessThanOrEqual(tipTurnFraction(d.outline) + 1e-9);
+    expect(tipLineOf({ ...d, tipLine: undefined }).start).toBeLessThanOrEqual(
+      tipTurnFraction(d.outline) + 1e-9,
+    );
     expect(sweepFrame(d).base.pts[0]!.y).toBeCloseTo(0, 9);
   });
 
@@ -162,7 +164,11 @@ describe('the swept loft', () => {
     // Owner testing (rule 3): with the top on the leading edge, the sections up there
     // slanted steeply down to the hook, and every cut near the top was thickest toward
     // its trailing edge, at 74% of the chord 94 mm up.
-    const d = { ...ownerFin('steep_tip_line.fin.json'), slices: [] };
+    // The default tip line: the owner's own is further round, where they put it.
+    const { tipLine: _own, ...rest } = ownerFin('steep_tip_line.fin.json');
+    void _own;
+    const d = { ...rest, slices: [] };
+    expect(tipLineOf(d).start).toBeCloseTo(tipTurnFraction(d.outline), 9);
     const turn = outlineAtFraction(d.outline, tipTurnFraction(d.outline));
     expect(turn.y).toBeGreaterThan(9); // 95 mm up, where the top begins
     expect(turn.y).toBeLessThan(9.8);

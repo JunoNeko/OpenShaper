@@ -159,10 +159,11 @@ export default function DocsFinDesigner() {
           <strong>Tip</strong> tabs do the same. Until you change it, the tip foil is the base foil.
           Drag either green dot at the ends of the tip line along the outline to move where the
           sweep ends: it starts where the outline begins to curve tightly into the tip. The top of
-          the fin counts as tip: the dot on the leading edge&apos;s side goes no further round than
-          where the leading edge turns onto the top (within 20° of level), so the sections near the
-          top run level, and a cut near the top is thickest toward its front, as a foil is. You can
-          drag it lower down the leading edge.
+          the fin counts as tip: the dot on the leading edge&apos;s side starts where the leading
+          edge turns onto the top (within 20° of level), so the sections near the top run level, and
+          a cut near the top is thickest toward its front, as a foil is. Drag it anywhere along the
+          outline, round the top included: further round, the sections near the top slant down
+          toward the trailing edge, and so does the thickness.
         </p>
         <p>
           The dashed orange line is the <strong>thickness path</strong>: where each section is
