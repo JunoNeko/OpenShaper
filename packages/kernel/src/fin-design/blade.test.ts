@@ -122,9 +122,7 @@ describe.each(FIN_POSITIONS)('bladeSection(default %s)', (position) => {
     // The taper sets each sweep section's thickness at its thickest point, at that
     // point's height: read there, a horizontal section has it (to the grid's reading).
     const g = sweepGrid(flat.design);
-    // Up to three quarters of the way: nearer the tip line the blade thins toward the tip
-    // edge (FIN_TIP_EDGE_SLOPE).
-    for (const f of [0, 0.25, 0.5, 0.75]) {
+    for (const f of [0, 0.25, 0.5, 0.75, 0.95]) {
       const q = sweepPointOn(g, f * g.tipRow, flat.thickestAt);
       const p = { x: q.x, y: Math.max(0, q.y) }; // a hair under 0 at the root, by rounding
       const c = chordAt(flat, p.y);

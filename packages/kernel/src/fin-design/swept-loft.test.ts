@@ -10,7 +10,6 @@ import { cosineStations } from './blade';
 import { vec2 } from '../vec2';
 import {
   FIN_SLICE_REACH,
-  FIN_TIP_EDGE_SLOPE,
   bladeSection,
   chordAt,
   moveFoilThickest,
@@ -29,6 +28,7 @@ import {
   outlineAtFraction,
   sweepFrame,
   sweepGrid,
+  sweepPointOn,
   sweepTipEdge,
   tipLineOf,
 } from './swept-loft';
@@ -219,8 +219,9 @@ describe('the swept loft', () => {
       const e = edge[Math.round((k / 10) * (edge.length - 1))]!;
       const len = Math.hypot(mid.x - e.x, mid.y - e.y);
       if (!(len > 0.05)) continue;
-      // Half a millimetre in from the edge, toward the tip line's middle.
-      const q = { x: e.x + ((mid.x - e.x) * 0.05) / len, y: e.y + ((mid.y - e.y) * 0.05) / len };
+      // A tenth of a millimetre in from the edge, toward the tip line's middle: the tip
+      // rounds off like a nose, so further in it is still most of its thickness.
+      const q = { x: e.x + ((mid.x - e.x) * 0.01) / len, y: e.y + ((mid.y - e.y) * 0.01) / len };
       if (!(q.y > 0 && q.y < b.depth)) continue;
       const c = chordAt(b, q.y);
       const u = (q.x - c.leading) / (c.trailing - c.leading);
@@ -244,32 +245,65 @@ describe('the swept loft', () => {
   });
 
   it.each(FINS)(
-    'thins steadily into the tip, with no shoulder at the trailing edge: %s',
+    'only thins going out from the tip foil’s high point to the tip edge: %s',
     (_, make) => {
-      // Owner testing: the sweep carried the taper's thickness right up to a tip line a few
-      // millimetres from the edge, then dropped to the minimum in the last millimetre, a
-      // bulge round the tip. Near the tip a cut now thins at most FIN_TIP_EDGE_SLOPE (and a
-      // little for the blend) per unit going out to the trailing edge.
+      // The owner's tip loft: spokes from the high point out to the edge, each thinning
+      // all the way (a slope cap on the thickness near the edge left a divot).
       const d = make();
       const b = prepareBlade(d);
-      const f = sweepFrame(d);
-      const low = Math.min(f.tipStart.y, f.tipEnd.y);
-      // Up to the tip line's upper end: above it a hooked tip's cut ends on the hook's
-      // upper edge, which is leading edge, a foil's round nose.
-      const high = Math.min(b.depth - 0.05, Math.max(f.tipStart.y, f.tipEnd.y));
-      for (let h = low; h <= high + 1e-9; h += (high - low) / 6) {
-        const c = chordAt(b, h);
-        const chord = Math.abs(c.leading - c.trailing);
-        const st = Array.from({ length: 41 }, (_, i) => 0.8 + (0.2 * i) / 40);
-        const s = bladeSection(b, h, st);
-        const t = st.map((_, i) => Math.abs(s.outside[i]!.y - s.inside[i]!.y));
-        for (let i = 1; i < t.length; i++) {
-          const drop = (t[i - 1]! - t[i]!) / (chord * (st[i]! - st[i - 1]!));
-          // The slope holds along the sweep; a level cut crosses it at a slant, so a little
-          // more. Without it the default fins dropped 0.8 and the hatchet 1.9 here.
-          expect(drop).toBeLessThan(2.5 * FIN_TIP_EDGE_SLOPE);
+      const g = sweepGrid(d);
+      const high = sweepPointOn(g, g.tipRow, thicknessPathOf(d)[2]);
+      const edge = sweepTipEdge(d);
+      const at = (x: number, z: number): number | null => {
+        if (!(z > 0 && z < b.depth)) return null;
+        const c = chordAt(b, z);
+        const u = (x - c.leading) / (c.trailing - c.leading);
+        if (!(u > 0 && u < 1)) return null;
+        const s = bladeSection(b, z, [u]);
+        return Math.abs(s.outside[0]!.y - s.inside[0]!.y);
+      };
+      for (let k = 1; k < 12; k++) {
+        const e = edge[Math.round((k / 12) * (edge.length - 1))]!;
+        let last = Infinity;
+        for (let j = 1; j < 20; j++) {
+          const t = j / 20;
+          const v = at(high.x + (e.x - high.x) * t, high.y + (e.y - high.y) * t);
+          if (v === null) continue;
+          expect(v).toBeLessThanOrEqual(last + 2e-4); // to 0.002 mm, the grid's reading
+          last = v;
         }
       }
     },
   );
+
+  it.each(FINS)('has no divot in an upright cut through the tip: %s', (_, make) => {
+    // Owner testing: cuts across the tip went thin, thick, thin again. Up any upright
+    // line through the tip the blade now thickens to one peak and thins after it.
+    const d = make();
+    const b = prepareBlade(d);
+    const f = sweepFrame(d);
+    const low = Math.min(f.tipStart.y, f.tipEnd.y) - 1;
+    const x0 = Math.min(...f.tipEdge.pts.map((p) => p.x));
+    const x1 = Math.max(f.tipStart.x, f.tipEnd.x);
+    for (let k = 1; k < 8; k++) {
+      const x = x0 + ((x1 - x0) * k) / 8;
+      const ts: number[] = [];
+      for (let z = Math.max(0.01, low); z < b.depth; z += 0.02) {
+        const c = chordAt(b, z);
+        if (!(x < c.leading && x > c.trailing)) {
+          if (ts.length) break;
+          continue;
+        }
+        const s = bladeSection(b, z, [(x - c.leading) / (c.trailing - c.leading)]);
+        ts.push(Math.abs(s.outside[0]!.y - s.inside[0]!.y));
+      }
+      // No dip: never down and then up again by more than 0.03 mm (the grid reads to a
+      // few thousandths; an outline corner right at the tip line adds a little more).
+      let fell = false;
+      for (let i = 1; i < ts.length; i++) {
+        if (ts[i]! < ts[i - 1]! - 3e-3) fell = true;
+        else if (fell) expect(ts[i]!).toBeLessThanOrEqual(ts[i - 1]! + 3e-3);
+      }
+    }
+  });
 });

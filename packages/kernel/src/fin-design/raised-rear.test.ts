@@ -31,7 +31,6 @@ import { BLADE_CI_TOLERANCE, bladeSurfaceDeviation, fitBladeSurface } from './bl
 import { splineExtremes } from './curve-shape';
 import type { FinDesign, FinTwist } from './fin-design';
 import { finReadouts } from './fin-readouts';
-import { sweepFrame } from './swept-loft';
 import { validateFinDesign } from './fin-rules';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -426,14 +425,9 @@ describe('corners in an edge (the owner’s test fin, docs/specs/fins/corner_cre
       const s = bladeSection(b, h, [0, (x - c.leading) / (c.trailing - c.leading), 1]);
       return Math.abs(s.outside[1]!.y - s.inside[1]!.y);
     };
-    // Clear of the tip: within 5 mm of the tip line the blade thins into the tip edge
-    // (FIN_TIP_EDGE_SLOPE), which bends there by design. This fin has a corner 2 mm under
-    // its tip line's end.
-    const f = sweepFrame(d);
-    const tipLow = Math.min(f.tipStart.y, f.tipEnd.y) - 0.5;
     const corners = d.outline.knots.slice(1, -1).filter((k) => !k.continuous);
-    expect(corners.filter((k) => k.end.y < tipLow)).toHaveLength(3);
-    for (const k of corners.filter((c) => c.end.y < tipLow)) {
+    expect(corners).toHaveLength(4);
+    for (const k of corners) {
       const h = k.end.y;
       for (const ahead of [0.5, 1]) {
         const x = chordAt(b, h).trailing + ahead;
