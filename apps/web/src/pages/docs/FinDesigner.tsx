@@ -166,7 +166,8 @@ export default function DocsFinDesigner() {
           thickest points, so the two always agree: drag the path&apos;s end dot in the profile and
           that foil is reshaped to match; drag the orange <strong>thickest point</strong> dot in the
           foil view (or reshape the foil) and the path follows. The middle dot moves only the path.
-          How thick the fin is comes from the thickness curve, at each height, the tip included.
+          Each section is as thick on the path as the thickness curve says at that height, and thins
+          with the curve toward its higher end, never thicker toward its lower end.
         </p>
         <p>
           On a raised rear the sweep starts along the underside too, so the underside keeps the
@@ -230,7 +231,10 @@ export default function DocsFinDesigner() {
           fin&apos;s depth below and above it — less where the base, the tip line or the next slice
           is nearer — easing in and out so no line forms. Two slices closer than that hold their
           foils all the way between them. A slice above the tip line blends into the rounded tip,
-          which the profile shades. The thickness still comes from the thickness curve.{' '}
+          which the profile shades. The thickness still comes from the thickness curve, and a
+          slice&apos;s thickest point sits where the swept fin is thickest at its height, so a slice
+          you haven&apos;t reshaped leaves the fin much as it was; near the tip that is well back
+          toward the trailing edge. A slice&apos;s foil therefore has no thickest-point handle.{' '}
           <strong>Remove slice</strong>, next to Add slice, takes the selected slice away: click a
           slice&apos;s line (or its foil tab) to select it. Slices keep at least 2% of the depth
           from each other and from the root and tip.
@@ -254,10 +258,10 @@ export default function DocsFinDesigner() {
           root (bottom) to the tip (top). It stands upright at the fin&apos;s true depth, so it
           lines up with the profile; thickness runs across, drawn four times wider than true. A
           straight run that curves in near the tip is the usual shape: that curve is what controls
-          how the tip flexes. The curve holds all the way up: past the tip line the tip is as thick
-          as the curve says at each height, the loft only rounding it off to the edge, so a fuller
-          curve near the tip gives a fuller tip and no more. <strong>Root thickness</strong> scales
-          the whole curve.
+          how the tip flexes. The curve holds all the way up: past the tip line the tip is no
+          thicker than the curve says at each height, the loft rounding it off to the edge, so a
+          fuller curve near the tip gives a fuller tip and no more. <strong>Root thickness</strong>{' '}
+          scales the whole curve.
         </p>
       </Section>
 

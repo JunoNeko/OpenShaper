@@ -244,6 +244,30 @@ describe('the swept loft', () => {
     expect(sliceWeight(d, 0.8 - FIN_SLICE_REACH / 2, tip)).toBeCloseTo(0.5, 9);
   });
 
+  it('lays a slice near the tip thickest where the sweep is, the right way round', () => {
+    // Owner testing: a slice added at 92.8 mm, not edited, put its thickest point at its
+    // own 35% of the chord, toward the leading edge, where the sweep is thickest toward
+    // the hook: the tip's foil turned round.
+    const plain = defaultFinDesign('side', 'left');
+    const sliced = { ...plain, slices: [{ height: 0.928, section: plain.section }] };
+    const thickestU = (d: FinDesign, h: number): number => {
+      const b = prepareBlade(d);
+      const st = Array.from({ length: 201 }, (_, i) => i / 200);
+      const s = bladeSection(b, h, st);
+      let k = 0;
+      st.forEach((_, i) => {
+        const t = s.outside[i]!.y - s.inside[i]!.y;
+        if (t > s.outside[k]!.y - s.inside[k]!.y) k = i;
+      });
+      return st[k]!;
+    };
+    const depth = prepareBlade(plain).depth;
+    const h = 0.928 * depth;
+    // The sweep is thickest well back toward the hook here; the slice now agrees.
+    expect(thickestU(plain, h)).toBeGreaterThan(0.5);
+    expect(Math.abs(thickestU(sliced, h) - thickestU(plain, h))).toBeLessThan(0.1);
+  });
+
   it.each(FINS)(
     'only thins going out from the tip foil’s high point to the tip edge: %s',
     (_, make) => {
@@ -260,9 +284,7 @@ describe('the swept loft', () => {
         const u = (x - c.leading) / (c.trailing - c.leading);
         if (!(u > 0 && u < 1)) return null;
         const s = bladeSection(b, z, [u]);
-        // As a share of the thickness curve at that height: the curve sets how thick each
-        // height is, the tip loft only closes it off.
-        return Math.abs(s.outside[0]!.y - s.inside[0]!.y) / thicknessAt(b, z);
+        return Math.abs(s.outside[0]!.y - s.inside[0]!.y);
       };
       for (let k = 1; k < 12; k++) {
         const e = edge[Math.round((k / 12) * (edge.length - 1))]!;
@@ -271,7 +293,7 @@ describe('the swept loft', () => {
           const t = j / 20;
           const v = at(high.x + (e.x - high.x) * t, high.y + (e.y - high.y) * t);
           if (v === null) continue;
-          expect(v).toBeLessThanOrEqual(last + 2e-3);
+          expect(v).toBeLessThanOrEqual(last + 2e-4); // to 0.002 mm, the grid's reading
           last = v;
         }
       }

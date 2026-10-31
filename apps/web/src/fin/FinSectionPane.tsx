@@ -412,11 +412,12 @@ export const FinSectionPane = memo(function FinSectionPane({
   }, [section]);
 
   // Where the taper's thickness applies: this foil's thickest point. On the base and tip
-  // foils it is the thickness path's end too: drag it (or the path) and both follow.
+  // foils it is the thickness path's end too: drag it (or the path) and both follow. A
+  // horizontal slice's sits where the sweep is thickest at its height, so it has no handle.
   const thickestAt = useMemo(() => (section ? sectionThickest(section).at : null), [section]);
   const markers = useMemo(
     () =>
-      thickestAt === null
+      thickestAt === null || activeFoil > 0
         ? []
         : [
             {
@@ -426,7 +427,7 @@ export const FinSectionPane = memo(function FinSectionPane({
               label: 'Thickest point',
             },
           ],
-    [thickestAt],
+    [thickestAt, activeFoil],
   );
   const markerHandlers = useMemo(
     () => ({
