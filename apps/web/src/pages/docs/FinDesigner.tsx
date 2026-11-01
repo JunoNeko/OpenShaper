@@ -117,7 +117,8 @@ export default function DocsFinDesigner() {
 
       <Section id="outline" title="The outline">
         <p>
-          The profile shows the fin from the side, drawn over its tab. Drag a point or a handle to
+          The profile shows the fin from the side, drawn over its tab, front on the left and rear on
+          the right, as fin designers draw it and as the foil view runs. Drag a point or a handle to
           reshape it; double-click the curve to add a point; select a point and press Delete to
           remove it. The toolbar&apos;s point tools do the same for the selected point on any curve
           — <strong>+</strong> adds a point halfway to the next, <strong>−</strong> deletes it — and

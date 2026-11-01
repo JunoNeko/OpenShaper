@@ -269,6 +269,20 @@ describe('selecting several points in a pane', () => {
   };
 
   it(
+    'draws the profile front on the left, as the foil view runs',
+    () => {
+      // Owner request: fin designers draw profiles front left, rear right.
+      render(<FinOutlinePane store={finStore} units={lengthUnitByKey('mm')} />);
+      const canvas = screen.getByRole('img', { name: 'Fin outline' });
+      const last = design().outline.knots.length - 1;
+      const front = find(canvas, 0); // the leading-edge root
+      const rear = find(canvas, last); // the trailing-edge root
+      expect(front.clientX).toBeLessThan(rear.clientX);
+    },
+    HEAVY,
+  );
+
+  it(
     'shift-clicks a second point, then drags both the same way',
     () => {
       render(<FinOutlinePane store={finStore} units={lengthUnitByKey('mm')} />);
