@@ -23,8 +23,21 @@ const measurement = (page: Page, label: string) =>
 
 async function openFin(page: Page) {
   await page.goto('/fin');
-  await expect(page.getByRole('img', { name: 'Fin outline' })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Profile' })).toBeVisible();
   await expect(page.getByLabel('Fin measurements')).toContainText('mm²');
+}
+
+/** Start a new fin from the header's New fin menu. */
+async function pickNewFin(page: Page, label: string) {
+  await page.getByRole('menuitem', { name: 'New fin' }).click();
+  await page.getByRole('menuitem', { name: label, exact: true }).click();
+}
+
+/** The Export menu's item `name`, the menu opened first if it is closed. */
+async function exportItem(page: Page, name: string) {
+  const item = page.getByRole('menuitem', { name, exact: true });
+  if (!(await item.isVisible())) await page.getByRole('menuitem', { name: /^Export/ }).click();
+  return item;
 }
 
 /** Type into a labelled number field and commit it, as a user does. */
@@ -39,7 +52,7 @@ test.describe('Fin designer', () => {
     await openFin(page);
 
     // Start from a right-hand side fin and size it.
-    await page.getByLabel('Start a new fin').selectOption({ label: 'Side, right' });
+    await pickNewFin(page, 'Side, right');
     await expect(page.getByRole('button', { name: 'Right', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -49,10 +62,10 @@ test.describe('Fin designer', () => {
     await setField(page, /Cant/, '6');
     // Each view's controls come with it into the large pane.
     await page.getByRole('button', { name: 'Show Thickness in the large pane' }).click();
-    await setField(page, /Root thickness/, '7.5');
+    await setField(page, /Base thickness/, '7.5');
 
     // A cambered NACA foil.
-    await page.getByRole('button', { name: 'Show Foil section in the large pane' }).click();
+    await page.getByRole('button', { name: 'Show Foil in the large pane' }).click();
     await page.getByLabel('NACA preset').selectOption('2410');
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(page.getByLabel('Inside share of the thickness (%)')).toBeVisible();
@@ -71,7 +84,7 @@ test.describe('Fin designer', () => {
     await expect(page.getByRole('status')).toHaveCount(0);
     const [step] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('button', { name: 'Export STEP' }).click(),
+      (await exportItem(page, 'STEP for CNC')).click(),
     ]);
     expect(step.suggestedFilename()).toBe('fin-side-right.step');
     const stepText = await readFile((await step.path())!, 'utf8');
@@ -82,7 +95,7 @@ test.describe('Fin designer', () => {
     // STL for printing.
     const [stl] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('button', { name: 'Export STL' }).click(),
+      (await exportItem(page, 'STL for 3D printing')).click(),
     ]);
     expect(stl.suggestedFilename()).toBe('fin-side-right.stl');
     const stlBytes = await readFile((await stl.path())!);
@@ -96,7 +109,7 @@ test.describe('Fin designer', () => {
     ]);
     expect(saved.suggestedFilename()).toBe('fin-side-right.fin.json');
     const savedPath = (await saved.path())!;
-    await page.getByLabel('Start a new fin').selectOption({ label: 'Centre' });
+    await pickNewFin(page, 'Centre');
     await expect(page.getByText(/^Centre fin/)).toBeVisible();
     await page.getByLabel('Open a fin file').setInputFiles(savedPath);
     await expect(page.getByText(/^Side fin/)).toBeVisible();
@@ -106,15 +119,15 @@ test.describe('Fin designer', () => {
     // The autosave keeps it through a reload.
     await page.waitForTimeout(1200); // past the autosave's debounce
     await page.reload();
-    await expect(page.getByRole('img', { name: 'Fin outline' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Profile' })).toBeVisible();
     await expect(measurement(page, 'Depth')).toHaveText('110.0 mm');
     await expect(page.getByLabel('Inside share of the thickness (%)')).toBeVisible();
   });
 
   test('a foil slice: add, shape, export, save and reopen', async ({ page }) => {
     await openFin(page);
-    await page.getByRole('button', { name: 'Add slice (twist)' }).click();
-    await page.getByRole('button', { name: 'Show Foil section in the large pane' }).click();
+    await page.getByRole('button', { name: 'Add control section' }).click();
+    await page.getByRole('button', { name: 'Show Foil in the large pane' }).click();
     const tabs = page.getByRole('tablist', { name: 'Foil' });
     await expect(tabs.getByRole('tab')).toHaveText(['Base', 'Tip', '50.0 mm']);
     await page.getByLabel('NACA preset').selectOption('0008');
@@ -123,7 +136,7 @@ test.describe('Fin designer', () => {
 
     const [step] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('button', { name: 'Export STEP' }).click(),
+      (await exportItem(page, 'STEP for CNC')).click(),
     ]);
     expect(
       (await readFile((await step.path())!, 'utf8')).match(/MANIFOLD_SOLID_BREP\(/g),
@@ -135,7 +148,7 @@ test.describe('Fin designer', () => {
     ]);
     const savedPath = (await saved.path())!;
     expect(JSON.parse(await readFile(savedPath, 'utf8')).version).toBe(3);
-    await page.getByLabel('Start a new fin').selectOption({ label: 'Centre' });
+    await pickNewFin(page, 'Centre');
     await expect(tabs.getByRole('tab')).toHaveText(['Base', 'Tip']); // no slices
     await page.getByLabel('Open a fin file').setInputFiles(savedPath);
     await expect(tabs.getByRole('tab')).toHaveText(['Base', 'Tip', '50.0 mm']);
@@ -143,15 +156,13 @@ test.describe('Fin designer', () => {
 
   test('a canard on the FCS single tab exports for CNC', async ({ page }) => {
     await openFin(page);
-    await page
-      .getByLabel('Start a new fin')
-      .selectOption({ label: 'Canard, left (FCS single tab)' });
-    await expect(page.getByLabel('Base')).toHaveValue('fcs-single');
+    await pickNewFin(page, 'Canard, left (FCS single)');
+    await expect(page.getByLabel('Tab', { exact: true })).toHaveValue('fcs-single');
     await expect(page.getByLabel(/^Cant/)).toBeDisabled();
     await expect(page.getByRole('status')).toHaveCount(0);
     const [step] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('button', { name: 'Export STEP' }).click(),
+      (await exportItem(page, 'STEP for CNC')).click(),
     ]);
     expect(step.suggestedFilename()).toBe('fin-side-left.step');
     expect(
@@ -159,20 +170,21 @@ test.describe('Fin designer', () => {
     ).toHaveLength(2);
   });
 
-  test('exports a left and a right fin with R & L ticked', async ({ page }) => {
+  test('exports a left and a right fin with the option ticked', async ({ page }) => {
     await openFin(page);
-    await page.getByRole('checkbox', { name: 'R & L' }).check();
+    await (await exportItem(page, 'STEP for CNC')).isVisible();
+    await page.getByRole('menuitemcheckbox', { name: /^Left and right fin/ }).click();
     const downloads: string[] = [];
     page.on('download', (d) => downloads.push(d.suggestedFilename()));
-    await page.getByRole('button', { name: 'Export STL' }).click();
+    await (await exportItem(page, 'STL for 3D printing')).click();
     await expect.poll(() => downloads.length).toBe(2);
     expect(downloads.sort()).toEqual(['fin-side-left.stl', 'fin-side-right.stl']);
   });
 
   test('explains a foil a centre fin cannot take', async ({ page }) => {
     await openFin(page);
-    await page.getByLabel('Start a new fin').selectOption({ label: 'Centre' });
-    await page.getByRole('button', { name: 'Show Foil section in the large pane' }).click();
+    await pickNewFin(page, 'Centre');
+    await page.getByRole('button', { name: 'Show Foil in the large pane' }).click();
     await page.getByLabel('NACA preset').selectOption('other');
     await page.getByLabel('NACA 4-digit code').fill('2412');
     await page.getByRole('button', { name: 'Apply' }).click();
@@ -195,17 +207,18 @@ test.describe('Fin designer', () => {
       mimeType: 'application/json',
       buffer: Buffer.from(JSON.stringify(doc)),
     });
-    await expect(page.getByRole('status')).toContainText('Cant must be 0–20°');
-    await expect(page.getByRole('button', { name: 'Export STEP' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Export STL' })).toBeDisabled();
+    await expect(page.getByRole('status')).toContainText('Cant must be 0° to 20°');
+    await expect(await exportItem(page, 'STEP for CNC')).toBeDisabled();
+    await expect(await exportItem(page, 'STL for 3D printing')).toBeDisabled();
+    await page.keyboard.press('Escape');
     // Fixing it opens export again.
     await setField(page, /Cant/, '12');
-    await expect(page.getByRole('button', { name: 'Export STEP' })).toBeEnabled();
+    await expect(await exportItem(page, 'STEP for CNC')).toBeEnabled();
   });
 
   test('links to its documentation', async ({ page }) => {
     await openFin(page);
-    await page.getByRole('link', { name: 'Help / Feedback' }).click();
+    await page.getByRole('link', { name: 'Help' }).click();
     await expect(page.getByRole('heading', { name: 'OpenFinShaper help', level: 1 })).toBeVisible();
     await expect(page.getByRole('link', { name: 'fin designer', exact: true })).toHaveAttribute(
       'href',
@@ -218,11 +231,11 @@ test.describe('Fin designer', () => {
 
     test('shows the panes and exports', async ({ page }) => {
       await openFin(page);
-      await expect(page.getByRole('img', { name: 'Foil section' })).toBeAttached();
-      await expect(page.getByRole('img', { name: 'Thickness taper' })).toBeAttached();
+      await expect(page.getByRole('img', { name: 'Foil' })).toBeAttached();
+      await expect(page.getByRole('img', { name: 'Thickness' })).toBeAttached();
       const [stl] = await Promise.all([
         page.waitForEvent('download'),
-        page.getByRole('button', { name: 'Export STL' }).click(),
+        (await exportItem(page, 'STL for 3D printing')).click(),
       ]);
       expect(stl.suggestedFilename()).toMatch(/\.stl$/);
     });

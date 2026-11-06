@@ -443,3 +443,61 @@ OpenCascade reads two closed solids.
 Not ours: the console's `THREE.Clock` deprecation comes from `@react-three/fiber` (harmless,
 goes with a fiber update); `share-modal.js` is not in the repository, most likely a browser
 extension.
+
+## UI and copy review, round 1 (owner review, 2026-11)
+
+A review against Robin Williams' The Non-Designer's Design Book (proximity, alignment,
+repetition, contrast, type) and a copy inventory; the owner approved every recommendation and
+a glossary. This round is the clear-cut set; the layout changes (header and its Export menu,
+phone header, the 3D controls and small 3D pane, the status bar's warnings, one meaning per
+colour, selected toggles vs primary buttons) are mocked up first.
+
+- **Glossary** (owner): the fin system selector is **Tab** (was Base); **Base** is where the
+  blade meets the tab, replacing "root" everywhere users see it (Base thickness, Base length,
+  Base / Tip, Base foil / Tip foil); **Profile**, **Foil**, **Thickness** (not outline, Foil
+  section, taper); **Slice** ("Add slice", "Twist at", "Slice at 50 mm"); **Rake** (the
+  readout was "Sweep"); **Export minimum thickness** vs the fin's **Min thickness**; **Export
+  core**; "problem" in the app. Code names and the `.fin.json` format keep the old words.
+- Canvas text is drawn in Instrument Sans at 12 px (`FIN_CANVAS_FONT`); the editor redraws once
+  the font has loaded. Labels are full-strength slate (`FIN_CANVAS_LABEL`, 6.5:1; they were at
+  70%, 3.8:1).
+- The section analysis sliders have a quiet track and an orange thumb (`.fin-range`): the
+  filled track read as a progress bar. Both readouts sit in one strip at the bottom, shortened
+  ("70.0 mm back · 83.2 mm high · 5.9 mm thick"): in a short pane the right-hand column ran up
+  over the toolbar.
+- The large pane's title is set apart from its controls; the Outside / Inside split moved into
+  the foil toolbar beside Asymmetric, Min thickness into the thickness toolbar beside Base
+  thickness. Ranges left the labels for tooltips (Cant, Toe, Cant at slice, with a true minus).
+- New fin is a menu; disabled point tools lose their border; the consent banner's Accept and
+  Reject have the same weight; File settings' Units row matches the other rows.
+- Front overhang reads "none (11.3 mm clear)" rather than a negative overhang. Long tooltips
+  were cut to a line, file-opening errors say what was damaged in plain words, and rule
+  messages use the glossary.
+
+## UI and copy review, round 2 (the mock-ups, owner review 2026-11)
+
+The owner approved the layout mock-ups with two changes: the tagline moves to the bottom and
+reads "A fork of OpenShaper"; and a slice is a **control section** ("Station" was unfamiliar
+to a shaper of twenty years; "twist" undersold it, as it sets foil, cant and toe). Phones
+are unlikely, tablets likely: touch sizes stay (`pointer-coarse` in the Button), the phone
+header was not built.
+
+- Header in three groups set apart by rules: File (New fin, Open…, Save), Edit (Undo,
+  Redo), and at the right one primary **Export** menu (STEP for CNC, STL for 3D printing,
+  Core to laminate over…, and the left-and-right option, which changes Save too), settings
+  and Help. `Menu` takes `triggerClassName` and `panelClassName` for this.
+- The 3D tools in titled groups (`ToolGroup`, laid across the toolbar or stacked under the
+  small pane by `ToolsLayout`): Placement (Tab, side, Cant, Position), Toe (field, then its
+  turn buttons), View (View from above, Panel fit). With a control section selected,
+  **Shape at** picks it and its own Cant and Toe replace Placement, which is hidden rather
+  than greyed; **Reset cant and toe** takes its change away. The small pane holding the 3D
+  view gets a double-height row (`data-3d-slot`), so the model has room beside its tools.
+- The status bar: description, measurements, then at the right one chip for warnings and
+  problems ("2 to fix"), opening the list with Fit to panel for a panel the fin doesn't fit;
+  a hidden live region still reads problems out. "A fork of OpenShaper" sits at its end.
+- One meaning per colour, with a key in the help: cyan the profile, the outside face and
+  what is selected; violet the inside face; pink control sections (were violet); green the
+  base and tip foils; amber thickness; orange limits and warnings only (the analysis planes,
+  the tab axis and a panel the fin fits went slate; the slider thumb cyan); red problems.
+- Toggles that are on use the Button's new `selected` variant (tinted, outlined), keeping
+  solid primary for the one action to press.

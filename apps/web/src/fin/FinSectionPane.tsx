@@ -7,7 +7,7 @@
  * which stay editable afterwards. The dashed vertical marks the thickest point, where
  * the taper's thickness applies. A horizontal slice whose chord crosses the tip line
  * shows the part past it, which the tip foil shapes, shaded, and a green dot for the tip
- * there; the tip foil shows an aqua dot where each slice crosses it, for the slice there.
+ * there; the tip foil shows a pink dot where each slice crosses it, for the slice there.
  * Both foils get a point at the crossing to match the dots with (owner's rules). An
  * asymmetric foil shows how its thickness is shared
  * (outside / inside, top left); typing a share rebuilds the foil as leading-edge radii
@@ -27,7 +27,12 @@ import {
   type FinDesign,
   type Spline,
 } from '@openshaper/kernel';
-import { FinCurveEditor, type FinCurveLayer } from '@openshaper/render2d';
+import {
+  FIN_CANVAS_FONT,
+  FIN_CANVAS_LABEL,
+  FinCurveEditor,
+  type FinCurveLayer,
+} from '@openshaper/render2d';
 import {
   foilSize,
   foilTrueScale,
@@ -56,10 +61,10 @@ export { foilSize, foilTrueScale };
 /** What the foil view is showing, as the profile names it. */
 export const foilTitle = (d: FinDesign, foil: number, units: LengthUnit): string =>
   foil === 0
-    ? 'Foil sweep start (base)'
+    ? 'Base foil'
     : foil === TIP_FOIL
-      ? 'Foil sweep end (tip)'
-      : `Horizontal slice foil · ${fmtLen((d.slices[foil - 1]?.height ?? 0) * finReadouts(d).depth, units)}`;
+      ? 'Tip foil'
+      : `Control section ${fmtLen((d.slices[foil - 1]?.height ?? 0) * finReadouts(d).depth, units)}`;
 
 /** Keep the chord line and a strip under it (for the labels) in view; the faces add the rest. */
 const SECTION_FRAME = { minX: 0, maxX: 1, minY: -0.12, maxY: 0.02 };
@@ -74,8 +79,8 @@ const GUIDE = 'rgba(138,155,179,0.7)';
 const TIP_PART = 'rgba(138,155,179,0.16)';
 /** In a slice, the tip at the crossing: the profile's tip-line green. */
 const TIP_DOT = SWEEP_LINE;
-/** In the tip foil, a slice at the crossing: aqua. */
-const SLICE_DOT = '#2DD4BF';
+/** In the tip foil, a control section at the crossing: pink, control sections' colour. */
+const SLICE_DOT = '#F472B6';
 
 const mirrored = (s: Spline): Spline =>
   splineFromKnots(
@@ -173,7 +178,7 @@ function PanelTools({ store, minThickness }: { store: StoreApi<FinState>; minThi
   if (angle === undefined) return null;
   return (
     <div className="flex items-center gap-1" role="group" aria-label="Panel">
-      <Tooltip label="The fin turned in the panel, seen from above (±45°): see it in the 3D view's Panel fit. The fin itself doesn't change, nor its exports">
+      <Tooltip label="Turn the fin in the panel (±45°); see it in Panel fit">
         <div className="w-36 text-sm">
           <DegField
             label="Panel angle"
@@ -206,6 +211,10 @@ export const FinSectionTools = memo(function FinSectionTools({
   const asymmetric = useFinState(store, (s) =>
     s.design ? getFoil(s.design, s.activeFoil)?.inside !== null : false,
   );
+  const share = useFinState(store, (s) => {
+    const sec = s.design && getFoil(s.design, s.activeFoil);
+    return sec?.inside ? foilShare(sec) : null;
+  });
   if (!position) return null;
   const centre = position === 'centre';
   return (
@@ -215,7 +224,7 @@ export const FinSectionTools = memo(function FinSectionTools({
         <div className="flex gap-1" role="group" aria-label="Inside face">
           <Button
             size="sm"
-            variant={asymmetric ? 'outline' : 'default'}
+            variant={asymmetric ? 'outline' : 'selected'}
             aria-pressed={!asymmetric}
             onClick={() => store.getState().setInsideFace('symmetric')}
           >
@@ -223,7 +232,7 @@ export const FinSectionTools = memo(function FinSectionTools({
           </Button>
           <Button
             size="sm"
-            variant={asymmetric ? 'default' : 'outline'}
+            variant={asymmetric ? 'selected' : 'outline'}
             aria-pressed={asymmetric}
             onClick={() => {
               // Already asymmetric: keep the faces (a split or a NACA camber) as they are.
@@ -234,6 +243,8 @@ export const FinSectionTools = memo(function FinSectionTools({
           </Button>
         </div>
       )}
+      {/* Beside Asymmetric, which it belongs to (owner review: it sat on the canvas). */}
+      {!centre && share !== null && <SplitFields store={store} share={share} />}
       <NacaPicker store={store} centre={centre} />
       <PointTools store={store} />
       <PanelTools store={store} minThickness={minThickness} />
@@ -261,7 +272,7 @@ function FoilTabs({ store, units }: { store: StoreApi<FinState>; units: LengthUn
           size="sm"
           role="tab"
           aria-selected={activeFoil === foil}
-          variant={activeFoil === foil ? 'default' : 'outline'}
+          variant={activeFoil === foil ? 'selected' : 'outline'}
           onClick={() => store.getState().setActiveFoil(foil)}
         >
           {label}
@@ -316,7 +327,7 @@ function SplitFields({ store, share }: { store: StoreApi<FinState>; share: numbe
     setDraft(null);
   };
   const field = (side: 'outside' | 'inside', label: string, color: string, value: string) => (
-    <label className="flex flex-col gap-0.5">
+    <label className="flex items-center gap-1">
       <span style={{ color }}>{label}</span>
       <NumericInput
         value={value}
@@ -330,12 +341,12 @@ function SplitFields({ store, share }: { store: StoreApi<FinState>; share: numbe
   );
   return (
     <div
-      className="absolute left-2 top-1 z-10 flex items-end gap-1 text-xs"
+      className="flex items-center gap-1 text-sm"
       role="group"
       aria-label="Outside and inside share of the thickness"
     >
       {field('outside', 'Outside', OUTSIDE, outsideNow)}
-      <span className="pb-1.5 text-muted-foreground">/</span>
+      <span className="text-muted-foreground">/</span>
       {field('inside', 'Inside', INSIDE, insideNow)}
     </div>
   );
@@ -525,7 +536,8 @@ export const FinSectionPane = memo(function FinSectionPane({
         ctx.stroke();
       }
       ctx.setLineDash([]);
-      ctx.font = '11px system-ui, sans-serif';
+      ctx.font = FIN_CANVAS_FONT;
+      ctx.fillStyle = FIN_CANVAS_LABEL;
       const label = (text: string, x: number, dy: number, align: CanvasTextAlign) => {
         ctx.textAlign = align;
         ctx.fillText(text, at(x), chord + dy);
@@ -540,7 +552,7 @@ export const FinSectionPane = memo(function FinSectionPane({
           tipPart[1] >= 1 ? 'right' : 'left',
         );
       if (activeFoil === TIP_FOIL && dots.length)
-        label('Aqua: a slice where it crosses', 1, 32, 'right');
+        label('Pink dot: the control section where it crosses', 1, 32, 'right');
       if (thickestAt !== null) label('thickest', thickestAt, 32, 'center');
       if (panelLines) {
         ctx.strokeStyle = panelLines.fits ? PANEL_FIT : PANEL_OVER;
@@ -568,28 +580,24 @@ export const FinSectionPane = memo(function FinSectionPane({
   if (!design || !section) return null;
   return (
     <div className="relative h-full">
-      {section.inside && design.position !== 'centre' ? (
-        <SplitFields store={store} share={foilShare(section)} />
-      ) : (
-        <span
-          className="pointer-events-none absolute left-2 top-1 z-10 flex gap-2 text-xs"
-          aria-hidden
-        >
-          <span style={{ color: OUTSIDE }}>— outside</span>
-          {section.inside && <span style={{ color: INSIDE }}>— inside</span>}
-        </span>
-      )}
+      <span
+        className="pointer-events-none absolute left-2 top-1 z-10 flex gap-2 text-xs"
+        aria-hidden
+      >
+        <span style={{ color: OUTSIDE }}>— outside</span>
+        {section.inside && <span style={{ color: INSIDE }}>— inside</span>}
+      </span>
       <span
         className="pointer-events-none absolute right-2 top-1 z-10 flex flex-col items-end text-xs"
         data-testid="foil-title"
       >
         <span className="font-medium text-foreground">{foilTitle(design, activeFoil, units)}</span>
         <span className="text-muted-foreground" aria-hidden>
-          True scale · scroll to zoom
+          True scale
         </span>
       </span>
       <FinCurveEditor
-        label="Foil section"
+        label="Foil"
         layers={layers}
         selection={pickFromSelection(selection, ['outside', 'inside'])}
         alsoSelected={alsoFromSelection(selection, ['outside', 'inside'])}

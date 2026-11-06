@@ -9,7 +9,7 @@ import type { StoreApi } from 'zustand/vanilla';
 import { bestPoseOf } from './use-panel-fit';
 
 /** The panel's faces where they are drawn: green when the fin fits, orange when not. */
-export const PANEL_FIT = 'rgba(34,197,94,0.9)';
+export const PANEL_FIT = 'rgba(138,155,179,0.9)'; // slate: a fit is quiet; orange warns
 export const PANEL_OVER = 'rgba(249,115,22,0.95)';
 
 /** Turn and tilt the fin to whatever needs the thinnest panel, as one undo step. */
@@ -21,7 +21,7 @@ export function FitToPanel({
   minThickness: number;
 }) {
   return (
-    <Tooltip label="Turn and tilt the fin in the panel to what needs the thinnest panel">
+    <Tooltip label="Turn and tilt the fin to fit the thinnest panel">
       <Button
         size="sm"
         variant="outline"
