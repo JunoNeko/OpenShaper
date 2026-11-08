@@ -416,9 +416,15 @@ export default function DocsFinDesigner() {
             the foil at that height and reads the height, the chord and the thickness, along the
             bottom of the view.
           </Term>
+          <Term name="Zebra">
+            Black and white stripes over the blade, to judge how smooth it is, as on a car body
+            under strip lights. Over a smooth face the stripes run on unbroken and bend gently.
+            Where they break or jog sideways, the face has a crease; where they kink, its curve
+            changes suddenly. Turn the fin to move the stripes across a spot you want to check.
+          </Term>
         </Terms>
         <p>
-          Either plane or both can be on. Thicknesses are square to the blade, allowing for cant.
+          Any of them can be on together. Thicknesses are square to the blade, allowing for cant.
           The sliders sit on the edges of the view rather than on the planes, so they stay in reach
           however the fin is turned.
         </p>
@@ -563,6 +569,21 @@ export default function DocsFinDesigner() {
           <Term name="Export core">
             The laminate thickness per face, which faces it goes on, and whether it wraps the tab:
             what Export core… starts from (see <a href="#export">Core</a>).
+          </Term>
+          <Term name="Smooth surface (preview)">
+            Shows the new smooth surface in the 3D view: a new way of building the blade, still in
+            progress, that blends the foils, thickness, cant and toe without creasing it. It runs
+            the foils along the fin, from the base round to the tip, so on a hooked or swept fin the
+            thickness curve is read along the arm. Check it with <a href="#analysis">Zebra</a>.
+            Exports still use the current surface.
+          </Term>
+          <Term name="Control sections on the smooth surface">
+            A control section is a line across the fin, from edge to edge along it, not a level cut.
+            The profile draws it along its line, and dragging it moves it to the line under the
+            pointer, its foil going with it. Its foil is the fin&apos;s shape along that line,
+            exactly as drawn, and its cant and toe bend and turn the blade from there up. A new one
+            starts as the shape already there, so adding it changes nothing. The thickness view
+            places it by how far along the fin it is, as the thickness curve is read there.
           </Term>
         </Terms>
       </Section>

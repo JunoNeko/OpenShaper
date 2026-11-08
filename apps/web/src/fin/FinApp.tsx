@@ -28,6 +28,7 @@ import {
   validateFinDesign,
   type FinBase,
   type FinDesign,
+  type FinEngine,
   type FinHand,
   type FinLaminate,
   type FinTwist,
@@ -104,9 +105,12 @@ function Preview({
   onReset,
   units,
   minThickness,
+  engine,
 }: {
   frameKey: string;
   view: FinPreviewView;
+  /** The surface the 3D view shows (File settings). */
+  engine: FinEngine;
   /** The exports' minimum thickness (cm): the panel holds the fin as exported. */
   minThickness: number;
   section: SectionState;
@@ -117,7 +121,7 @@ function Preview({
   const design = useSettledDesign(finStore);
   const position = useFinState(finStore, (s) => s.design?.position);
   const hand = useFinState(finStore, (s) => s.design?.hand);
-  const cuts = useSectionCuts(design, section);
+  const cuts = useSectionCuts(design, section, engine);
   const fit = usePanelFit(finStore, minThickness);
   const panel = useMemo(() => (fit ? panelOutline(fit) : null), [fit]);
   return (
@@ -128,7 +132,10 @@ function Preview({
           frameKey={`${position}-${hand}-${frameKey}`}
           view={view}
           panel={panel}
-          sections={cuts?.planes ?? null}
+          // See-through only with a plane to see through to.
+          sections={cuts?.planes?.length ? cuts.planes : null}
+          zebra={section.on && section.zebra}
+          engine={engine}
         />
       </Suspense>
       <SectionOverlay
@@ -1090,6 +1097,9 @@ export function FinApp() {
     });
   }, []);
   const units = useMemo(() => finLengthUnit(settings), [settings]);
+  // The store adds and moves control sections as the surface shown has them (rows on the
+  // smooth surface).
+  useEffect(() => finStore.getState().setEngine(settings.engine), [settings.engine]);
   const [view3d, setView3d] = useState<FinPreviewView>('side');
   // The foil view's analysis: the other sections behind the foil (foil-analysis.ts).
   const [foilAnalysis, setFoilAnalysis] = useState<FoilAnalysis>(FOIL_ANALYSIS_DEFAULT);
@@ -1238,6 +1248,7 @@ export function FinApp() {
             frameKey={`${sizeKey('3d')}-${resets}`}
             view={view3d}
             minThickness={settings.exportMin}
+            engine={settings.engine}
             section={section}
             onSection={setSection}
             onReset={resetView}

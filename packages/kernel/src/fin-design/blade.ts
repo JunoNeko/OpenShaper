@@ -151,7 +151,7 @@ export interface BladeSection {
 }
 
 /** Outside and inside offsets of a foil at chord fraction u, in chords. */
-const sectionShapeAt = (sec: FinSection, u: number): [number, number] => {
+export const sectionShapeAt = (sec: FinSection, u: number): [number, number] => {
   const out = yAtX(sec.outside, u);
   return [out, sec.inside ? yAtX(sec.inside, u) : -out];
 };
@@ -1464,6 +1464,17 @@ const fitShape = (s: BladeShape): FinSection => {
   const flat = s.ins.every((y) => Math.abs(y) < 1e-7);
   return { outside, inside: flat ? straightFace() : fitFace(s.us, s.ins, must, ends) };
 };
+
+/**
+ * A foil fitted to faces sampled at chord stations `us` (0 → 1), in chords: as few points
+ * as follow them to within FIT_TOLERANCE. Symmetric: the outside face only.
+ */
+export const fitFoil = (
+  us: readonly number[],
+  out: readonly number[],
+  ins: readonly number[],
+  symmetric: boolean,
+): FinSection => fitShape({ us, out, ins, free: [0, 1], symmetric });
 
 /**
  * The fin's horizontal section at `eta` (fraction of the depth) as a foil, chord
