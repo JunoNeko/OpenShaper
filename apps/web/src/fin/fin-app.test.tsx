@@ -475,36 +475,27 @@ describe('FinApp', () => {
     expect(finStore.getState().design!.toe).toBe(-5); // already at the limit
   });
 
-  it('bends and twists the blade above a slice from the 3D view', () => {
+  it('bends and twists the blade from a cant line, set from the 3D view', () => {
     localStorage.removeItem('bs.fin.views');
     render(<FinApp />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add control section' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add cant line' }));
     const d = () => finStore.getState().design!;
     const threeD = within(screen.getByRole('region', { name: '3D' }));
-    // The new slice is selected: cant and toe now set its change; the arrows are off.
-    expect(threeD.getByLabelText('Shape at')).toHaveProperty('value', '1');
-    // The whole fin's placement gives way to the control section's own cant and toe.
+    // The new line is selected: cant and toe now set it.
+    expect(threeD.getByLabelText('Cant and toe at')).toHaveProperty('value', '1');
     expect(threeD.queryByRole('group', { name: 'Position on the tab' })).toBeNull();
-    // No change yet; no transition zone either: a change eases in over the whole span.
-    expect(threeD.queryByLabelText(/^Transition/)).toBeNull();
-    expect(threeD.queryByRole('button', { name: 'Reset cant and toe' })).toBeNull();
-    const cant = threeD.getByLabelText(/^Cant/);
+    const cant = threeD.getByLabelText(/^Cant(?! and| line)/);
     fireEvent.change(cant, { target: { value: '12' } });
     fireEvent.keyDown(cant, { key: 'Enter' });
-    expect(d().slices[0]!.twist).toEqual({ cant: 12, toe: 0 });
+    expect(d().cantLines![0]).toMatchObject({ cant: 12, toe: 0 });
     fireEvent.click(threeD.getByRole('button', { name: 'Toe out' }));
-    expect(d().slices[0]!.twist!.toe).toBe(-0.25);
+    expect(d().cantLines![0]!.toe).toBe(-0.25);
     expect(d().toe).toBe(0); // the whole fin's toe is untouched
-    // The arrow keys don't move the fin while a slice is selected.
-    const le = d().outline.knots[0]!.end.x;
-    fireEvent.keyDown(window, { key: 'ArrowUp' });
-    expect(d().outline.knots[0]!.end.x).toBe(le);
-    fireEvent.click(threeD.getByRole('button', { name: 'Reset cant and toe' }));
-    expect(d().slices[0]!.twist).toBeUndefined();
-    // Back to the root: the arrows work again.
-    fireEvent.change(threeD.getByLabelText('Shape at'), { target: { value: '0' } });
-    fireEvent.keyDown(window, { key: 'ArrowUp' });
-    expect(d().outline.knots[0]!.end.x).toBeGreaterThan(le);
+    fireEvent.change(threeD.getByLabelText('Cant and toe at'), { target: { value: '0' } });
+    expect(threeD.getByRole('group', { name: 'Position on the tab' })).toBeTruthy();
+    fireEvent.change(threeD.getByLabelText('Cant and toe at'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove cant line' }));
+    expect(d().cantLines).toBeUndefined();
   });
 
   it('lists the rules the design breaks', () => {
@@ -724,6 +715,34 @@ describe('FinApp: importing drawings', () => {
     expect(finStore.getState().design!.outline).not.toBe(before);
     expect(finStore.getState().design!.outline.knots).toHaveLength(3);
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('scales an outline, and stays open to try again when it doesn’t fit', async () => {
+    render(<FinApp />);
+    const before = finStore.getState().design;
+    fireEvent.change(screen.getByLabelText('Open a vector file'), {
+      target: { files: [svg('fin.svg', FIN)] },
+    });
+    const dialog = await screen.findByRole('dialog', { name: 'Import vector outline' });
+    fireEvent.change(within(dialog).getByLabelText('Scale'), { target: { value: '400' } });
+    within(dialog).getByText(/^Depth \d+\.\d mm · Base \d+\.\d mm$/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Left' }));
+    within(dialog).getByRole('alert');
+    expect(finStore.getState().design).toBe(before);
+    fireEvent.change(within(dialog).getByLabelText('Scale'), { target: { value: '100' } });
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Left' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(finStore.getState().design).not.toBe(before);
+  });
+
+  it('offers no scale for a foil', async () => {
+    render(<FinApp />);
+    fireEvent.change(screen.getByLabelText('Open a ghost vector foil'), {
+      target: { files: [svg('fin.svg', FIN)] },
+    });
+    const dialog = await screen.findByRole('dialog', { name: 'Import ghost' });
+    expect(within(dialog).queryByLabelText('Scale')).toBeNull();
   });
 
   it('leaves the fin alone when the dialog is cancelled', async () => {
