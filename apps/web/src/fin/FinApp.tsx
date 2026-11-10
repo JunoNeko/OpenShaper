@@ -67,7 +67,7 @@ import {
   writeFinSettings,
   type FinSettings,
 } from './fin-settings';
-import { GITHUB_URL } from '../seo/site';
+import { UPSTREAM_URL } from '../seo/site';
 import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane, FinSectionTools } from './FinSectionPane';
@@ -438,7 +438,7 @@ function CantLineTools({ line, units }: { line: number; units: LengthUnit }) {
 
 /**
  * The whole fin's cant (side and quad-rear fins), in the 3D view's tools. Disabled on an
- * FCS tab, whose plug carries the cant, and a US box.
+ * FCS tab, whose plug carries the cant, a Gbox, whose box does, and a US box.
  */
 function CantField() {
   const position = useFinState(finStore, (s) => s.design?.position);
@@ -451,14 +451,16 @@ function CantField() {
       label={
         base === 'us-box'
           ? 'A fin in a US box has no cant'
-          : fcs
-            ? 'Set by the FCS plug (0°, 5° or 9°)'
-            : `Blade lean out from the tab, 0° to ${FIN_MAX_CANT}°`
+          : base === 'gbox'
+            ? 'Set by the Gbox'
+            : fcs
+              ? 'Set by the FCS plug (0°, 5° or 9°)'
+              : `Blade lean out from the tab, 0° to ${FIN_MAX_CANT}°`
       }
     >
       <div>
         <DegField
-          label={fcs ? 'Cant (plug)' : 'Cant'}
+          label={base === 'gbox' ? 'Cant (box)' : fcs && base !== 'us-box' ? 'Cant (plug)' : 'Cant'}
           value={cant}
           disabled={fcs}
           onCommit={(v) => finStore.getState().setCant(v)}
@@ -839,7 +841,7 @@ function Status({ units, minThickness }: { units: LengthUnit; minThickness: numb
         {/* Credit where it's due: a fork of OpenShaper (GPL), at the bottom (owner review). */}
         <a
           className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-          href={GITHUB_URL}
+          href={UPSTREAM_URL}
           target="_blank"
           rel="noreferrer"
         >
