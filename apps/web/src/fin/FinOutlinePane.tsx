@@ -17,6 +17,7 @@ import {
   tabProfilePoints,
   type FinBase,
   type Spline,
+  type Vec2,
 } from '@openshaper/kernel';
 import {
   FIN_CANVAS_FONT,
@@ -26,9 +27,11 @@ import {
   type Viewport,
 } from '@openshaper/render2d';
 import { TIP_FOIL, type FinState } from '@openshaper/store';
-import { memo, useCallback, useMemo } from 'react';
+import { Tooltip } from '@openshaper/ui';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
-import type { LengthUnit } from '../format';
+import { fmtLen, type LengthUnit } from '../format';
+import { SCALE_BLOCK, scaleBox, scaleFactor, type ScaleBox } from './profile-scale';
 import { alsoFromSelection, curveEditorHandlers, pickFromSelection } from './curve-editor-wiring';
 import { GhostControl, useGhostRightDrag } from './VectorImport';
 import { drawGhost, ghostMarkers, makeGhost, withGhostHandles, type Ghost } from './ghost';
@@ -53,6 +56,7 @@ const FRONT_LEFT = { a: -1, b: 0, c: 0, d: 1 } as const;
 const TAB_FILL = 'rgba(138,155,179,0.18)';
 const TAB_LINE = 'rgba(138,155,179,0.7)';
 const LIMIT = 'rgba(249,115,22,0.85)';
+const SCALE_LINE = 'rgba(56,189,248,0.9)';
 
 /** Each tab's profile and its holes in the blade frame (tab top at y = 0), for drawing. */
 const tabPolygons = (base: FinBase, outline?: Spline) => {
@@ -61,6 +65,39 @@ const tabPolygons = (base: FinBase, outline?: Spline) => {
     tabProfilePoints(segs, 0.002).map((p) => ({ x: p.x, y: p.y - tab.height }));
   return tab.parts.flatMap((part) => [ring(part.segments), ...part.holes.map(ring)]);
 };
+
+/**
+ * The owner's Scale icon (scale_icon.svg): a small box inside a larger one, an arrow out of
+ * the corner. Inkscape's arrowhead marker is drawn as a plain path, and the colour follows
+ * the button's text (muted, or bright while the tool is on).
+ */
+function ScaleIcon() {
+  return (
+    <svg
+      viewBox="163.6 17.3 10.6 10"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <rect x="168.4985" y="22.134506" width="5.298315" height="4.7096133" strokeWidth="0.562576" />
+      <rect
+        x="164.07071"
+        y="17.771286"
+        width="7.561759"
+        height="6.7215629"
+        strokeWidth="0.656287"
+      />
+      <path d="M 165.6287,19.357094 167.75179,21.493294" strokeWidth="0.547325" />
+      <path
+        d="M 167.853,19.267 165.532,19.26 165.525,21.581"
+        strokeWidth="0.547325"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 export const FinOutlinePane = memo(function FinOutlinePane({
   store,
@@ -111,14 +148,66 @@ export const FinOutlinePane = memo(function FinOutlinePane({
   );
 
   const sweep = useMemo(() => (design ? sweepOverlay(design) : null), [design]);
-  const markerHandlers = useMemo(
-    () => withGhostHandles(sweepMarkerHandlers(store), ghost, onGhost),
-    [store, ghost, onGhost],
+  // Scale: a box round the profile, its block dragged to scale the fin; letting go ends it.
+  const [scaling, setScaling] = useState(false);
+  const scaleDrag = useRef<{ box: ScaleBox; k: number } | null>(null);
+  useEffect(() => {
+    if (!scaling) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !scaleDrag.current) setScaling(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [scaling]);
+  const box = useMemo(
+    () => (scaling && design ? scaleBox(design.outline) : null),
+    [scaling, design],
   );
+  const markerHandlers = useMemo(() => {
+    const h = withGhostHandles(sweepMarkerHandlers(store), ghost, onGhost);
+    let ours = false;
+    return {
+      ...h,
+      onMarkerDragStart: (id: string) => {
+        ours = id === SCALE_BLOCK;
+        if (!ours) return h.onMarkerDragStart(id);
+        const d = store.getState().design;
+        if (!d) return;
+        scaleDrag.current = { box: scaleBox(d.outline), k: 1 };
+        store.getState().beginEdit('Scale fin');
+      },
+      onMarkerDrag: (id: string, to: Vec2) => {
+        if (id !== SCALE_BLOCK) return h.onMarkerDrag(id, to);
+        const drag = scaleDrag.current;
+        if (!drag) return;
+        drag.k = scaleFactor(drag.box, to);
+        store.getState().scaleOutline(drag.k, drag.box.origin);
+      },
+      onMarkerDragEnd: () => {
+        if (!ours) return h.onMarkerDragEnd();
+        ours = false;
+        if (scaleDrag.current) store.getState().endEdit();
+        scaleDrag.current = null;
+        setScaling(false);
+      },
+    };
+  }, [store, ghost, onGhost]);
   const ghostRightDrag = useGhostRightDrag(ghost, onGhost);
   const markers = useMemo(
-    () => [...(sweep?.markers ?? []), ...(ghost ? ghostMarkers(ghost) : [])],
-    [sweep, ghost],
+    () =>
+      box
+        ? [
+            {
+              id: SCALE_BLOCK,
+              at: box.corner,
+              color: SCALE_LINE,
+              label: 'Drag to scale the fin',
+              square: true,
+              first: true,
+            },
+          ]
+        : [...(sweep?.markers ?? []), ...(ghost ? ghostMarkers(ghost) : [])],
+    [box, sweep, ghost],
   );
   // Real size, standing on the tab top in the middle of the fin.
   const makeGhostHere = useCallback(
@@ -231,16 +320,48 @@ export const FinOutlinePane = memo(function FinOutlinePane({
         ctx.fillText('Tip foil', t.x + 12, t.y + 4);
         ctx.restore();
       }
+
+      if (box) {
+        // The box, and the profile's size as it scales.
+        const a = toScreen(box.rear);
+        const b = toScreen(box.corner);
+        ctx.save();
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = SCALE_LINE;
+        ctx.lineWidth = 1.25;
+        ctx.strokeRect(
+          Math.min(a.x, b.x),
+          Math.min(a.y, b.y),
+          Math.abs(b.x - a.x),
+          Math.abs(b.y - a.y),
+        );
+        ctx.setLineDash([]);
+        const k = design.outline.knots;
+        const baseLen = Math.abs(k[0]!.end.x - k[k.length - 1]!.end.x);
+        const drag = scaleDrag.current;
+        const size = `Depth ${fmtLen(box.corner.y, units)} · Base ${fmtLen(baseLen, units)}`;
+        ctx.font = FIN_CANVAS_FONT;
+        ctx.fillStyle = SCALE_LINE;
+        ctx.textAlign = 'left';
+        ctx.fillText(
+          drag ? `${Math.round(drag.k * 100)}% · ${size}` : size,
+          Math.min(a.x, b.x) + 14,
+          Math.min(a.y, b.y) - 10,
+        );
+        ctx.restore();
+      }
     },
-    [design, tab, tabLen, kind, sweep, activeFoil, ghost],
+    [design, tab, tabLen, kind, sweep, activeFoil, ghost, box, units],
   );
 
   const onBackgroundClick = useCallback(
     (at: { x: number; y: number }, unitsPerPx: number) => {
+      // A click off the block puts the Scale tool away.
+      if (scaling) return setScaling(false);
       const foil = sweep && pickSweepLine(sweep, at, unitsPerPx);
       if (foil !== null && foil !== undefined) store.getState().setActiveFoil(foil);
     },
-    [sweep, store],
+    [sweep, store, scaling],
   );
 
   const handlers = useMemo(() => curveEditorHandlers(store), [store]);
@@ -254,6 +375,17 @@ export const FinOutlinePane = memo(function FinOutlinePane({
           onGhost={onGhost}
         />
       )}
+      <Tooltip label="Scale the fin: drag the box's corner block">
+        <button
+          type="button"
+          aria-label="Scale the fin"
+          aria-pressed={scaling}
+          className={`absolute left-2 z-10 grid h-8 w-8 place-items-center rounded-md ${onGhost ? 'top-11' : 'top-2'} ${scaling ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          onClick={() => setScaling((on) => !on)}
+        >
+          <ScaleIcon />
+        </button>
+      </Tooltip>
       <FinCurveEditor
         gridStep={gridStep}
         label="Profile"

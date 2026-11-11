@@ -145,6 +145,19 @@ export default function DocsFinDesigner() {
           show the area (the profile above the tab), depth, base length and rake — the angle from
           where the leading edge meets the base to the tip, measured from upright.
         </p>
+        <p>
+          <strong>Scale</strong>, the icon at the top left of the profile view, below the ghost,
+          makes the whole profile larger or smaller, evenly. A dashed box appears round the profile,
+          showing its depth and base length, with a square block at its top-left corner. Drag the
+          block out toward the top left to make the fin larger, or in toward the bottom right to
+          make it smaller; the percentage shows as you drag. The rear end of the base stays put on
+          the top of the tab, so the fin stays on the tab and keeps its place at the back of it. (On
+          a raked fin the tip reaches back past the base, so the box&apos;s lower-right corner is a
+          little behind that point.) The fin stops growing where it would break a rule, such as
+          overhanging the front of the tab. Let go and the tool puts itself away; the whole drag is
+          one undo step. Press Escape or click away from the block to put it away without scaling.
+          Only the profile changes: the thickness stays as it was.
+        </p>
       </Section>
 
       <Section id="sweep" title="The foil sweep">
@@ -511,17 +524,28 @@ export default function DocsFinDesigner() {
       <Section id="files" title="Saving your work">
         <p>
           The fin saves itself in your browser as you work, so a reload or a closed tab doesn&apos;t
-          lose it. <strong>Save</strong> ({shortcutKeys('save')}) downloads it as a{' '}
+          lose it. <strong>Save</strong> ({shortcutKeys('save')}) writes it as a{' '}
           <code>.fin.json</code> file to keep or share; <strong>Open…</strong> loads one back. The
           designer works offline.
         </p>
         <p>
+          Save, and each Export, opens a dialog first. Name the file there (the extension is added
+          for you) and choose where it goes. In Chrome and Edge on a computer,{' '}
+          <strong>Choose folder…</strong> picks a folder, which is offered again next time; the
+          browser asks once a visit before the page may write to it, and the dialog warns before it
+          replaces a file of the same name. <strong>Use Downloads</strong> goes back to the
+          browser&apos;s downloads folder. Other browsers, and tablets and phones, save to the
+          downloads folder: to be asked where each time, turn on the browser&apos;s own &ldquo;ask
+          where to save&rdquo; setting. The name you type is offered again until you open or start
+          another fin.
+        </p>
+        <p>
           For a side, quad-rear or canard fin, tick <strong>Left and right fin</strong> in the
           Export menu to write a matched pair: each Save or Export then writes two files, the fin
-          and its mirror for the other side (<code>fin-side-left</code> and{' '}
+          and its mirror for the other side (offered as <code>fin-side-left</code> and{' '}
           <code>fin-side-right</code>
-          ). Your browser may ask once to allow more than one download. The choice is remembered on
-          this device.
+          ), each named in the dialog. Your browser may ask once to allow more than one download.
+          The choice is remembered on this device.
         </p>
       </Section>
 
@@ -571,11 +595,13 @@ export default function DocsFinDesigner() {
         </p>
         <Terms>
           <Term name="Outline">
-            Replaces the profile, placed on the current tab. It comes in at the drawing&apos;s real
-            size unless you change <strong>Scale</strong> in the dialog, which shows the depth and
-            base length it will have. Draw it closed along the base, or open with both ends at the
-            bottom. If it breaks a rule, such as overhanging the tab, the dialog says why and stays
-            open so you can change the scale.
+            Replaces the profile, placed on the current tab, at the drawing&apos;s own size, and the
+            views re-fit to it. Then size it with <a href="#outline">Scale</a> in the profile view,
+            by eye or against a ghost of the drawing. A drawing too big or small for the tab still
+            comes in: the status bar says what is wrong, and export waits until scaling puts it
+            right. Draw it closed along the base, or open with both ends at the bottom. A drawing
+            that isn&apos;t a fin profile, such as one whose leading edge turns back down, is
+            refused, and the dialog says why.
           </Term>
           <Term name="Foil">
             Replaces the base foil. A closed shape is cut at its leading and trailing edges into two

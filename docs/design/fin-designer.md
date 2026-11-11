@@ -829,3 +829,55 @@ forward to cover the tab. The box carries the cant, so the fin has none, as on F
 The two screw grooves in the tab's side (1/8" end mill, 1/16" deep) are not modelled: the tab is a
 side profile extruded across its thickness, and a pocket in one face is not something that model
 can hold. They are recorded in `GBOX_TAB` and in the help.
+
+## The save dialog (owner request, 2026-11)
+
+Save and each Export used to download straight away, named after the fin's position. They now
+open a dialog (`SaveDialog.tsx`) with a name for each file (two with the left-and-right option on)
+and a location. The extension is fixed and shown beside the field; what is typed is made safe for
+a file (`cleanStem` in `save-files.ts`). A pair needs two different names.
+
+Where the browser has the File System Access API (Chrome and Edge on a computer), **Choose
+folder…** uses `showDirectoryPicker`, and the files are written into that folder with
+`createWritable`. The folder's handle is kept in IndexedDB, so it is offered next visit; write
+permission is asked for inside the Save click, as browsers require, and the dialog warns when a
+name would replace a file already there. A folder rather than `showSaveFilePicker`, because a pair
+is two files and a second picker would need a second click, and because STEP takes about a second
+a fin to make, after the click. Everywhere else (Safari, Firefox, iPad, phones) the files are
+downloads, and the dialog says how to make the browser ask where each one goes: a web page can't
+pick the downloads location itself.
+
+Names typed are offered again for the rest of the visit, and forgotten when a fin is opened or
+started. ⌘S opens the same dialog.
+
+## Scaling the profile (owner request, 2026-11)
+
+The import dialog's Scale field is gone: the size of a shape in an SVG is often unknown, so a
+number was guesswork. An outline now comes in at the drawing's own size, the views re-fit to it,
+and **Scale** in the Profile view sizes it by eye (`profile-scale.ts`, `FinOutlinePane`).
+
+The icon (below the ghost's) shows a dashed box round the profile, from the tab top to its highest
+point, with a square block at the box's top-left corner (`FinCurveMarker.square`, and `first`
+so it is picked before any curve point under it). Dragging the block scales the profile evenly:
+the factor is how far the pointer is along the line from the fixed point through the block's
+starting place, so the block stays under the pointer, and a drag across that line does nothing.
+Releasing the block ends the tool; Escape or a click elsewhere puts it away unused.
+
+The owner asked for the box's lower-right corner as the fixed point. That corner is the base's
+rear end, the trailing-edge root, only when the tip doesn't reach back past the base. Every
+default fin is raked, so their corner is in the air behind the root (38 mm behind on the default
+centre fin), and scaling about it slid the base back off the tab as the fin shrank, which the
+rear-clearance rule refused outright. Scaling about any point on the tab top gives the same
+shape, differing only in where it sits fore and aft, so the fixed point is the trailing-edge
+root: the base stays on the tab top and the fin stays rear-aligned, as `placeOnBase` places it.
+
+The store's `scaleOutline(factor, about)` scales from the design as it was when the edit began
+(the top of `past` while editing), so pointer moves never compound, and runs it through
+`clampEdit`: the fin stops where a rule would break, such as the Futures front overhang. One
+drag is one undo step, "Scale fin". Only the outline changes. Slice, cant-line and tip-line
+positions are fractions, and foils are by chord, so they follow; the thickness curve is in cm
+and is left alone, a fin's thickness being set by its material rather than its size.
+
+`importOutline` now lets through the rules a wrongly sized profile breaks (front overhang, tab
+rear, US box head length, FCS tab cover, rear clearance): the fin comes in flagged in the status
+bar, export waits, and Scale puts it right. Anything else wrong with it is still refused.
