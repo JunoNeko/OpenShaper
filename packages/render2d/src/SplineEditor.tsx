@@ -45,6 +45,7 @@ import {
   drawChannelCut,
   drawChannelLines,
   drawChannelKeys,
+  drawDashedLines,
   mirrorSigns,
   CHANNEL_KEY_RADIUS,
   hitFin,
@@ -815,6 +816,9 @@ export function SplineEditor({
         targets.map((t) => getTargetSpline(board, t)),
         vp,
       );
+    }
+    if (overlays?.dashedLines?.length) {
+      drawDashedLines(ctx, overlays.dashedLines, vp, palette[0]!, { mirrorX, mirrorY });
     }
     targets.forEach((t, i) => {
       const spline = getTargetSpline(board, t);

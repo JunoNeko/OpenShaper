@@ -25,6 +25,7 @@ export * from './polygon';
 export * from './fin-cavities';
 export * from './rail-profile';
 export * from './outline-cutout';
+export * from './swallow';
 export * from './board';
 export * from './surface';
 export * from './rail-band';

@@ -27,6 +27,7 @@ import { noFins, type FinConfig } from './fins';
 import type { BoardChannels } from './channel-layout';
 import { channelCutAreaAt } from './loft';
 import { cachedOutlineSegments, hasTailCutout, yInOut, type WidthBounds } from './outline-cutout';
+import { notchSqueeze, swallowBreaks, swallowStation, type SwallowWall } from './swallow';
 import { vec2, type Vec2 } from './vec2';
 
 /**
@@ -72,6 +73,11 @@ export interface BezierBoard {
    * it was before channels existed.
    */
   readonly channels?: BoardChannels;
+  /**
+   * How a swallow tail's inside wall climbs to the deck (`swallow.ts`), set from the
+   * Swallow Tail panel. Absent: the notch's wall stands upright, as it always has.
+   */
+  readonly swallow?: SwallowWall;
 }
 
 // Legacy fixed integration resolutions (BezierBoard.*_SPLITS). These are NO LONGER
@@ -132,6 +138,7 @@ export const board = (
   interpolationType: InterpolationType = 'controlPoint',
   fins: FinConfig = noFins(),
   channels?: BoardChannels,
+  swallow?: SwallowWall,
 ): BezierBoard => ({
   outline,
   bottom,
@@ -140,6 +147,7 @@ export const board = (
   interpolationType,
   fins,
   ...(channels && (channels.from === 'numbers' || channels.channels.length) ? { channels } : {}),
+  ...(swallow ? { swallow } : {}),
 });
 
 // --- dimensions ---
@@ -337,7 +345,7 @@ export const adjustCrossSectionsToThicknessAndWidth = (b: BezierBoard): BezierBo
     return scaled;
   });
   return changed
-    ? board(b.outline, b.bottom, b.deck, next, b.interpolationType, b.fins, b.channels)
+    ? board(b.outline, b.bottom, b.deck, next, b.interpolationType, b.fins, b.channels, b.swallow)
     : b;
 };
 
@@ -492,16 +500,81 @@ const cutoutAreaFactor = (b: BezierBoard, x: number): number => {
   return f < 0 ? 0 : f;
 };
 
+/** Splits per branch for a swallow's squeezed section: its squeeze isn't even. */
+const SWALLOW_AREA_SPLITS = 48;
+
+/**
+ * Area of a swallow's section at `x`, as the mesh builds it: the bottom squeezed out
+ * from the notch's edge, the deck from the deck line, and the inside wall between
+ * (`swallow.ts`). Measured off the section itself, so the squeeze and the wall count
+ * exactly; forward of the deck line it is the plain section.
+ */
+const swallowAreaAt = (b: BezierBoard, x: number, splits: number): number => {
+  const cs = getInterpolatedCrossSection(b, x);
+  if (!cs) return 0;
+  const { yIn, yOut } = widthBoundsAt(b, x);
+  const st = swallowStation(b, x);
+  const yB = st ? st.yB : 0;
+  const yD = st ? Math.min(st.yD, yOut) : 0;
+  const n = Math.max(splits, SWALLOW_AREA_SPLITS);
+  const onBottom = notchSqueeze(st ? yB : yIn > 1e-9 ? yIn : 0, yOut);
+  const ttAtRail = ttByNormal(cs.spline, (90 * Math.PI) / 180);
+  const at = (map: (px: number) => number) => (tt: number) => {
+    const p = pointByTT(cs.spline, tt);
+    return { x: map(p.x), y: p.y };
+  };
+  // The deck is the board's own, cut at the deck line (as the mesh lays it).
+  const deck = trapezoidIntegralXY(
+    at((px) => Math.max(px, yD)),
+    ttAtRail,
+    1.0,
+    n,
+  );
+  const bottom = trapezoidIntegralXY(at(onBottom), 0.0, ttAtRail, n);
+  // Under the inside wall, from the deck's edge down to the bottom's (or the stringer).
+  let wall = 0;
+  if (st) {
+    const zb = pointByTT(cs.spline, 0).y;
+    const t = pointByTT(cs.spline, 1).y - zb;
+    const pts = [{ y: yD, u: 1 }, ...st.wall];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p = pts[i]!;
+      const q = pts[i + 1]!;
+      wall +=
+        ((zb + p.u * t + zb + q.u * t) / 2) * Math.abs(Math.min(p.y, yOut) - Math.min(q.y, yOut));
+    }
+  }
+  return Math.max(0, (deck + wall - bottom) * 2);
+};
+
 export const getCrossSectionAreaAt = (b: BezierBoard, x: number, splits: number): number => {
   const base =
     b.interpolationType === 'sLinear'
       ? getSLinearCrossSectionAreaAt(b, x)
       : getControlPointCrossSectionAreaAt(b, x, splits);
   // A concave tail removes the inner strip; normal boards are untouched.
-  const uncut = hasTailCutout(b.outline) ? base * cutoutAreaFactor(b, x) : base;
+  const uncut = !hasTailCutout(b.outline)
+    ? base
+    : b.swallow
+      ? swallowAreaAt(b, x, splits)
+      : base * cutoutAreaFactor(b, x);
   if (!b.channels) return uncut;
   const cut = channelCutAreaAt(b, x);
   return cut > 0 ? Math.max(0, uncut - cut) : uncut;
+};
+
+/**
+ * The adaptive longitudinal integral of a section quantity. A swallow's leaning wall
+ * turns the area sharply where the notch bottom and the deck line meet the stringer; the
+ * integral is split there, or the adaptive rule can step over the turn (it read 37 cm³
+ * high on a test board).
+ */
+const areaIntegral = (b: BezierBoard, f: (x: number) => number, lo: number, hi: number): number => {
+  const cuts = [lo, ...swallowBreaks(b).filter((x) => x > lo && x < hi), hi];
+  let sum = 0;
+  for (let i = 0; i < cuts.length - 1; i++)
+    sum += adaptiveSimpson(f, cuts[i]!, cuts[i + 1]!, ADAPTIVE_REL_TOL);
+  return sum;
 };
 
 /**
@@ -518,7 +591,7 @@ export const getVolume = (b: BezierBoard, opts: IntegrationOptions = {}): number
   const bEnd = getLength(b) - 0.01;
   const areaAt = (x: number): number => getCrossSectionAreaAt(b, x, sectionSplits);
   return lengthSplits === undefined
-    ? adaptiveSimpson(areaAt, a, bEnd, ADAPTIVE_REL_TOL)
+    ? areaIntegral(b, areaAt, a, bEnd)
     : simpsonIntegral(areaAt, a, bEnd, lengthSplits);
 };
 
@@ -568,8 +641,8 @@ export const getCenterOfMass = (
   const areaAt = (x: number): number => getCrossSectionAreaAt(b, x, sectionSplits);
 
   if (lengthSplits === undefined) {
-    const moment = adaptiveSimpson((x) => x * areaAt(x), a, bEnd, ADAPTIVE_REL_TOL);
-    const weight = opts.weight ?? adaptiveSimpson(areaAt, a, bEnd, ADAPTIVE_REL_TOL);
+    const moment = areaIntegral(b, (x) => x * areaAt(x), a, bEnd);
+    const weight = opts.weight ?? areaIntegral(b, areaAt, a, bEnd);
     return moment / weight;
   }
 

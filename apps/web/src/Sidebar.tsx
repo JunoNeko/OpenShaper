@@ -58,6 +58,7 @@ import type { BoardMeta } from './file-io';
 import { fmtDimsHeadline, fmtLen, fmtVol, parseLen, type LengthUnit } from './format';
 import type { TraceView, UseTrace } from './use-trace';
 import { ChannelPanel } from './ChannelPanel';
+import { SwallowPanel } from './SwallowPanel';
 import { FinPanel } from './FinPanel';
 import {
   anyOpen,
@@ -259,6 +260,11 @@ export const Sidebar = memo(function Sidebar({
       ? `${Math.round(channelSet.params.count)}`
       : `${channelSet.channels.length * 2}${channelSet.params ? ', applied' : ' drawn'}`;
 
+  const swallowWall = useSyncExternalStore(
+    boardStore.subscribe,
+    () => boardStore.getState().board?.swallow ?? null,
+  );
+
   const overlaysOn = Object.values(overlayToggles).filter(Boolean).length;
   const hasTrace = Boolean(trace.traces.outline || trace.traces.rocker);
 
@@ -284,6 +290,7 @@ export const Sidebar = memo(function Sidebar({
         applyResize={applyResize}
       />
     ),
+    swallow: <SwallowPanel store={boardStore} units={units} />,
     controlPoint: <ControlPointInspector store={boardStore} units={units} />,
     analysis: <AnalysisSection overlayToggles={overlayToggles} setOverlay={setOverlay} />,
     boardInfo: <BoardInfoSection meta={meta} setMeta={setMeta} />,
@@ -328,6 +335,11 @@ export const Sidebar = memo(function Sidebar({
     specs: specs ? fmtVol(specs.volume) : undefined,
     analysis: overlaysOn > 0 ? `${overlaysOn} on` : undefined,
     boardInfo: meta.model || undefined,
+    swallow: swallowWall
+      ? swallowWall.kind === 'bevel'
+        ? `Beveled ${Math.round(swallowWall.angle)}°`
+        : `Rounded ${Math.round(swallowWall.size * 100)}%`
+      : undefined,
     channels: channelCount || undefined,
     fins: fins ? FIN_SETUP_LABELS[fins.setup] : undefined,
     weight: weight ? fmtWeight(weight.total) : undefined,

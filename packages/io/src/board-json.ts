@@ -1,6 +1,7 @@
 import {
   FIN_SETUPS,
   board,
+  clampWall,
   crossSection,
   defaultFinConfig,
   knot,
@@ -16,6 +17,7 @@ import {
   type ChannelWall,
   type FinConfig,
   type FinSetup,
+  type SwallowWall,
   type Knot,
   type KnotLock,
   type RefPoints,
@@ -75,6 +77,8 @@ export interface BoardJson {
   fins?: FinConfig;
   /** Bottom channels. Omitted when there are none. */
   channels?: ChannelsJson;
+  /** A swallow tail's inside wall. */
+  swallow?: SwallowWall;
   /** Reference points (still v2). Omitted when there are none. */
   referencePoints?: unknown[];
   metadata?: Record<string, unknown>;
@@ -205,6 +209,16 @@ const paramsFromJson = (p: unknown): ChannelParams => {
   };
 };
 
+/** A swallow's inside wall, or nothing when it isn't one we can read. */
+const swallowFromJson = (w: unknown): SwallowWall | undefined => {
+  if (!isObject(w)) return undefined;
+  if (w.kind === 'bevel' && typeof w.angle === 'number' && Number.isFinite(w.angle))
+    return clampWall({ kind: 'bevel', angle: w.angle });
+  if (w.kind === 'round' && typeof w.size === 'number' && Number.isFinite(w.size))
+    return clampWall({ kind: 'round', size: w.size });
+  return undefined;
+};
+
 const channelsFromJson = (c: unknown): BoardChannels | undefined => {
   if (c === undefined) return undefined;
   if (isObject(c) && c.from === 'numbers') {
@@ -252,6 +266,7 @@ export const writeBoardJson = (
     })),
     ...(b.fins.setup !== 'none' ? { fins: b.fins } : {}),
     ...(b.channels ? { channels: channelsToJson(b.channels) } : {}),
+    ...(b.swallow ? { swallow: b.swallow } : {}),
     ...(referencePoints?.length ? { referencePoints: refPointsToJson(referencePoints) } : {}),
     ...(metadata ? { metadata } : {}),
   };
@@ -350,6 +365,7 @@ export const readBoardJson = (text: string): ReadBoardJsonResult => {
     doc.interpolationType ?? 'controlPoint',
     finConfigFromDoc(doc),
     channelsFromJson(doc.channels),
+    swallowFromJson(doc.swallow),
   );
   const { points, dropped } = reviveRefPoints(doc.referencePoints);
   const droppedNote = `${dropped} damaged reference point${dropped === 1 ? ' was' : 's were'}`;

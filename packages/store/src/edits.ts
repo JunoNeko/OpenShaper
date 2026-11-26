@@ -1,6 +1,7 @@
 import {
   type BoardChannels,
   board,
+  clampWall,
   closestPointOnSpline,
   coeffsOf,
   crossSection,
@@ -14,6 +15,7 @@ import {
   knotLock,
   mirrorFinIndex,
   maxX,
+  plainTailOutline,
   REF_SECTION_TOLERANCE,
   refIdAllocator,
   refPointSectionIndex,
@@ -21,6 +23,8 @@ import {
   scaleSpline,
   splineFromKnots,
   splitCurve,
+  swallowSize,
+  swallowTailOutline,
   value as pointOnCurve,
   valueAt,
   vec2,
@@ -38,6 +42,7 @@ import {
   type RefPoint,
   type RefPoints,
   type Spline,
+  type SwallowWall,
   type Vec2,
 } from '@openshaper/kernel';
 
@@ -135,6 +140,7 @@ export const withSpline = (b: BezierBoard, t: SplineTarget, spline: Spline): Bez
         b.interpolationType,
         b.fins,
         b.channels,
+        b.swallow,
       );
     case 'deck':
       return board(
@@ -145,6 +151,7 @@ export const withSpline = (b: BezierBoard, t: SplineTarget, spline: Spline): Bez
         b.interpolationType,
         b.fins,
         b.channels,
+        b.swallow,
       );
     case 'bottom':
       return board(
@@ -155,12 +162,22 @@ export const withSpline = (b: BezierBoard, t: SplineTarget, spline: Spline): Bez
         b.interpolationType,
         b.fins,
         b.channels,
+        b.swallow,
       );
     case 'crossSection': {
       const cs = b.crossSections.map((c, i) =>
         i === t.index ? { position: c.position, spline } : c,
       );
-      return board(b.outline, b.bottom, b.deck, cs, b.interpolationType, b.fins, b.channels);
+      return board(
+        b.outline,
+        b.bottom,
+        b.deck,
+        cs,
+        b.interpolationType,
+        b.fins,
+        b.channels,
+        b.swallow,
+      );
     }
     case 'channel': {
       const c = b.channels;
@@ -180,7 +197,7 @@ export const withSpline = (b: BezierBoard, t: SplineTarget, spline: Spline): Bez
         outer: sameCurve(ch.outer, old) ? held : ch.outer,
         inner: ch.inner && sameCurve(ch.inner, old) ? held : ch.inner,
       }));
-      return board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, { ...c, channels }); // prettier-ignore
+      return board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, { ...c, channels }, b.swallow); // prettier-ignore
     }
   }
 };
@@ -577,6 +594,7 @@ export const propagateCrossSectionToCurves = (
     next.interpolationType,
     next.fins,
     next.channels,
+    next.swallow,
   );
 };
 
@@ -592,6 +610,7 @@ export const withCrossSections = (b: BezierBoard, list: readonly CrossSection[])
     b.interpolationType,
     b.fins,
     b.channels,
+    b.swallow,
   );
 
 /**
@@ -656,7 +675,16 @@ export const moveCrossSectionPosition = (
   const sections = b.crossSections.map((section, i) =>
     i === index ? crossSection(clamped, section.spline) : section,
   );
-  return board(b.outline, b.bottom, b.deck, sections, b.interpolationType, b.fins, b.channels);
+  return board(
+    b.outline,
+    b.bottom,
+    b.deck,
+    sections,
+    b.interpolationType,
+    b.fins,
+    b.channels,
+    b.swallow,
+  );
 };
 
 /**
@@ -668,7 +696,7 @@ export const moveCrossSectionPosition = (
  */
 /** Return the board with a different cross-section interpolation model. */
 export const withInterpolationType = (b: BezierBoard, type: InterpolationType): BezierBoard =>
-  board(b.outline, b.bottom, b.deck, b.crossSections, type, b.fins, b.channels);
+  board(b.outline, b.bottom, b.deck, b.crossSections, type, b.fins, b.channels, b.swallow);
 
 /**
  * Scale fin placement with the board (legacy `finScaling`): trailing-edge distance
@@ -700,17 +728,72 @@ export const scaleBoard = (b: BezierBoard, fL: number, fW: number, fT: number): 
     b.interpolationType,
     scaleFins(b.fins, fL, fW, fT),
     b.channels && scaleBoardChannels(b.channels, fL, fW, fT),
+    b.swallow,
   );
 
 // --- fins -------------------------------------------------------------------
 
 /** Return a new board with different channels, or none (`undefined`). */
 export const withChannels = (b: BezierBoard, channels: BoardChannels | undefined): BezierBoard =>
-  board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, channels);
+  board(
+    b.outline,
+    b.bottom,
+    b.deck,
+    b.crossSections,
+    b.interpolationType,
+    b.fins,
+    channels,
+    b.swallow,
+  );
 
 /** Return a new board with a different fin configuration. */
+/**
+ * A swallow tail (print version): the outline notched `width` across and `depth` deep,
+ * with its inside wall set. The notch the outline has is kept when it is already that
+ * size, so changing only the wall keeps any curve given to the notch. Null when the
+ * outline is never that wide.
+ */
+export const withSwallowTail = (
+  b: BezierBoard,
+  width: number,
+  depth: number,
+  wall: SwallowWall,
+): BezierBoard | null => {
+  const now = swallowSize(b.outline);
+  const same =
+    now && Math.abs(now.width - width) < SWALLOW_SAME && Math.abs(now.depth - depth) < SWALLOW_SAME;
+  const outline = same ? b.outline : swallowTailOutline(b.outline, width, depth);
+  if (!outline) return null;
+  return enforceJunctions(
+    board(outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, b.channels, clampWall(wall)), // prettier-ignore
+    { kind: 'outline' },
+  );
+};
+/** Sizes (cm) a typed width or depth is taken to be the notch's own within. */
+const SWALLOW_SAME = 1e-3;
+
+/** The board with its swallow's notch filled and its wall setting gone. */
+export const withoutSwallowTail = (b: BezierBoard): BezierBoard =>
+  enforceJunctions(
+    board(plainTailOutline(b.outline), b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, b.channels), // prettier-ignore
+    { kind: 'outline' },
+  );
+
+/** The board with its swallow's inside wall changed (the deck line's point dragged). */
+export const withSwallowWall = (b: BezierBoard, wall: SwallowWall): BezierBoard =>
+  board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, b.channels, clampWall(wall)); // prettier-ignore
+
 export const withFins = (b: BezierBoard, fins: FinConfig): BezierBoard =>
-  board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, fins, b.channels);
+  board(
+    b.outline,
+    b.bottom,
+    b.deck,
+    b.crossSections,
+    b.interpolationType,
+    fins,
+    b.channels,
+    b.swallow,
+  );
 
 /** Change the fin setup, re-seeding placement from defaults but keeping the system. */
 export const setFinSetup = (b: BezierBoard, setup: FinSetup): BezierBoard =>
@@ -958,7 +1041,16 @@ export const enforceJunctions = (b: BezierBoard, changed?: SplineTarget): Bezier
     outline = clampHandleFloor(outline, noseIdx, 'prev', 'y');
   }
 
-  return board(outline, bottom, deck, crossSections, b.interpolationType, b.fins, b.channels);
+  return board(
+    outline,
+    bottom,
+    deck,
+    crossSections,
+    b.interpolationType,
+    b.fins,
+    b.channels,
+    b.swallow,
+  );
 };
 
 /**

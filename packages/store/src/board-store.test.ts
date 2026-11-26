@@ -12,8 +12,10 @@ import {
   getRockerAtPos,
   getThicknessAtPos,
   getWidthAtPos,
+  hasTailCutout,
   knot,
   splineFromKnots,
+  swallowSize,
   valueAt,
   vec2,
   type BezierBoard,
@@ -983,5 +985,33 @@ describe('board store: channels', () => {
     store.getState().undo();
     store.getState().undo();
     expect(store.getState().board!.channels).toEqual(b1.channels);
+  });
+});
+
+describe('swallow tail', () => {
+  it('Apply notches the tail and sets the wall, one undo step; Remove fills it', () => {
+    const store = createBoardStore();
+    store.getState().load(makeBoard());
+    expect(store.getState().applySwallowTail(10, 8, { kind: 'bevel', angle: 30 })).toBe(true);
+    const b = store.getState().board!;
+    expect(hasTailCutout(b.outline)).toBe(true);
+    expect(swallowSize(b.outline)!.width).toBeCloseTo(10, 6);
+    expect(swallowSize(b.outline)!.depth).toBeCloseTo(8, 9);
+    expect(b.swallow).toEqual({ kind: 'bevel', angle: 30 });
+    store.getState().undo();
+    expect(store.getState().board!.swallow).toBeUndefined();
+    store.getState().redo();
+
+    // Only the wall changed: the notch, curve and all, stays.
+    store.getState().applySwallowTail(10, 8, { kind: 'round', size: 0.8 });
+    expect(store.getState().board!.outline).toBe(b.outline);
+    store.getState().setSwallowWall({ kind: 'round', size: 2 });
+    expect(store.getState().board!.swallow).toEqual({ kind: 'round', size: 1 });
+
+    store.getState().removeSwallowTail();
+    expect(hasTailCutout(store.getState().board!.outline)).toBe(false);
+    expect(store.getState().board!.swallow).toBeUndefined();
+    // Wider than the board: nothing done.
+    expect(store.getState().applySwallowTail(100, 8, { kind: 'bevel', angle: 30 })).toBe(false);
   });
 });

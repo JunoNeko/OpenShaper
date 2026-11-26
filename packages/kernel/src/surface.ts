@@ -2,6 +2,8 @@
 import { normalAngle, valueAt, valueAtReverse } from './bezier-spline';
 import { getLength, getRockerAtPos, widthBoundsAt, type BezierBoard } from './board';
 import { loftCrossSection } from './loft';
+import { hasTailCutout } from './outline-cutout';
+import { notchUnsqueeze, swallowStation } from './swallow';
 import { vec2, type Vec2 } from './vec2';
 
 /**
@@ -27,9 +29,22 @@ import { vec2, type Vec2 } from './vec2';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
-const sectionLateral = (b: BezierBoard, x: number, y: number): number | null => {
+const sectionLateral = (
+  b: BezierBoard,
+  x: number,
+  y: number,
+  side: 'deck' | 'bottom' = 'bottom',
+): number | null => {
   const { yIn, yOut } = widthBoundsAt(b, x);
   if (yOut <= 1e-6) return 0;
+  if (b.swallow && hasTailCutout(b.outline)) {
+    // A swallow's squeeze (`notchSqueeze`): the bottom from the notch's edge, the deck
+    // from the deck line.
+    const st = swallowStation(b, x);
+    // The deck is the board's own, cut at the deck line; the bottom is squeezed.
+    if (side === 'deck') return clamp(y, Math.min(st?.yD ?? 0, yOut), yOut);
+    return notchUnsqueeze(st?.yB ?? (yIn > 1e-9 ? yIn : 0), yOut, y);
+  }
   // Inverse of the tessellate cutout remap `mapped = yIn + p.x·scale`; identity
   // (scale = 1, yIn = 0) on a normal board.
   const scale = (yOut - yIn) / yOut;
@@ -43,7 +58,7 @@ const surfaceZAt = (b: BezierBoard, x: number, y: number, side: 'deck' | 'bottom
   if (!cs) return NaN;
   const rocker = getRockerAtPos(b, x);
   if (!Number.isFinite(rocker)) return NaN;
-  const lat = sectionLateral(b, x, y);
+  const lat = sectionLateral(b, x, y, side);
   if (lat === null) return NaN;
   const h = side === 'deck' ? valueAtReverse(cs.spline, lat) : valueAt(cs.spline, lat);
   return h + rocker;

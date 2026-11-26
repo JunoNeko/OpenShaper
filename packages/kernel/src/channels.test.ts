@@ -21,6 +21,7 @@ import {
   channelAnchors,
   channelDepthAt,
   channelProblems,
+  channelRailExits,
   scaleChannels,
   type BottomChannel,
   type ChannelWall,
@@ -257,6 +258,23 @@ describe('a channel designed off the bottom', () => {
       expect(Math.min(...ring.map((p) => Math.abs(p.y - y)))).toBeLessThan(1e-6);
     }
     expect(channelProblems(pair, (v) => getWidthAtPos(shortboard, v) / 2, (v) => getThicknessAtPos(shortboard, v)).join()).toMatch(/runs off the bottom/); // prettier-ignore
+  });
+
+  it("puts a station where it stops running out through the rail, so the cut rail doesn't web (owner's diamond tail)", () => {
+    const sq: ChannelWall = { shape: 'square' };
+    const pair = [straight(0, 5, 0.5, sq, 40, 60, 5), straight(5, 10, 0.5, sq, 40, 60, 5)];
+    const half = (v: number) => getWidthAtPos(shortboard, v) / 2;
+    const exits = channelRailExits(pair, half, 0, getLength(shortboard));
+    // The outer wall, 10 cm out, meets the narrowing tail's rail once.
+    expect(exits).toHaveLength(1);
+    expect(half(exits[0]!)).toBeCloseTo(10, 6);
+    // The mesh has a ring there, not a band stretched across it.
+    const m = tessellateBoard(withChannels(shortboard, pair), { targetFaceSize: 0.9 });
+    let nearest = Infinity;
+    for (let i = 0; i < m.positions.length; i += 3) {
+      nearest = Math.min(nearest, Math.abs(m.positions[i]! - exits[0]!));
+    }
+    expect(nearest).toBeLessThan(1e-5);
   });
 });
 

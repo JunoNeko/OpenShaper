@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { getLength, getMaxThickness, getMaxWidth, getWidthAtPos, type BezierBoard } from './board';
 import { boardChannels } from './channel-layout';
+import { channelRailExits } from './channels';
 import { triangulatePolygon } from './polygon';
 import {
   MIN_DIM,
@@ -16,6 +17,7 @@ import {
   type Vert3,
 } from './loft';
 import { CUTOUT_EPS, cachedOutlineSegments, hasTailCutout, yInOut } from './outline-cutout';
+import { notchSqueeze, swallowDeckApex, swallowStation, type SwallowStation } from './swallow';
 
 /**
  * A triangle mesh of the board surface, ready for upload to a GPU buffer.
@@ -155,8 +157,7 @@ export const tessellateBoard = (board: BezierBoard, opts: TessellateOptions = {}
   // Each entry: the vertex indices for one ring (a closed loop).
   const rings: number[][] = [];
 
-  for (let s = 0; s < lengthSteps; s++) {
-    const x = x0 + ((x1 - x0) * s) / (lengthSteps - 1);
+  for (const x of stationXs(board, x0, x1, lengthSteps)) {
     const ring = loftRing(board, x, ringSteps);
     if (!ring) continue;
     const idx = ring.map((v) => addVert(positions, v));
@@ -224,6 +225,40 @@ export const tessellateBoard = (board: BezierBoard, opts: TessellateOptions = {}
   else capEnd(rings[rings.length - 1]!, pointed1 ? length : x1, true);
 
   return finalizeMesh(positions, indices);
+};
+
+/** A feature this close to a station (share of the spacing) moves the station onto it. */
+const SNAP_SHARE = 0.25;
+
+/**
+ * Where the stations go: evenly from `x0` to `x1`, plus one on each feature the board
+ * has between them, where its surface turns sharply along its length:
+ *
+ * - each corner of the outline (a diamond tail's shoulders): between two even stations
+ *   the band cut straight across it, off the outline by millimetres;
+ * - where a channel starts or stops running out through the rail: the cut rail
+ *   stretched across the gap to the next station, webbing the corner (owner's diamond
+ *   tail, 2026-11).
+ *
+ * A feature near a station moves that station onto it, else it is added between two.
+ * A board with no features keeps its stations exactly.
+ */
+const stationXs = (board: BezierBoard, x0: number, x1: number, n: number): number[] => {
+  const xs = Array.from({ length: n }, (_, s) => x0 + ((x1 - x0) * s) / (n - 1));
+  const step = (x1 - x0) / (n - 1);
+  const inside = (x: number) => x > x0 + step * SNAP_SHARE && x < x1 - step * SNAP_SHARE;
+  const features = [
+    ...board.outline.knots.filter((k) => !k.continuous).map((k) => k.end.x),
+    ...channelRailExits(boardChannels(board), (x) => getWidthAtPos(board, x) / 2, x0, x1),
+  ].filter(inside);
+  if (features.length === 0) return xs;
+  const extra: number[] = [];
+  for (const f of features) {
+    const i = Math.round((f - x0) / step);
+    if (i > 0 && i < n - 1 && Math.abs(xs[i]! - f) <= step * SNAP_SHARE) xs[i] = f;
+    else extra.push(f);
+  }
+  return [...xs, ...extra].sort((a, b) => a - b).filter((x, i, all) => i === 0 || x - all[i - 1]! > 1e-6); // prettier-ignore
 };
 
 const emptyMesh = (): BoardMesh => ({
@@ -333,6 +368,10 @@ const tessellateCutout = (
 ): BoardMesh => {
   const segments = cachedOutlineSegments(board.outline);
   const eps = Math.min(0.5, length * 1e-3);
+  // A swallow made with the tool runs out to the board's ends: its end stations are
+  // fanned to a point on each end (see `capRow`), and stations packed toward them follow
+  // a round nose in. Boards folded by hand keep their meshes.
+  const swallowed = board.swallow !== undefined;
   const x0 = eps;
   const x1 = length - eps;
   const half = ringHalf(ringSteps);
@@ -348,9 +387,11 @@ const tessellateCutout = (
   // recursively subdivide any interval whose midpoint (y_in, y_out) deviates from a
   // straight chord — concentrating rings exactly where the outline bends, so the
   // mesh follows the bezier with smooth, consistent facets.
-  const lat = (x: number): [number, number] => {
+  // A swallow's set inside wall (`swallow.ts`): the deck's edge moves with it too.
+  const lat = (x: number): number[] => {
     const { yIn, yOut } = yInOut(segments, x);
-    return [yIn, yOut];
+    if (!swallowed) return [yIn, yOut];
+    return [yIn, yOut, swallowStation(board, x, 1)?.yD ?? 0];
   };
   const FLATNESS = 0.04; // cm: max midpoint deviation from the chord before splitting
   const STEP = 0.6; // cm: max lateral change of y_in / y_out per facet (bounds facet size)
@@ -358,13 +399,17 @@ const tessellateCutout = (
   const xs: number[] = [x0];
   const refine = (a: number, b: number, depth: number): void => {
     const m = (a + b) / 2;
-    const [ia, oa] = lat(a);
-    const [ib, ob] = lat(b);
-    const [im, om] = lat(m);
+    const la = lat(a);
+    const lb = lat(b);
+    const lm = lat(m);
     // Split where the curve bends (midpoint off the chord) OR where the boundary moves
     // too far laterally across the interval (a near-vertical wall → big flat facet).
-    const dev = Math.max(Math.abs(im - (ia + ib) / 2), Math.abs(om - (oa + ob) / 2));
-    const step = Math.max(Math.abs(ia - ib), Math.abs(oa - ob));
+    let dev = 0;
+    let step = 0;
+    for (let i = 0; i < la.length; i++) {
+      dev = Math.max(dev, Math.abs(lm[i]! - (la[i]! + lb[i]!) / 2));
+      step = Math.max(step, Math.abs(la[i]! - lb[i]!));
+    }
     if (
       (dev > FLATNESS || step > STEP) &&
       b - a > minDx &&
@@ -384,13 +429,39 @@ const tessellateCutout = (
     const cd1 = (1 - Math.cos(u1 * Math.PI)) / 2;
     refine(x0 + cd0 * (x1 - x0), x0 + cd1 * (x1 - x0), 0);
   }
+  if (swallowed) {
+    // Stations on the notch bottom and just past the deck line's point, where the wall
+    // changes from notch to V and from V to none, and a few across the V between.
+    const bottomEnd = segments.tailInner.reduce((m, p) => Math.max(m, p.x), -Infinity);
+    const deckEnd = swallowDeckApex(board);
+    xs.push(bottomEnd);
+    // Packed toward each end (squares of a step: the width runs out as a square root).
+    for (let i = 1; i < END_STATIONS; i++) {
+      const d = END_REACH * (i / END_STATIONS) ** 2;
+      xs.push(x0 + d, x1 - d);
+    }
+    if (deckEnd !== null && deckEnd > bottomEnd) {
+      const v = deckEnd + 1e-4 - bottomEnd;
+      for (let i = 1; i <= 6; i++) xs.push(bottomEnd + (v * i) / 6);
+    }
+    xs.sort((p, q) => p - q);
+    for (let i = xs.length - 1; i > 0; i--) if (xs[i]! - xs[i - 1]! < 1e-6) xs.splice(i, 1);
+  }
 
   const yIns: number[] = [];
+  /** Points on the inside wall after each row's ring (0 where the deck isn't notched). */
+  const wallCounts: number[] = [];
+  /** Rows inside the bottom's notch, whose wall ends on the ring's first point. */
+  const notched: boolean[] = [];
   const rightRows: (number[] | null)[] = [];
   const leftRows: (number[] | null)[] = [];
 
   /** The notch's remap at x, as a channel sees it. */
   const lateralAt = (x: number): LateralMap => {
+    if (swallowed) {
+      const { yIn, yOut } = yInOut(segments, x);
+      return notchSqueeze(yIn > 1e-9 ? yIn : 0, yOut);
+    }
     let { yIn, yOut } = yInOut(segments, x);
     if (yIn < CUTOUT_EPS) yIn = 0;
     if (yOut < yIn + CUTOUT_EPS) yOut = yIn;
@@ -404,12 +475,17 @@ const tessellateCutout = (
     const section = loftSection(board, x);
     if (!section) {
       yIns.push(0);
+      wallCounts.push(0);
+      notched.push(false);
       rightRows.push(null);
       leftRows.push(null);
       continue;
     }
     let { yIn, yOut } = yInOut(segments, x);
-    if (yIn < CUTOUT_EPS) yIn = 0;
+    const sw: SwallowStation | null = swallowed ? swallowStation(board, x) : null;
+    if (sw)
+      yIn = sw.yB; // the wall ends on it exactly
+    else if (yIn < CUTOUT_EPS) yIn = 0;
     if (yOut < yIn + CUTOUT_EPS) yOut = yIn; // collapsed tip → zero-width sliver
     yIns.push(yIn);
 
@@ -417,22 +493,65 @@ const tessellateCutout = (
     const ring = cut ? stationRing(board, section, x, half, lateralAt) : null;
     const fs = ring ? ring.fs : ladder;
     rowLength = fs.length;
+    const pts = fs.map((f) =>
+      ring ? channelCutAt(board, ring, section, f, x, lateralAt(x)) : loftPoint(section, f),
+    );
+    // The deck runs from its own edge: from the rail's widest point on, its points are
+    // squeezed into [yD, yOut] (they meet the bottom's there, both at yOut).
+    let widest = 0;
+    if (sw) pts.forEach((p, i) => p.x > pts[widest]!.x && (widest = i));
+    // Within the rail, should the tip's band have been closed up to nothing.
+    const yD = sw ? Math.min(sw.yD, yOut) : 0;
+    const bottomMap = sw ? notchSqueeze(yIn, yOut) : null;
+    const deckMap = sw ? notchSqueeze(yD, yOut) : null;
     const right: number[] = [];
     const left: number[] = [];
     let ok = true;
-    for (let i = 0; i < fs.length; i++) {
-      const p = ring
-        ? channelCutAt(board, ring, section, fs[i]!, x, lateralAt(x))
-        : loftPoint(section, fs[i]!);
-      const mapped = yIn + p.x * scale; // p.x ∈ [0, yOut] → [yIn, yOut]
-      const z = p.y + section.rocker;
-      if (!isFinite3(x, mapped, z)) {
+    const push = (y: number, z: number): void => {
+      if (!isFinite3(x, y, z)) {
         ok = false;
-        break;
+        return;
       }
-      right.push(addVert(positions, { x, y: mapped, z }));
-      left.push(addVert(positions, { x, y: -mapped, z }));
+      right.push(addVert(positions, { x, y, z }));
+      left.push(addVert(positions, { x, y: -y, z }));
+    };
+    // A swallow's deck is the board's own deck, cut away at the deck line: its points are
+    // spread by the squeeze but sit at the deck's height where they land. (Carried with
+    // them, the deck's height at the stringer rode out to each tip, the deck rising a few
+    // millimetres toward the tips: a kick, owner report 2026-11.)
+    const deckFrom = sw ? fs[widest]! : 1;
+    const deckHeightAt = (y: number): number => {
+      let lo = deckFrom;
+      let hi = 1;
+      for (let k = 0; k < DECK_STEPS; k++) {
+        const m = (lo + hi) / 2;
+        if (loftPoint(section, m).x > y) lo = m;
+        else hi = m;
+      }
+      return loftPoint(section, (lo + hi) / 2).y;
+    };
+    let zd = 0;
+    for (let i = 0; i < pts.length && ok; i++) {
+      const p = pts[i]!;
+      // p.x ∈ [0, yOut] → [yIn, yOut]
+      if (!sw) {
+        push(yIn + p.x * scale, p.y + section.rocker);
+      } else if (i > widest) {
+        const y = deckMap!(p.x);
+        zd = deckHeightAt(y) + section.rocker;
+        push(y, zd);
+      } else {
+        push(bottomMap!(p.x), p.y + section.rocker);
+      }
     }
+    if (sw && ok) {
+      // The inside wall, from the deck's edge down to the bottom's, or to where the V
+      // closes on the stringer.
+      const zb = pts[0]!.y + section.rocker;
+      for (const q of sw.wall) if (ok) push(Math.min(q.y, yOut), zb + q.u * (zd - zb));
+    }
+    wallCounts.push(sw && ok ? sw.wall.length : 0);
+    notched.push(yIn > 0);
     if (!ok || right.length < 2) {
       rightRows.push(null);
       leftRows.push(null);
@@ -442,12 +561,30 @@ const tessellateCutout = (
     leftRows.push(left);
   }
 
+  const samePos = (i: number, j: number): boolean =>
+    Math.abs(positions[i * 3]! - positions[j * 3]!) < 1e-9 &&
+    Math.abs(positions[i * 3 + 1]! - positions[j * 3 + 1]!) < 1e-9 &&
+    Math.abs(positions[i * 3 + 2]! - positions[j * 3 + 2]!) < 1e-9;
+
   // Stitch one half-shell's rows; `mirror` flips the winding for the -Y side.
   const stitch = (rows: (number[] | null)[], mirror: boolean): void => {
     for (let r = 0; r < rows.length - 1; r++) {
       const a = rows[r];
       const b = rows[r + 1];
       if (!a || !b) continue;
+      if (swallowed) {
+        const wa = wallCounts[r]!;
+        const wb = wallCounts[r + 1]!;
+        stitchSwallow(indices, a, b, rowLength, wa, wb, mirror);
+        // Out of the bottom's notch onto the stringer: the wall's upright foot, from the
+        // notch's last edge to the stringer below where the wall leaves it.
+        const bLast = b[rowLength - 1 + wb]!;
+        if (notched[r] && !notched[r + 1] && !samePos(bLast, b[0]!)) {
+          if (!mirror) indices.push(a[0]!, bLast, b[0]!);
+          else indices.push(a[0]!, b[0]!, bLast);
+        }
+        continue;
+      }
       // Close the deck↔bottom wall (the ring's wrap edge) only inside the notch.
       const wall = yIns[r]! > CUTOUT_EPS || yIns[r + 1]! > CUTOUT_EPS;
       const lim = wall ? rowLength : rowLength - 1;
@@ -476,9 +613,37 @@ const tessellateCutout = (
   // over the channels' mouths: cover exactly its outline instead (the row is one station,
   // so it lies in a plane of constant x).
   const channelled = boardChannels(board).length > 0;
-  const capRow = (row: number[] | null, reverse: boolean): void => {
+  const capRow = (whole: number[] | null, reverse: boolean, hubX?: number, pod = false): void => {
+    let row = whole;
     if (!row || row.length < 3) return;
+    if (hubX !== undefined) {
+      // A swallow's end: fanned out to a point on the board's own end, so the mesh runs
+      // all the way (capped flat at the inset station, a round nose was cut off square,
+      // centimetres wide; owner report, 2026-11). A tail pod is a closed ring (its wall
+      // ends on its first point) and gets a point of its own; a half of the nose, open
+      // along the stringer, meets its mirror at one point on it, and leaves the stringer
+      // edge to the mirror's fan.
+      const n = row.length;
+      let sy = 0;
+      let sz = 0;
+      for (const vi of row) {
+        sy += positions[vi * 3 + 1]!;
+        sz += positions[vi * 3 + 2]!;
+      }
+      if (!isFinite3(hubX, sy / n, sz / n)) return;
+      const hub = addVert(positions, { x: hubX, y: pod ? sy / n : 0, z: sz / n });
+      for (let i = 0; i < (pod ? n : n - 1); i++) {
+        const i0 = row[i]!;
+        const i1 = row[(i + 1) % n]!;
+        if (samePos(i0, i1)) continue;
+        if (reverse) indices.push(hub, i1, i0);
+        else indices.push(hub, i0, i1);
+      }
+      return;
+    }
     if (channelled) {
+      // A swallow's wall ends on the ring's first point: one corner, not two.
+      while (row.length > 3 && samePos(row[row.length - 1]!, row[0]!)) row = row.slice(0, -1);
       const pts = row.map((vi) => ({ x: positions[vi * 3 + 1]!, y: positions[vi * 3 + 2]! }));
       for (const [a, b, c] of triangulatePolygon(pts)) {
         if (reverse) indices.push(row[c]!, row[b]!, row[a]!);
@@ -503,6 +668,7 @@ const tessellateCutout = (
     for (let i = 0; i < n; i++) {
       const i0 = row[i]!;
       const i1 = row[(i + 1) % n]!;
+      if (samePos(i0, i1)) continue; // a swallow's wall ends on the ring's first point
       if (reverse) indices.push(tip, i1, i0);
       else indices.push(tip, i0, i1);
     }
@@ -518,13 +684,59 @@ const tessellateCutout = (
   }
   if (firstIdx !== -1 && lastIdx !== firstIdx) {
     // Wound against their bands, as the single-loop caps (see there).
-    capRow(rightRows[firstIdx]!, false);
-    capRow(rightRows[lastIdx]!, true);
-    capRow(leftRows[firstIdx]!, true);
-    capRow(leftRows[lastIdx]!, false);
+    const tail = swallowed ? 0 : undefined;
+    const nose = swallowed ? length : undefined;
+    const pod0 = notched[firstIdx]!;
+    const pod1 = notched[lastIdx]!;
+    capRow(rightRows[firstIdx]!, false, tail, pod0);
+    capRow(rightRows[lastIdx]!, true, nose, pod1);
+    capRow(leftRows[firstIdx]!, true, tail, pod0);
+    capRow(leftRows[lastIdx]!, false, nose, pod1);
   }
 
   return finalizeMesh(positions, indices);
+};
+
+/** Over how much length (cm) at each end a swallow's stations are packed in. */
+const END_REACH = 1;
+/** Stations packed into each end. */
+const END_STATIONS = 12;
+
+/** Halvings finding the deck's height at a point across a swallow's station: 2^-30 of the profile. */
+const DECK_STEPS = 30;
+
+/**
+ * Stitch two rows of a swallow's half-shell. Each row is the ring (`n` points, stringer
+ * bottom to stringer deck) then `wa`/`wb` points down the inside wall. The wall's last
+ * point lies on the ring's first, or on the stringer, so no wrap edge is closed: the
+ * shell meets itself, or its mirror, there. Where only one row has a wall it fans to the
+ * other's deck edge.
+ */
+const stitchSwallow = (
+  indices: number[],
+  a: readonly number[],
+  b: readonly number[],
+  n: number,
+  wa: number,
+  wb: number,
+  mirror: boolean,
+): void => {
+  const quad = (a0: number, a1: number, b0: number, b1: number): void => {
+    if (!mirror) indices.push(a0, b0, a1, a1, b0, b1);
+    else indices.push(a0, a1, b0, a1, b1, b0);
+  };
+  const tri = (p: number, q: number, r: number): void => {
+    if (!mirror) indices.push(p, q, r);
+    else indices.push(p, r, q);
+  };
+  const shared = wa === wb ? n + wa : n;
+  for (let j = 0; j < shared - 1; j++) quad(a[j]!, a[j + 1]!, b[j]!, b[j + 1]!);
+  if (wa === wb) return;
+  if (wb === 0) {
+    for (let k = 0; k < wa; k++) tri(a[n - 1 + k]!, b[n - 1]!, a[n + k]!);
+  } else if (wa === 0) {
+    for (let k = 0; k < wb; k++) tri(a[n - 1]!, b[n - 1 + k]!, b[n + k]!);
+  }
 };
 
 /**

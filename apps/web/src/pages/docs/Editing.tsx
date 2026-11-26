@@ -333,6 +333,22 @@ export default function DocsEditing() {
           area, the 3D mesh and every export understand the cutout, so the numbers stay honest.
         </p>
         <p>
+          <strong>Swallow Tail</strong> in the Shape tab of the sidebar cuts one for you. Set the
+          notch&apos;s width across the tail and its depth up the stringer, and how its inside wall
+          climbs to the deck: <strong>Beveled</strong> leans it back at an angle from upright,{' '}
+          <strong>Rounded</strong> stands it upright and rounds it into the deck, the percentage
+          being the radius as a share of the thickness. Apply cuts the notch into the outline.
+        </p>
+        <p>
+          Then shape it in the outline view. The notch is the outline&apos;s own points: drag the
+          point on the stringer to change the depth, and the tip&apos;s handle to curve the notch.
+          The dashed line is where the inside wall meets the deck; it follows the notch. Drag its
+          point on the stringer to make the wall lean more or less: the panel shows the angle or
+          roundness that gives. Past the bottom of the notch, the deck is notched a little further
+          than the bottom, in a V that closes at that point. Apply again with only the wall changed
+          and the notch keeps its curve; <strong>Remove</strong> fills it in.
+        </p>
+        <p>
           One shape is not supported: a single notch only, so batwing tails with two cutouts cannot
           be described.
         </p>

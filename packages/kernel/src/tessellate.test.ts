@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { getLength, getVolume } from './board';
+import { board, getLength, getVolume, getWidthAtPos } from './board';
+import { splineFromKnots } from './bezier-spline';
 import { tessellateBoard, tessellationSteps } from './tessellate';
 import { parseBrdGeometry } from './test-support/brd-geometry';
 
@@ -203,5 +204,22 @@ describe('tessellateBoard: target face size', () => {
     const mesh = tessellateBoard(board, { targetFaceSize: 0.5, lengthSteps: 10, ringSteps: 8 });
     // 10 stations (some end sections may drop) → vertex count near 10*8 plus caps.
     expect(mesh.positions.length / 3).toBeLessThan(10 * 8 + 10);
+  });
+});
+
+describe('tessellateBoard: outline corners', () => {
+  it("puts a station on each corner of the outline (a diamond tail's shoulders)", () => {
+    const b = loadBoard('shortboard');
+    // Its second outline knot made a corner, as a diamond tail's shoulder is.
+    const knots = b.outline.knots.map((k, i) => (i === 1 ? { ...k, continuous: false } : k));
+    const corner = knots[1]!.end;
+    const cornered = board(splineFromKnots(knots), b.bottom, b.deck, b.crossSections, b.interpolationType); // prettier-ignore
+    const m = tessellateBoard(cornered, { targetFaceSize: 0.9 });
+    // A ring on the corner, reaching the outline there.
+    let widest = 0;
+    for (let i = 0; i < m.positions.length; i += 3) {
+      if (Math.abs(m.positions[i]! - corner.x) < 1e-5) widest = Math.max(widest, m.positions[i + 1]!); // prettier-ignore
+    }
+    expect(widest).toBeCloseTo(getWidthAtPos(cornered, corner.x) / 2, 3);
   });
 });

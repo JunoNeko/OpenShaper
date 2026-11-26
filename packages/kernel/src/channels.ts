@@ -119,6 +119,52 @@ const wallsAt = (c: BottomChannel, x: number): { yi: number | null; yo: number }
   return { yi, yo };
 };
 
+/** Samples along a channel, then bisection steps, finding where it runs out through the rail. */
+const EXIT_SAMPLES = 256;
+const EXIT_STEPS = 40;
+
+/**
+ * Where (x, cm) each channel's outer wall crosses the rail between `x0` and `x1`, on a
+ * board whose half-width at x is `halfWidth(x)`: where a channel starts or stops running
+ * out through the rail (a narrowing tail). The mesh puts a station on each, so the cut
+ * rail ends where it does, not across the gap to the next station.
+ */
+export const channelRailExits = (
+  channels: readonly BottomChannel[],
+  halfWidth: (x: number) => number,
+  x0: number,
+  x1: number,
+): number[] => {
+  const out: number[] = [];
+  for (const c of channels) {
+    const [a, b] = splineSpan(c.depth);
+    const lo = Math.max(a, x0);
+    const hi = Math.min(b, x1);
+    if (!(hi > lo)) continue;
+    const g = (x: number) => wallsAt(c, x).yo - halfWidth(x);
+    let xp = lo;
+    let gp = g(lo);
+    for (let k = 1; k <= EXIT_SAMPLES; k++) {
+      const x = lo + ((hi - lo) * k) / EXIT_SAMPLES;
+      const gx = g(x);
+      if (Number.isFinite(gp) && Number.isFinite(gx) && gp > 0 !== gx > 0) {
+        let l = xp;
+        let h = x;
+        for (let i = 0; i < EXIT_STEPS; i++) {
+          const m = (l + h) / 2;
+          if (g(m) > 0 === gp > 0) l = m;
+          else h = m;
+        }
+        const xc = (l + h) / 2;
+        if (channelFullDepth(c, xc) > 0) out.push(xc);
+      }
+      xp = x;
+      gp = gx;
+    }
+  }
+  return out;
+};
+
 const at = (c: BottomChannel, x: number): ChannelAtX => ({
   ...wallsAt(c, x),
   depth: channelFullDepth(c, x),

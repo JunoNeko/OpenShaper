@@ -14,9 +14,11 @@ import {
   hasTailCutout,
   knot,
   splineFromKnots,
+  swallowTailOutline,
   vec2,
   type KnotLock,
   type Spline,
+  type SwallowWall,
 } from '@openshaper/kernel';
 import { parseBrd } from './brd-reader';
 import { BoardJsonError, readBoardJson, writeBoardJson } from './board-json';
@@ -271,5 +273,34 @@ describe('board-json channels', () => {
       params: { count: 4, layout: 'parallel', depth: 0.5, tailEnd: 0, length: 80, runIn: 20, inner: 0, railMargin: 3, land: 0, wall: { shape: 'step', radius: 0 } }, // prettier-ignore
     };
     expect(() => readBoardJson(JSON.stringify(doc))).toThrow(/channel numbers/);
+  });
+});
+
+describe('board-json swallow tail', () => {
+  const withWall = (swallow: unknown) => {
+    const b = loadBrd('shortboard');
+    const outline = swallowTailOutline(b.outline, 10, 10)!;
+    return board(outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, undefined, swallow as SwallowWall); // prettier-ignore
+  };
+
+  it('round-trips the inside wall, beveled or rounded', () => {
+    for (const wall of [
+      { kind: 'bevel', angle: 30 },
+      { kind: 'round', size: 0.8 },
+    ] as const) {
+      const original = withWall(wall);
+      const { board: restored } = readBoardJson(writeBoardJson(original));
+      expect(restored.swallow).toEqual(wall);
+      expect(restored.outline.knots.length).toBe(original.outline.knots.length);
+    }
+  });
+
+  it('writes nothing for an upright wall, and drops one it cannot read', () => {
+    expect(JSON.parse(writeBoardJson(withWall(undefined))).swallow).toBeUndefined();
+    const doc = JSON.parse(writeBoardJson(withWall({ kind: 'bevel', angle: 30 })));
+    doc.swallow = { kind: 'chamfer', angle: 3 };
+    expect(readBoardJson(JSON.stringify(doc)).board.swallow).toBeUndefined();
+    doc.swallow = { kind: 'bevel', angle: 400 };
+    expect(readBoardJson(JSON.stringify(doc)).board.swallow).toEqual({ kind: 'bevel', angle: 75 });
   });
 });

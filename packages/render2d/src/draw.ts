@@ -377,13 +377,45 @@ export interface EditorOverlays {
    * Points of applied channels that can be dragged, by id (`SplineEditor`'s
    * `onChannelKeyDrag`). Drawn on both halves of a mirrored pane.
    */
-  channelKeys?: readonly { id: string; p: Vec2 }[];
+  channelKeys?: readonly { id: string; p: Vec2; square?: boolean }[];
+  /**
+   * Lines drawn dashed in the outline's colour, mirrored with the pane: a swallow tail's
+   * deck line, where its inside wall meets the deck.
+   */
+  dashedLines?: readonly (readonly Vec2[])[];
 }
 
-/** Draw draggable channel points: green with a dark ring, on each half of a mirrored pane. */
+/** Draw `dashedLines`: dashed, mirrored with the pane. */
+export const drawDashedLines = (
+  ctx: CanvasRenderingContext2D,
+  lines: readonly (readonly Vec2[])[],
+  vp: Viewport,
+  color: string,
+  mirror: Mirror = {},
+): void => {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.25;
+  ctx.setLineDash([6, 5]);
+  for (const f of reflections(mirror)) {
+    for (const w of lines) {
+      if (w.length < 2) continue;
+      ctx.beginPath();
+      w.forEach((p, i) => {
+        const s = worldToScreen(vp, f(p));
+        if (i === 0) ctx.moveTo(s.x, s.y);
+        else ctx.lineTo(s.x, s.y);
+      });
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+};
+
+/** Draw draggable channel points: green with a dark ring (white squares if `square`), on each half of a mirrored pane. */
 export const drawChannelKeys = (
   ctx: CanvasRenderingContext2D,
-  keys: readonly { id: string; p: Vec2 }[],
+  keys: readonly { id: string; p: Vec2; square?: boolean }[],
   vp: Viewport,
   mirror: Mirror = {},
 ): void => {
@@ -391,6 +423,18 @@ export const drawChannelKeys = (
   for (const f of reflections(mirror)) {
     for (const k of keys) {
       const s = worldToScreen(vp, f(k.p));
+      if (k.square) {
+        // A square, white with a dark ring: a point of the outline's own kind.
+        const r = CHANNEL_KEY_RADIUS - 0.5;
+        ctx.beginPath();
+        ctx.rect(s.x - r, s.y - r, 2 * r, 2 * r);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#0B1220';
+        ctx.stroke();
+        continue;
+      }
       ctx.beginPath();
       ctx.arc(s.x, s.y, CHANNEL_KEY_RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = CHANNEL_CUT_COLOR;

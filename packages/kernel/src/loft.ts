@@ -599,12 +599,39 @@ const ontoBottom = (y: number, reach: number, widest: number): number => {
   if (!(reach > 0)) return 0;
   const band = Math.min(SQUEEZE_BAND, reach / 4);
   const knee = reach - band;
-  const squeezed = y <= knee ? y : knee + band * (1 - Math.exp(-(y - knee) / band));
+  // Rationally, not exponentially: walls held a few centimetres past the bottom (a
+  // narrow nose, past a channel's end) came out a micron apart, which a mesh welds into
+  // edges shared by dozens of faces (owner board, 2026-11). The same at the knee.
+  const squeezed = y <= knee ? y : knee + (band * (y - knee)) / (y - knee + band);
   const w = Math.min(1, Math.max(0, widest / reach - 2));
   if (w === 0) return squeezed;
   const scaled = widest > reach ? (y * reach) / widest : y;
   return (1 - w) * squeezed + w * scaled;
 };
+
+/**
+ * An anchor `y` out from the stringer, on a bottom that starts `start` out (a swallow's
+ * notch) and runs `reach` on: those that fit stay; those short of the start, and in the
+ * last {@link SQUEEZE_BAND} before it, are scaled into that band past it, in order and
+ * apart (squeezed exponentially, walls far inside the notch landed on one point, and on
+ * the bottom's first: edges shared by dozens of faces). The band narrows to nothing as
+ * the notch closes onto the stringer, so the anchors move smoothly onto those of a
+ * bottom from the stringer. Strictly increasing in `y`.
+ */
+const offNotch = (y: number, start: number, reach: number): number => {
+  const band = Math.min(SQUEEZE_BAND, reach / 4, start);
+  if (!(band > 0)) return Math.max(y, start);
+  const knee = start + band;
+  if (y >= knee) return y;
+  // Off the bottom's first point, by a fifth of the band, for a wall on the stringer.
+  return start + band * (NOTCH_GAP + (1 - NOTCH_GAP) * Math.max(0, y / knee));
+};
+
+/** The least profile fraction between anchors squeezed past the bottom (tens of µm). */
+const SQUEEZED_GAP = 1e-4;
+
+/** The share of the band kept between the bottom's first point and the first anchor. */
+const NOTCH_GAP = 0.2;
 
 /**
  * The channel anchors at station `x` as fractions of its profile, never decreasing.
@@ -634,8 +661,26 @@ const anchorFractions = (
     map(loftPoint(s, railStart(s, end)).x) - start - RAIL_EDGE_GAP,
   );
   const widest = ys.length ? ys[ys.length - 1]! : 0;
-  const out = ys.map((y) => bottomFractionAt(s, start + ontoBottom(y, reach, widest), end, map));
-  for (let i = 1; i < out.length; i++) out[i] = Math.max(out[i]!, out[i - 1]!);
+  // Out from the stringer, as the walls are: in a swallow's notch, where the bottom
+  // starts off the stringer, a wall that fits keeps its place (measured from where the
+  // bottom starts, every wall in the notch sat millimetres off its cut, so the cut's
+  // edge hopped between ring points from station to station: owner report, 2026-11).
+  // Those inside the notch are brought onto the bottom, just past its start.
+  const placed = (y: number): number =>
+    start > 0 ? offNotch(ontoBottom(y, start + reach, widest), start, reach) : ontoBottom(y, reach, widest); // prettier-ignore
+  const out = ys.map((y) =>
+    bottomFractionAt(s, start > 0 ? placed(y) : start + placed(y), end, map),
+  );
+  // Squeezed past the bottom, a step's vertical wall (two anchors 2 µm apart) came out on
+  // one point, as close to the stringer as a narrow nose: the mesh welds it into edges
+  // shared by dozens of faces (owner board, 2026-11). Those squeezed keep a little apart,
+  // blended in across the band so nothing jumps; walls on the bottom are untouched.
+  const band = Math.min(SQUEEZE_BAND, reach / 4);
+  const knee = (start > 0 ? start + reach : reach) - band;
+  for (let i = 1; i < out.length; i++) {
+    const share = band > 0 ? Math.min(1, Math.max(0, (ys[i]! - knee) / band)) : 0;
+    out[i] = Math.max(out[i]!, out[i - 1]! + SQUEEZED_GAP * share);
+  }
   return out;
 };
 

@@ -1,7 +1,8 @@
-import type { BezierBoard, RailPresetId, RefPoints, Vec2 } from '@openshaper/kernel';
+import type { BezierBoard, RailPresetId, RefPoints, SwallowWall, Vec2 } from '@openshaper/kernel';
 import {
   adjustCrossSectionsToThicknessAndWidth,
   applyRailProfile,
+  hasTailCutout,
   railPresetById,
 } from '@openshaper/kernel';
 import { createStore, type StoreApi } from 'zustand/vanilla';
@@ -39,6 +40,9 @@ import {
   setFinSetup,
   setFinSymmetrical,
   withChannels,
+  withSwallowTail,
+  withSwallowWall,
+  withoutSwallowTail,
   setFinSystem,
   setKnotContinuous,
   setKnotLock,
@@ -181,6 +185,15 @@ export interface BoardState {
   /** Add, change or remove (`null`) the bottom channels: one undo step. */
   /** Set the board's channels; `label` names the undo step (else Add / Edit / Remove). */
   setChannels: (channels: BoardChannels | null, label?: string) => void;
+  /**
+   * Notch the tail into a swallow `width` across and `depth` deep with its inside wall
+   * set (one undo step). False when the outline is never that wide.
+   */
+  applySwallowTail: (width: number, depth: number, wall: SwallowWall) => boolean;
+  /** Fill the swallow's notch: a square tail again. */
+  removeSwallowTail: () => void;
+  /** Change the swallow's inside wall (dragging the deck line's point). */
+  setSwallowWall: (wall: SwallowWall) => void;
   /** Patch one fin's parametric spec (distance, inset, base, depth, toe, cant, …). */
   updateFin: (index: number, patch: Partial<FinSpec>) => void;
   /** Re-place a fin from a dropped plan point (2D drag); keeps the fin's side. */
@@ -560,6 +573,27 @@ export const createBoardStore = (): StoreApi<BoardState> =>
           label ??
             (!channels ? 'Remove channels' : !board.channels ? 'Add channels' : 'Edit channels'),
         );
+      },
+
+      applySwallowTail: (width, depth, wall) => {
+        const { board } = get();
+        if (!board) return false;
+        const next = withSwallowTail(board, width, depth, wall);
+        if (!next) return false;
+        commit(next, board.swallow || hasTailCutout(board.outline) ? 'Edit swallow tail' : 'Add swallow tail'); // prettier-ignore
+        return true;
+      },
+
+      removeSwallowTail: () => {
+        const { board } = get();
+        if (!board || (!board.swallow && !hasTailCutout(board.outline))) return;
+        commit(withoutSwallowTail(board), 'Remove swallow tail');
+      },
+
+      setSwallowWall: (wall) => {
+        const { board } = get();
+        if (!board?.swallow) return;
+        commit(withSwallowWall(board, wall), 'Edit swallow wall');
       },
 
       updateFin: (index, patch) => {
