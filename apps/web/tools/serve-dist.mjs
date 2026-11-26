@@ -24,6 +24,7 @@ const PORT = Number(process.argv[2] ?? 4173);
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript',
+  '.wasm': 'application/wasm',
   '.mjs': 'text/javascript',
   '.css': 'text/css',
   '.json': 'application/json',

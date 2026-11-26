@@ -56,6 +56,8 @@ const targetLabel = (t: SplineTarget): string => {
       return 'Bottom';
     case 'crossSection':
       return `Cross-section ${t.index}`;
+    case 'channel':
+      return `Channel ${t.index + 1} ${t.wall} wall`;
   }
 };
 
@@ -68,7 +70,9 @@ const targetLabel = (t: SplineTarget): string => {
  * spline's x is the axis running *up* the screen there (see `turnFitsLarger`).
  */
 const coordinateLabels = (target: SplineTarget): readonly [string, string] =>
-  target.kind === 'crossSection' ? ['Y', 'Z'] : ['X', target.kind === 'outline' ? 'Y' : 'Z'];
+  target.kind === 'crossSection'
+    ? ['Y', 'Z']
+    : ['X', target.kind === 'outline' || target.kind === 'channel' ? 'Y' : 'Z'];
 
 /** A handle's length (cm): its distance from the point. */
 const handleLength = (knot: Knot, which: 'prev' | 'next'): number =>

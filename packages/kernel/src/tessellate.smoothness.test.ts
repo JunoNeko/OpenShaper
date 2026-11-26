@@ -75,7 +75,7 @@ const makeBoard = (): BezierBoard => {
   );
 };
 
-/** Which station interval x falls in; ring triples that straddle a boundary are excluded. */
+/** Which stretch between stations x falls in: triples that straddle a station are excluded. */
 const intervalOf = (x: number): number => {
   for (let i = 0; i < STATIONS.length - 1; i++) if (x < STATIONS[i + 1]!) return i;
   return STATIONS.length - 2;
@@ -101,46 +101,15 @@ describe('tessellateBoard: correspondence smoothness between differing stations'
   });
 
   /**
-   * A correct loft sweeps each ring vertex along a straight line between two
-   * stations — second difference zero. Any departure is the loft failing to hold
-   * a consistent correspondence.
-   *
-   * The point-blended loft (`loft.ts`) gets that for free and exactly: ring
-   * vertex `i` is `lerp(p_i(A), p_i(B), d)` where both points are constants, so
-   * the only curvature in the sweep comes from the board's own thickness / width
-   * / rocker curves. What remains here is those curves, not the loft.
-   *
-   * Measured on this fixture (max over all ring vertices, cm):
-   *   arc length, adaptive (PR #24)        3.2e-3   plus real high-frequency noise
-   *   arc length, fixed table + CP blend   1.6e-3
-   *   point blend (current)                1.1e-6
-   *
-   * The threshold is set an order of magnitude above the current figure and
-   * three below the previous one, so any return to blending control points —
-   * whose knot-index pairing is what put the extra motion there — fails here.
-   */
-  it('sweeps ring vertices near-linearly within a station interval', () => {
-    let maxD2 = 0;
-    for (let r = 1; r < lengthSteps - 1; r++) {
-      if (intervalOf(xOf(r - 1)) !== intervalOf(xOf(r + 1))) continue; // straddles a station
-      for (let i = 0; i < ringLen; i++) {
-        const [ay, az] = yz(r - 1, i);
-        const [by, bz] = yz(r, i);
-        const [cy, cz] = yz(r + 1, i);
-        maxD2 = Math.max(maxD2, Math.hypot(cy - 2 * by + ay, cz - 2 * bz + az));
-      }
-    }
-    expect(maxD2).toBeLessThan(1e-5);
-  });
-
-  /**
-   * The visible symptom is not the magnitude of the second difference but its
-   * high-frequency content: shading derives normals from neighbouring vertices,
-   * and the curvature overlay differentiates those again, so jitter blotches
-   * where a smooth trend would not. The adaptive arc-length sampler's jitter was
-   * 2.6e-3 cm and the fixed-resolution table with a control-point blend 1.6e-3;
-   * the point-blended loft is 1.1e-6 — i.e. the whole second difference is now
-   * the board's own curves, with no high-frequency component left to separate.
+   * Between two stations each ring vertex sweeps along the stations' spline (a cubic
+   * in x), so its second difference changes slowly and evenly. The visible symptom of
+   * a broken correspondence is high-frequency content in it: shading derives normals
+   * from neighbouring vertices, and the curvature overlay differentiates those again,
+   * so jitter blotches where a smooth trend would not. The adaptive arc-length
+   * sampler's jitter was 2.6e-3 cm and the fixed-resolution table with a
+   * control-point blend 1.6e-3; the point-blended loft is under 1e-6, the cubic's own
+   * slow change, so any return to blending control points (whose knot-index pairing
+   * put the extra motion there) fails here.
    */
   it('has no high-frequency jitter in that sweep', () => {
     let maxJitter = 0;
@@ -151,11 +120,39 @@ describe('tessellateBoard: correspondence smoothness between differing stations'
       return Math.hypot(cy - 2 * by + ay, cz - 2 * bz + az);
     };
     for (let r = 1; r < lengthSteps - 2; r++) {
-      if (intervalOf(xOf(r - 1)) !== intervalOf(xOf(r + 2))) continue;
+      const run = intervalOf(xOf(r - 1));
+      if (run < 0 || run !== intervalOf(xOf(r + 2))) continue;
       for (let i = 0; i < ringLen; i++) {
         maxJitter = Math.max(maxJitter, Math.abs(d2(r + 1, i) - d2(r, i)));
       }
     }
     expect(maxJitter).toBeLessThan(1e-5);
+  });
+
+  /**
+   * ...and no crease at a station. A straight blend from station to station turns a
+   * corner there: each ring vertex changes direction at once, and the hull carries a
+   * crease across the board at every station. The stations' spline passes through
+   * each with one rate of change from both sides, so the worst second difference
+   * anywhere, stations included, stays of the order of the spline's own curving.
+   *
+   * Measured on this fixture (max over all ring vertices, cm):
+   *   straight blend, at a station   5.2e-3
+   *   10 cm ease (before 2026-11)    3.1e-4
+   *   cardinal spline (current)      4.1e-4
+   *
+   * The bound sits five times under the corner and over twice the current figure.
+   */
+  it('turns no corner at a station', () => {
+    let maxD2 = 0;
+    for (let r = 1; r < lengthSteps - 1; r++) {
+      for (let i = 0; i < ringLen; i++) {
+        const [ay, az] = yz(r - 1, i);
+        const [by, bz] = yz(r, i);
+        const [cy, cz] = yz(r + 1, i);
+        maxD2 = Math.max(maxD2, Math.hypot(cy - 2 * by + ay, cz - 2 * bz + az));
+      }
+    }
+    expect(maxD2).toBeLessThan(1e-3);
   });
 });

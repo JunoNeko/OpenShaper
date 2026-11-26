@@ -95,6 +95,9 @@ const probes = (b: BezierBoard): number[] => {
   return [1, 2, 3, 4, 5].map((i) => (end * i) / 6);
 };
 
+/** What a new station's neighbours may move as the spline through them re-forms (cm). */
+const SPLINE_RESHAPE_CM = 0.01;
+
 describe('editableCrossSection', () => {
   /**
    * The headline: adding a station leaves the board alone. Measured on the surface the 3D
@@ -103,6 +106,11 @@ describe('editableCrossSection', () => {
    * Half a millimetre is the fitter's own tolerance and it is not a coincidence — this is
    * the same measurement, taken end to end through an actual insert rather than on the
    * section in isolation. Against 4.79 mm before.
+   *
+   * Plus {@link SPLINE_RESHAPE_CM}: since 2026-11 the stations are joined by a spline
+   * (`loft.ts`), whose rate of change at a station reads the stations either side, so a
+   * new station on the existing shape bends the surface near it a little where a
+   * straight blend did not. Measured worst 0.550 mm on the three boards (0.500 before).
    */
   it.each(GOLDEN)('inserting a station does not reshape %s', (file) => {
     for (const board of [golden(file), mixedRails(golden(file))]) {
@@ -110,7 +118,7 @@ describe('editableCrossSection', () => {
         const cs = editableCrossSection(board, x);
         expect(cs).not.toBeNull();
         expect(surfaceShift(board, withStation(board, cs!))).toBeLessThanOrEqual(
-          SECTION_FIT_TOL_CM,
+          SECTION_FIT_TOL_CM + SPLINE_RESHAPE_CM,
         );
       }
     }

@@ -416,12 +416,24 @@ export const parseBrd = (text: string): ParsedBrd => {
     ...guides.outline.map((p): RefPoint => ({ id: nextId(), plane: 'outline', x: p.x, y: p.y })),
     ...(['bottom', 'deck'] as const).flatMap((curve) =>
       guides[curve].map(
-        (p): RefPoint => ({ id: nextId(), plane: 'rocker', curve, x: p.x, y: p.y }),
+        (p): RefPoint => ({
+          id: nextId(),
+          plane: 'rocker',
+          curve,
+          x: p.x,
+          y: p.y,
+        }),
       ),
     ),
     ...sections.flatMap((s) =>
       s.guides.map(
-        (p): RefPoint => ({ id: nextId(), plane: 'section', station: s.position, x: p.x, y: p.y }),
+        (p): RefPoint => ({
+          id: nextId(),
+          plane: 'section',
+          station: s.position,
+          x: p.x,
+          y: p.y,
+        }),
       ),
     ),
   ];

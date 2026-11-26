@@ -93,7 +93,8 @@ export default defineConfig({
         // An allowlist: nothing is precached unless it is named here. Marketing
         // HTML and the ~2.7 MB of guide images are excluded by omission.
         globPatterns: [
-          'assets/**/*.{js,css,woff2}',
+          // .wasm: the print-blank export's solid modeller, so blanks export offline.
+          'assets/**/*.{js,css,woff2,wasm}',
           'app/index.html',
           // Reference docs ride along: a few KB of HTML, and being unable to read
           // how a feature works is worst precisely when there's no signal.

@@ -36,7 +36,11 @@ const loadSLinearBoard = (name: string) => {
 // comfortable 1e-4 relative band on AREA that still leaves headroom for platform
 // float-ordering drift.
 // See docs/specs/slinear-interpolation.md for the derivation and exact figures.
-const AREA_PCT = 1e-4;
+// 2e-4 since `yForX` solves to machine precision instead of to the legacy 0.03 mm in
+// x: the legacy figures carry that error, up to 1.24e-4 at the shortboard's nose
+// where the outline is steepest (docs/specs/divergences.md, `yForX`). Before it the
+// port agreed to 1e-10.
+const AREA_PCT = 2e-4;
 
 // VOLUME no longer matches the legacy golden at 1e-4: getVolume's *longitudinal*
 // integral now defaults to adaptiveSimpson instead of the legacy fixed 30-panel

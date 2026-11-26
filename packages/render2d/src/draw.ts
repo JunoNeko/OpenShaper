@@ -360,7 +360,114 @@ export interface EditorOverlays {
   refTolerance?: number;
   /** Stations (board x) where cross-section reference points were measured; length-wise panes. */
   measuredStations?: readonly number[];
+  /**
+   * Bottom channels cut into the cross-section on show: the cut bottom,
+   * one side, and the points on it. Drawn on both sides when the pane mirrors.
+   */
+  channelCut?: {
+    curve: readonly Vec2[];
+    points: readonly Vec2[];
+  };
+  /**
+   * Bottom channels drawn as lines: walls in plan on the outline, the depth above the
+   * bottom on the rocker. Mirrored with the pane.
+   */
+  channelLines?: readonly (readonly Vec2[])[];
+  /**
+   * Points of applied channels that can be dragged, by id (`SplineEditor`'s
+   * `onChannelKeyDrag`). Drawn on both halves of a mirrored pane.
+   */
+  channelKeys?: readonly { id: string; p: Vec2 }[];
 }
+
+/** Draw draggable channel points: green with a dark ring, on each half of a mirrored pane. */
+export const drawChannelKeys = (
+  ctx: CanvasRenderingContext2D,
+  keys: readonly { id: string; p: Vec2 }[],
+  vp: Viewport,
+  mirror: Mirror = {},
+): void => {
+  ctx.save();
+  for (const f of reflections(mirror)) {
+    for (const k of keys) {
+      const s = worldToScreen(vp, f(k.p));
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, CHANNEL_KEY_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = CHANNEL_CUT_COLOR;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#0B1220';
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+};
+
+/** The reflections of a mirrored pane, as signs on x and y: the drawn halves. */
+export const mirrorSigns = (m: Mirror): { x: number; y: number }[] => {
+  const out = [{ x: 1, y: 1 }];
+  if (m.mirrorY) out.push({ x: 1, y: -1 });
+  if (m.mirrorX) out.push({ x: -1, y: 1 });
+  return out;
+};
+
+/** Screen radius of a channel key (px). */
+export const CHANNEL_KEY_RADIUS = 5;
+
+/** Draw channel lines (walls in plan, depth in profile): thin green, mirrored with the pane. */
+export const drawChannelLines = (
+  ctx: CanvasRenderingContext2D,
+  walls: readonly (readonly Vec2[])[],
+  vp: Viewport,
+  mirror: Mirror = {},
+): void => {
+  ctx.save();
+  ctx.strokeStyle = CHANNEL_CUT_COLOR;
+  ctx.lineWidth = 1.25;
+  for (const f of reflections(mirror)) {
+    for (const w of walls) {
+      if (w.length < 2) continue;
+      ctx.beginPath();
+      w.forEach((p, i) => {
+        const s = worldToScreen(vp, f(p));
+        if (i === 0) ctx.moveTo(s.x, s.y);
+        else ctx.lineTo(s.x, s.y);
+      });
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+};
+
+/** The channel cut's colour: green. */
+export const CHANNEL_CUT_COLOR = '#4ADE80';
+
+/** Draw bottom channels cut into a cross-section: the cut on both sides, its points on one. */
+export const drawChannelCut = (
+  ctx: CanvasRenderingContext2D,
+  cut: NonNullable<EditorOverlays['channelCut']>,
+  vp: Viewport,
+  mirror: Mirror = {},
+): void => {
+  if (cut.curve.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = CHANNEL_CUT_COLOR;
+  ctx.lineWidth = 1.5;
+  for (const f of reflections(mirror)) {
+    ctx.beginPath();
+    cut.curve.forEach((p, i) => {
+      const s = worldToScreen(vp, f(p));
+      if (i === 0) ctx.moveTo(s.x, s.y);
+      else ctx.lineTo(s.x, s.y);
+    });
+    ctx.stroke();
+  }
+  for (const p of cut.points) {
+    const s = worldToScreen(vp, p);
+    dot(ctx, s.x, s.y, 2.5, CHANNEL_CUT_COLOR);
+  }
+  ctx.restore();
+};
 
 /** A cross-section's longitudinal position, shown as a pickable line on the outline. */
 export interface SectionMarker {

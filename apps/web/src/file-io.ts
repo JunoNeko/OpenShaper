@@ -35,7 +35,7 @@ import {
   brdUnwritableRefPoints,
 } from '@openshaper/io';
 import type { ImportWarning } from '@openshaper/io';
-import type { BezierBoard, RefPoints } from '@openshaper/kernel';
+import type { BezierBoard, CavitySettings, RefPoints } from '@openshaper/kernel';
 import { recordRecentBoard } from './recent-boards';
 
 /**
@@ -400,6 +400,24 @@ export function downloadStep(
     `${slug}.step`,
     'model/step',
   );
+}
+
+/**
+ * Export the board as a blank to print (print version): the hull with a cavity cut for
+ * each fin's box or plug, and no fins. The cutting runs in a solid modeller loaded on
+ * first use (`print-blank-loader.ts`), so this is async. Resolves with what to check
+ * before printing.
+ */
+export async function downloadPrintBlank(
+  board: BezierBoard,
+  settings: CavitySettings,
+  meta?: BoardMeta,
+): Promise<{ cavities: number; warnings: readonly string[] }> {
+  const slug = slugifyName(meta?.model);
+  const { printBlank } = await import('./print-blank-loader');
+  const { stl, cavities, warnings } = await printBlank(board, { cavities: settings, name: slug });
+  download(stl as unknown as BlobPart, `${slug}-blank.stl`, 'model/stl');
+  return { cavities: cavities.length, warnings };
 }
 
 /**

@@ -29,6 +29,7 @@
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.1",
     "lucide-react": "^1.51.0",
+    "manifold-3d": "3.5.4",
     "posthog-js": "^1.433.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

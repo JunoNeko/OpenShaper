@@ -3,6 +3,9 @@ import {
   crossSection,
   curveFromKnots,
   defaultFinConfig,
+  buildFinBladeMesh,
+  getVolume,
+  resolveFins,
   knot,
   splineFromKnots,
   splitCurve,
@@ -234,5 +237,66 @@ describe('exportStl: binary (P29)', () => {
     const bin = exportStl(board, opts).byteLength;
     const ascii = new TextEncoder().encode(exportStlAscii(board, opts)).byteLength;
     expect(ascii / bin).toBeGreaterThan(3); // ~4× on these meshes
+  });
+});
+
+describe('exportStl: faces point out of the board', () => {
+  /** Facets from a binary STL: [normal, a, b, c] as xyz triples. */
+  const facets = (bin: Uint8Array): number[][][] => {
+    const v = new DataView(bin.buffer, bin.byteOffset, bin.byteLength);
+    const out: number[][][] = [];
+    for (let i = 0, o = 84; i < v.getUint32(80, true); i++, o += 50) {
+      const t: number[][] = [];
+      for (let k = 0; k < 4; k++) t.push([0, 4, 8].map((d) => v.getFloat32(o + k * 12 + d, true)));
+      out.push(t);
+    }
+    return out;
+  };
+  /** Signed volume by the divergence theorem: positive when the faces point outward. */
+  const signedVolume = (fs: number[][][]) =>
+    fs.reduce((sum, [, a, b, c]) => {
+      const [ax, ay, az] = a!;
+      const [bx, by, bz] = b!;
+      const [cx, cy, cz] = c!;
+      return (
+        sum +
+        (ax! * (by! * cz! - bz! * cy!) -
+          ay! * (bx! * cz! - bz! * cx!) +
+          az! * (bx! * cy! - by! * cx!)) /
+          6
+      );
+    }, 0);
+
+  it('encloses a positive volume, near the board’s, ends facing away from it', () => {
+    const board = makeTestBoard();
+    const fs = facets(exportStl(board, { lengthSteps: 80, ringSteps: 24, includeFins: false }));
+    const vol = signedVolume(fs);
+    expect(vol).toBeGreaterThan(0);
+    expect(vol / getVolume(board)).toBeCloseTo(1, 1);
+    const xs = fs.flatMap(([, ...vs]) => vs.map((p) => p[0]!));
+    const [lo, hi] = [Math.min(...xs), Math.max(...xs)];
+    // Facets with a vertex on the cap's centre point, by the stored normal.
+    const capNormalX = (atX: number) => {
+      const cap = fs.filter(([, ...vs]) => vs.every((p) => Math.abs(p[0]! - atX) < 1e-3));
+      return cap.reduce((s, [n]) => s + n![0]!, 0) / cap.length;
+    };
+    expect(capNormalX(lo)).toBeLessThan(0);
+    expect(capNormalX(hi)).toBeGreaterThan(0);
+  });
+
+  it('writes every fin facing out, mirrored ones too', () => {
+    const b = makeTestBoard();
+    const finned = makeBoard(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, defaultFinConfig('thruster', 'futures')); // prettier-ignore
+    const opts = { lengthSteps: 80, ringSteps: 24 } as const;
+    let rest = facets(exportStl(finned, opts)).slice(
+      facets(exportStl(b, { ...opts, includeFins: false })).length,
+    );
+    const fins = resolveFins(finned);
+    expect(fins).toHaveLength(3);
+    for (const fin of fins) {
+      const n = buildFinBladeMesh(fin).indices.length / 3;
+      expect(signedVolume(rest.slice(0, n))).toBeGreaterThan(0);
+      rest = rest.slice(n);
+    }
   });
 });
