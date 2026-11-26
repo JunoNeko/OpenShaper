@@ -1,7 +1,7 @@
 import {
   boardChannels,
   triangulatePolygon,
-  buildFinBladeMesh,
+  boardFinMesh,
   channelCutAt,
   getLength,
   hasTailCutout,
@@ -122,7 +122,7 @@ const stlFacets = (board: BezierBoard, opts: StlOptions): number[] => {
   if (hasTailCutout(board.outline)) {
     writeMesh(out, tessellateBoard(board, { lengthSteps, ringSteps: ringSteps * 2 }));
     if (opts.includeFins !== false) {
-      for (const fin of resolveFins(board)) writeMesh(out, buildFinBladeMesh(fin));
+      for (const fin of resolveFins(board)) writeMesh(out, boardFinMesh(board, fin));
     }
     return out;
   }
@@ -201,7 +201,7 @@ const stlFacets = (board: BezierBoard, opts: StlOptions): number[] => {
 
   // Foiled fin blade solids (same coordinate frame as the hull: X length, Y width, Z up).
   if (opts.includeFins !== false) {
-    for (const fin of resolveFins(board)) writeMesh(out, buildFinBladeMesh(fin));
+    for (const fin of resolveFins(board)) writeMesh(out, boardFinMesh(board, fin));
   }
 
   return out;

@@ -16,6 +16,9 @@
  * | Futures box body | 139.5 × 22.5     | 129.5 × 12.5 |                             |
  * | FCS II plug      | 120.6 × 46.9     | 110.6 × 36.9 | plug at most 110 × 37.5     |
  *
+ * A twinzer's canards stand in FCS 1 single plugs: round, 26 mm across and 20 mm tall
+ * (the owner's measurements), so their cavity is that round hole, as deep as the plug.
+ *
  * Depths: a Futures flange is 1.587 mm thick, plus 0.8 mm for resin, 2.4 mm; FCS II
  * plugs vary, 18.5 mm is safe (both the owner's). A Futures box body is as deep as its
  * box: "F" boxes (thruster sides, quad fronts) 3/4", "X" boxes (centres, quad rears)
@@ -25,11 +28,11 @@
  * to the bottom there: the plugs and boxes carry the fin's cant themselves. Its depth
  * is measured from the bottom as cut, channels included, so a box sits flush.
  */
-import { getThicknessAtPos, type BezierBoard } from './board';
+import { getWidthAtPos, type BezierBoard } from './board';
 import { boardChannels } from './channel-layout';
 import { channelDepthAt } from './channels';
-import { resolveFins } from './fins';
-import { bottomZAt } from './surface';
+import { FCS_SINGLE_PLUG, finGroups, resolveFins } from './fins';
+import { bottomZAt, deckZAt } from './surface';
 import { vec2, type Vec2 } from './vec2';
 
 const pts = (xy: readonly (readonly [number, number])[]): readonly Vec2[] =>
@@ -122,6 +125,13 @@ const FCS2_PLUG = pts([
   [1.3273, 1.4129], [1.1218, 1.3592], [0.8952, 1.3083], [0.6581, 1.2728], [0.426, 1.2532], [0.1979, 1.2445],
 ]);
 
+/** The FCS single plug's outline (cm), as {@link FUTURES_FLANGE}: a circle. */
+const FCS_SINGLE = Array.from({ length: 48 }, (_, i) => {
+  const a = (i / 48) * 2 * Math.PI;
+  const r = FCS_SINGLE_PLUG.diameter / 2;
+  return vec2(r * Math.cos(a), r * Math.sin(a));
+});
+
 /** How deep each cavity is cut (cm, below the bottom), and extra room all round. */
 export interface CavitySettings {
   /** The Futures flange step: the flange, 1.587 mm, plus 0.8 mm for resin. */
@@ -132,6 +142,8 @@ export interface CavitySettings {
   readonly futuresCentreDepth: number;
   /** An FCS II plug: they vary; 18.5 mm is safe. */
   readonly fcs2Depth: number;
+  /** An FCS single plug (a twinzer's canards): the plug's height, 20 mm. */
+  readonly fcsSingleDepth: number;
   /** Extra room all round every outline (cm), past the jigs' own. */
   readonly clearance: number;
 }
@@ -141,6 +153,7 @@ export const DEFAULT_CAVITY_SETTINGS: CavitySettings = {
   futuresSideDepth: 1.905 + 0.08,
   futuresCentreDepth: 1.27 + 0.08,
   fcs2Depth: 1.85,
+  fcsSingleDepth: FCS_SINGLE_PLUG.height,
   clearance: 0,
 };
 
@@ -166,7 +179,7 @@ export interface FinCavity {
   /** The fin, by index in the board's fin configuration. */
   readonly fin: number;
   /** Which box, as a shaper calls it. */
-  readonly kind: 'Futures F' | 'Futures X' | 'FCS II';
+  readonly kind: 'Futures F' | 'Futures X' | 'FCS II' | 'FCS single';
   /** Its centre on the bottom as cut (cm). */
   readonly origin: P3;
   /** Along the fin base toward the nose, in plan (unit). */
@@ -188,24 +201,31 @@ const rearOfPair = (fins: ReturnType<typeof resolveFins>, i: number): boolean =>
 
 /**
  * The cavities to print into board `b` for its fins: none for glass-on fins, or for
- * the FCS X-2's round plugs, whose cavities aren't known yet.
+ * the FCS X-2's round plugs or Futures' canard box, whose cavities aren't known yet.
+ * A twinzer's canards take their own box (`FinConfig.canardBox`), its twins the system.
  */
 export const finCavities = (
   b: BezierBoard,
   s: CavitySettings = DEFAULT_CAVITY_SETTINGS,
 ): FinCavity[] => {
-  const system = b.fins.system;
-  if (system !== 'futures' && system !== 'fcs-ii') return [];
+  const cfg = b.fins;
+  const groups = finGroups(cfg.setup);
+  const boxOf = (i: number) =>
+    groups[i] === 'canard' ? (cfg.canardBox ?? 'fcs-single') : cfg.system;
+  const known = (i: number) => ['futures', 'fcs-ii', 'fcs-single'].includes(boxOf(i));
+  if (!cfg.fins.some((_, i) => known(i))) return [];
   const fins = resolveFins(b);
   const channels = boardChannels(b);
-  return fins.map((f, i) => {
+  return fins.flatMap((f, i): FinCavity[] => {
+    if (!known(i)) return [];
+    const system = boxOf(i);
     const { fore, aft } = f.baseLine;
     const dx = fore.x - aft.x;
     const dy = fore.y - aft.y;
     const len = Math.hypot(dx, dy) || 1;
     const along = vec2(dx / len, dy / len);
-    const x = (fore.x + aft.x) / 2;
-    const y = (fore.y + aft.y) / 2;
+    // Under the fin's tab (a fin with a design), or the middle of its base.
+    const { x, y } = f.boxCenter;
     // Square to the uncut bottom (a channel wall nearby would tip it), at the height
     // the bottom is cut to. The board is symmetric and the surface is read on the +y
     // side (`bottomZAt` is defined there only), then mirrored: read at a negative y it
@@ -220,39 +240,103 @@ export const finCavities = (
     const origin = { x, y, z: zAt(x, ay) + channelDepthAt(channels, x, ay) };
     if (system === 'fcs-ii') {
       const steps = [{ outline: FCS2_PLUG, depth: s.fcs2Depth, grow: s.clearance }];
-      return { fin: i, kind: 'FCS II', origin, along, axis, steps };
+      return [{ fin: i, kind: 'FCS II', origin, along, axis, steps }];
     }
-    const small = f.side === 0 || rearOfPair(fins, i);
-    return {
-      fin: i,
-      kind: small ? 'Futures X' : 'Futures F',
-      origin,
-      along,
-      axis,
-      steps: [
-        { outline: FUTURES_FLANGE, depth: s.futuresFlangeDepth, grow: s.clearance },
-        {
-          outline: FUTURES_BODY,
-          depth: small ? s.futuresCentreDepth : s.futuresSideDepth,
-          grow: s.clearance,
-        },
-      ],
-    };
+    if (system === 'fcs-single') {
+      const steps = [{ outline: FCS_SINGLE, depth: s.fcsSingleDepth, grow: s.clearance }];
+      return [{ fin: i, kind: 'FCS single', origin, along, axis, steps }];
+    }
+    // A Futures box: an X box for a centre, or a rear with a fin ahead of it on its
+    // side (a quad's; a twinzer's twins are its main fins, ahead of nothing but canards).
+    const small = f.side === 0 || (groups[i] !== 'side' && rearOfPair(fins, i));
+    return [
+      {
+        fin: i,
+        kind: small ? 'Futures X' : 'Futures F',
+        origin,
+        along,
+        axis,
+        steps: [
+          { outline: FUTURES_FLANGE, depth: s.futuresFlangeDepth, grow: s.clearance },
+          {
+            outline: FUTURES_BODY,
+            depth: small ? s.futuresCentreDepth : s.futuresSideDepth,
+            grow: s.clearance,
+          },
+        ],
+      },
+    ];
   });
 };
 
 /** The least board left above a cavity's floor before it is worth a warning (cm). */
 const MIN_SKIN = 0.3;
 
-/**
- * What a person should check before printing `cavities` into `b`, said for them:
- * a cavity that leaves under 3 mm of board above its floor. Empty if nothing.
- */
-export const cavityProblems = (b: BezierBoard, cavities: readonly FinCavity[]): string[] =>
-  cavities.flatMap((c) => {
-    const deepest = Math.max(...c.steps.map((s) => s.depth));
-    const left = getThicknessAtPos(b, c.origin.x) - deepest;
-    return left < MIN_SKIN
-      ? [`Fin ${c.fin + 1}'s ${c.kind} cavity leaves ${Math.max(0, left * 10).toFixed(1)} mm of board above it.`] // prettier-ignore
-      : [];
+/** The least foam between a box (its flange, on Futures) and the rail before a warning (cm). */
+export const MIN_RAIL_GAP = 1;
+
+/** A channel's depth changing more than this across a box means it straddles a wall (cm). */
+const CHANNEL_STEP = 0.1;
+
+/** Where a cavity step's outline lies in plan (cm), grown by its clearance. */
+export const planOutline = (c: FinCavity, step: CavityStep): Vec2[] => {
+  const across = vec2(-c.along.y, c.along.x);
+  return step.outline.map((p) => {
+    const r = Math.hypot(p.x, p.y) || 1;
+    const g = step.grow / r;
+    const px = p.x * (1 + g);
+    const py = p.y * (1 + g);
+    return vec2(c.origin.x + c.along.x * px + across.x * py, c.origin.y + c.along.y * px + across.y * py); // prettier-ignore
   });
+};
+
+/**
+ * What a person should check about `cavities` in `b`, said for them (fin integration):
+ *
+ * - a box too deep for the board above it: under 3 mm of foam left to the deck, read
+ *   where the box is (a thin tail toward the rail is where a side box comes through);
+ * - a box or flange within {@link MIN_RAIL_GAP} of the rail, or past it in plan;
+ * - a box set across a channel's wall, its floor stepping across it.
+ *
+ * Empty if nothing.
+ */
+export const cavityProblems = (b: BezierBoard, cavities: readonly FinCavity[]): string[] => {
+  const channels = boardChannels(b);
+  const half = (x: number) => getWidthAtPos(b, x) / 2;
+  return cavities.flatMap((c) => {
+    const out: string[] = [];
+    const name = `Fin ${c.fin + 1}'s ${c.kind} box`;
+    const deepest = c.steps.reduce((m, s) => (s.depth > m.depth ? s : m));
+    // The foam above the floor, at its thinnest over the box.
+    let left = Infinity;
+    for (const p of [vec2(c.origin.x, c.origin.y), ...planOutline(c, deepest)]) {
+      const y = Math.abs(p.y);
+      const t = deckZAt(b, p.x, y) - bottomZAt(b, p.x, y);
+      if (Number.isFinite(t)) left = Math.min(left, t - deepest.depth);
+    }
+    if (left < MIN_SKIN) {
+      out.push(`${name} leaves ${Math.max(0, left * 10).toFixed(1)} mm of board above it: it may come through the deck.`); // prettier-ignore
+    }
+    // The widest step (a Futures flange) nearest the rail.
+    let gap = Infinity;
+    for (const step of c.steps) {
+      for (const p of planOutline(c, step)) gap = Math.min(gap, half(p.x) - Math.abs(p.y));
+    }
+    if (gap < 0) {
+      out.push(`${name} reaches ${(-gap * 10).toFixed(1)} mm past the rail.`);
+    } else if (gap < MIN_RAIL_GAP) {
+      out.push(`${name} comes within ${(gap * 10).toFixed(1)} mm of the rail.`);
+    }
+    if (channels.length > 0) {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const p of planOutline(c, deepest)) {
+        const d = channelDepthAt(channels, p.x, Math.abs(p.y));
+        lo = Math.min(lo, d);
+        hi = Math.max(hi, d);
+      }
+      if (hi - lo > CHANNEL_STEP) out.push(`${name} sits across a channel wall.`);
+    }
+    return out;
+  });
+};

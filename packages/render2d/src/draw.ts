@@ -346,6 +346,8 @@ export interface EditorOverlays {
   distribution?: { x: number; value: number }[];
   /** Resolved fins to draw on this pane (placement + box/blade geometry). */
   fins?: readonly ResolvedFin[];
+  /** Fin boxes and plugs in plan (outline pane): each a closed outline (cm). */
+  finBoxes?: readonly (readonly Vec2[])[];
   /** How to draw fins: `'plan'` (footprint + box, default) or `'profile'` (blade silhouette). */
   finView?: 'plan' | 'profile';
   /**
@@ -896,14 +898,70 @@ export const drawFinsPlan = (
     ctx.moveTo(aft.x, aft.y);
     ctx.lineTo(fore.x, fore.y);
     ctx.stroke();
-    // Leading-edge tick.
+    // The fin dot: the trailing edge's root, the mark it is placed and measured by.
+    const dot = worldToScreen(vp, f.dot);
     ctx.beginPath();
-    ctx.arc(fore.x, fore.y, selected ? 3.5 : 2.5, 0, Math.PI * 2);
+    ctx.arc(dot.x, dot.y, selected ? 4.5 : 3.5, 0, Math.PI * 2);
     ctx.fill();
 
-    // System box / plugs, centred on the base line.
-    drawFinBox(ctx, f, vp, color, selected);
+    // Its tab's slot, where the fin's tab puts it (a fin with a design), or the old
+    // generic footprints, centred on the base line.
+    if (f.slot) drawFinSlot(ctx, f.slot, vp, color, selected);
+    else drawFinBox(ctx, f, vp, color, selected);
   });
+  ctx.restore();
+};
+
+/** A fin's tab slot: a rectangle from its back end to its front, the tab's width. */
+const drawFinSlot = (
+  ctx: CanvasRenderingContext2D,
+  slot: NonNullable<ResolvedFin['slot']>,
+  vp: Viewport,
+  color: string,
+  selected: boolean,
+): void => {
+  const along = unit2(sub(slot.front, slot.rear));
+  const hw = slot.width / 2;
+  const n = { x: -along.y * hw, y: along.x * hw };
+  const c = [
+    { x: slot.rear.x + n.x, y: slot.rear.y + n.y },
+    { x: slot.front.x + n.x, y: slot.front.y + n.y },
+    { x: slot.front.x - n.x, y: slot.front.y - n.y },
+    { x: slot.rear.x - n.x, y: slot.rear.y - n.y },
+  ].map((p) => worldToScreen(vp, p));
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = selected ? 0.9 : 0.6;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(c[0]!.x, c[0]!.y);
+  for (let k = 1; k < 4; k++) ctx.lineTo(c[k]!.x, c[k]!.y);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+};
+
+/** Draw fin boxes and plugs in plan (a Futures flange, an FCS II plug): thin outlines. */
+export const drawFinBoxes = (
+  ctx: CanvasRenderingContext2D,
+  boxes: readonly (readonly Vec2[])[],
+  vp: Viewport,
+): void => {
+  ctx.save();
+  ctx.strokeStyle = FIN_COLOR;
+  ctx.globalAlpha = 0.55;
+  ctx.lineWidth = 1;
+  for (const box of boxes) {
+    if (box.length < 3) continue;
+    ctx.beginPath();
+    box.forEach((p, i) => {
+      const s = worldToScreen(vp, p);
+      if (i === 0) ctx.moveTo(s.x, s.y);
+      else ctx.lineTo(s.x, s.y);
+    });
+    ctx.closePath();
+    ctx.stroke();
+  }
   ctx.restore();
 };
 
@@ -967,10 +1025,20 @@ export const drawFinsProfile = (
     if (f.template.length < 3) return;
     const selected = i === selectedIndex;
     const color = selected ? FIN_COLOR_SELECTED : FIN_COLOR;
-    // Trailing-edge root (template local x=0) sits at the aft base point; local x runs
-    // toward the nose (+x — the tail is always at x=0), local y is depth downward.
-    const rootX = f.baseLine.aft.x;
-    const toScreen = (p: Vec2) => worldToScreen(vp, { x: rootX + p.x, y: f.surfaceZ - p.y });
+    // The fin dot (template local x=0) at the base's back end; local x runs toward the
+    // nose (+x — the tail is always at x=0), local y is depth downward. The fin stands
+    // square to the bottom: its base on the bottom's tangent at the base's middle, its
+    // depth down the normal there (`ResolvedFin.pitch`).
+    const half = f.spec.base / 2;
+    const c = Math.cos(f.pitch);
+    const sn = Math.sin(f.pitch);
+    const toScreen = (p: Vec2) => {
+      const along = p.x - half;
+      return worldToScreen(vp, {
+        x: f.center.x + along * c + p.y * sn,
+        y: f.surfaceZ + along * sn - p.y * c,
+      });
+    };
     ctx.beginPath();
     const p0 = toScreen(f.template[0]!);
     ctx.moveTo(p0.x, p0.y);

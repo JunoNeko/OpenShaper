@@ -266,7 +266,8 @@ export function Sel<T extends string>({
 }: {
   value: T;
   onChange: (v: T) => void;
-  options: { value: T; label: string }[];
+  /** A disabled option is listed but greyed out (one not offered yet). */
+  options: { value: T; label: string; disabled?: boolean }[];
   title: string;
 }) {
   return (
@@ -279,7 +280,7 @@ export function Sel<T extends string>({
       className="h-7 px-1 text-xs"
     >
       {options.map((o) => (
-        <option key={o.value} value={o.value}>
+        <option key={o.value} value={o.value} disabled={o.disabled}>
           {o.label}
         </option>
       ))}
@@ -362,6 +363,14 @@ export function ThreeDControls({
         title="Draw a ring at every cross-section (the active one in cyan)"
       >
         Sections
+      </Button>
+      <Button
+        size="sm"
+        variant={settings.showBoxes ? 'secondary' : 'ghost'}
+        onClick={() => set({ showBoxes: !settings.showBoxes })}
+        title="Draw each fin's box or plug on the bottom"
+      >
+        Boxes
       </Button>
       {!compact && (
         <>

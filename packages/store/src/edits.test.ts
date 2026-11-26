@@ -1276,8 +1276,9 @@ describe('setFinFromPlanPoint', () => {
     const moved = setFinFromPlanPoint(b, 0, vec2(30, 0));
 
     const spec = moved.fins.fins[0]!;
-    expect(spec.trailingFromTail).toBeCloseTo(30 - spec.base / 2, 9);
-    // The round trip a user sees: the fin resolves where it was dropped.
-    expect(resolveFins(moved)[0]!.center.x).toBeCloseTo(30, 9);
+    // The dropped point is the fin dot: its distance from the tail.
+    expect(spec.trailingFromTail).toBeCloseTo(30, 9);
+    // The round trip a user sees: the fin dot resolves where it was dropped.
+    expect(resolveFins(moved)[0]!.dot.x).toBeCloseTo(30, 9);
   });
 });

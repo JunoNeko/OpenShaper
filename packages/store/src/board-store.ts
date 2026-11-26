@@ -8,10 +8,15 @@ import {
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import type {
   BoardChannels,
+  CanardBox,
+  FinDesign,
   FinSetup,
+  FinSize,
   FinSpec,
   FinSystem,
   InterpolationType,
+  PlugCant,
+  PlugCantGroup,
   Spline,
 } from '@openshaper/kernel';
 import {
@@ -43,7 +48,12 @@ import {
   withSwallowTail,
   withSwallowWall,
   withoutSwallowTail,
+  setFinSet,
   setFinSystem,
+  setLibraryFin,
+  setOwnFin,
+  setPlugCant,
+  setCanardBox,
   setKnotContinuous,
   setKnotLock,
   setKnotTangentLength,
@@ -182,6 +192,16 @@ export interface BoardState {
   setFinSystem: (system: FinSystem) => void;
   /** Toggle symmetric port/starboard pair editing. */
   setFinSymmetrical: (symmetrical: boolean) => void;
+  /** Every fin from a library set at a size (placement kept): one undo step. */
+  setFinSet: (setId: string, size: FinSize) => void;
+  /** One fin (and its mirror, when kept matched) as a library fin at a size. */
+  setLibraryFin: (index: number, id: string, size: FinSize) => void;
+  /** An FCS plug cant: the front sides', the rears' or a twinzer's canards'. */
+  setPlugCant: (which: PlugCantGroup, cant: PlugCant) => void;
+  /** A twinzer's canard box. */
+  setCanardBox: (box: CanardBox) => void;
+  /** One fin (and its mirror, when kept matched) as a person's own design. */
+  setOwnFin: (index: number, design: FinDesign, name?: string) => void;
   /** Add, change or remove (`null`) the bottom channels: one undo step. */
   /** Set the board's channels; `label` names the undo step (else Add / Edit / Remove). */
   setChannels: (channels: BoardChannels | null, label?: string) => void;
@@ -561,6 +581,38 @@ export const createBoardStore = (): StoreApi<BoardState> =>
         const { board } = get();
         if (!board || board.fins.symmetrical === symmetrical) return;
         commit(setFinSymmetrical(board, symmetrical), 'Toggle fin symmetry');
+      },
+
+      setFinSet: (setId, size) => {
+        const { board } = get();
+        if (!board) return;
+        commit(setFinSet(board, setId, size), 'Change fins');
+      },
+
+      setLibraryFin: (index, id, size) => {
+        const { board } = get();
+        if (!board) return;
+        const next = setLibraryFin(board, index, id, size);
+        if (next !== board) commit(next, 'Change fin');
+      },
+
+      setOwnFin: (index, design, name) => {
+        const { board } = get();
+        if (!board) return;
+        const next = setOwnFin(board, index, design, name);
+        if (next !== board) commit(next, 'Change fin');
+      },
+
+      setPlugCant: (which, cant) => {
+        const { board } = get();
+        if (!board) return;
+        commit(setPlugCant(board, which, cant), 'Change plug cant');
+      },
+
+      setCanardBox: (box) => {
+        const { board } = get();
+        if (!board || (board.fins.canardBox ?? 'fcs-single') === box) return;
+        commit(setCanardBox(board, box), 'Change canard box');
       },
 
       setChannels: (channels, label) => {

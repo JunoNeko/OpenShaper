@@ -158,6 +158,7 @@ const sanitizeView3D = (v: unknown): View3DSettings | undefined => {
     meshQuality: oneOf(o.meshQuality, QUALITY_3D, d.meshQuality),
     showStringer: bool(o.showStringer, d.showStringer),
     showSections: bool(o.showSections, d.showSections),
+    showBoxes: bool(o.showBoxes, d.showBoxes),
   };
 };
 

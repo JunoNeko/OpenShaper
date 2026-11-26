@@ -26,6 +26,7 @@ import {
   interpolateSurface,
   knotMultiplicities,
   pointParams,
+  splitSurfaceU,
   surfaceBoundaryCurve,
   surfaceNormal,
   type BSplineSurface,
@@ -309,6 +310,61 @@ describe('interpolateSurface: creases via uBreaks', () => {
   });
 });
 
+describe('interpolateSurface: creases via vBreaks', () => {
+  const ROWS = 8;
+  const COLS = 13;
+  const KINK = 6;
+
+  /** z is piecewise linear in the column index, with a kink at column KINK. */
+  const kinked = (): Vert3[][] =>
+    Array.from({ length: ROWS }, (_, r) =>
+      Array.from({ length: COLS }, (_, c) => v3(r, c, c <= KINK ? c : KINK - 3 * (c - KINK))),
+    );
+
+  const kinkError = (s: BSplineSurface): number => {
+    let worst = 0;
+    for (let k = 0; k <= 200; k++) {
+      const p = evalSurface(s, 0.5, k / 200);
+      const want = p.y <= KINK ? p.y : KINK - 3 * (p.y - KINK);
+      worst = Math.max(worst, Math.abs(p.z - want));
+    }
+    return worst;
+  };
+
+  it('reproduces the crease exactly when told where it is', () => {
+    expect(kinkError(interpolateSurface(kinked(), { vBreaks: [KINK] }))).toBeLessThan(1e-9);
+    expect(kinkError(interpolateSurface(kinked()))).toBeGreaterThan(0.05);
+  });
+
+  it('lands multiplicity `degree` on the break knot, with a consistent net', () => {
+    const s = interpolateSurface(kinked(), { vBreaks: [KINK] });
+    const { mults } = knotMultiplicities(s.vKnots);
+    expect(mults.slice(1, -1).filter((m) => m === CUBIC)).toHaveLength(1);
+    expect(s.vKnots).toHaveLength(s.ctrl[0]!.length + s.vDegree + 1);
+    expect(s.uKnots).toHaveLength(s.ctrl.length + s.uDegree + 1);
+  });
+
+  it('combines with uBreaks', () => {
+    const grid = Array.from({ length: 13 }, (_, r) =>
+      Array.from({ length: COLS }, (_, c) => {
+        const zu = r <= 6 ? r : 6 - 3 * (r - 6);
+        const zv = c <= KINK ? c : KINK - 3 * (c - KINK);
+        return v3(r, c, zu + zv);
+      }),
+    );
+    const s = interpolateSurface(grid, { uBreaks: [6], vBreaks: [KINK] });
+    // Bilinear-in-strips data is reproduced exactly at every grid point and between.
+    for (let i = 0; i <= 40; i++) {
+      for (let j = 0; j <= 40; j++) {
+        const p = evalSurface(s, i / 40, j / 40);
+        const zu = p.x <= 6 ? p.x : 6 - 3 * (p.x - 6);
+        const zv = p.y <= KINK ? p.y : KINK - 3 * (p.y - KINK);
+        expect(Math.abs(p.z - (zu + zv))).toBeLessThan(1e-9);
+      }
+    }
+  });
+});
+
 describe('surfaceNormal', () => {
   it('points along +z for a grid in the z = const plane', () => {
     const grid = Array.from({ length: 6 }, (_, r) =>
@@ -317,5 +373,74 @@ describe('surfaceNormal', () => {
     const n = surfaceNormal(interpolateSurface(grid), 0.4, 0.6);
     expect(n).not.toBeNull();
     expect(Math.abs(Math.abs(n!.z) - 1)).toBeLessThan(1e-9);
+  });
+});
+
+describe('interpolateSurface: explicit v parameters', () => {
+  const grid = Array.from({ length: 7 }, (_, r) => ring(r * 2, 9, 1 + r * 0.1));
+
+  it('is the default fit when given the parameters it would have averaged', () => {
+    const v = averageParams(grid.map((row) => pointParams(row, CENTRIPETAL)));
+    expect(interpolateSurface(grid, { vParams: v })).toEqual(interpolateSurface(grid));
+  });
+
+  it('uses the parameters it is given, still through every point', () => {
+    // One parameter per point along v (along each row here); 9 points per row.
+    const v = [0, 0.02, 0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 1];
+    const s = interpolateSurface(grid, { vParams: v });
+    expect(s.vKnots).not.toEqual(interpolateSurface(grid).vKnots);
+    // The first and last rows are the u = 0 and u = 1 edges: exact at the given v.
+    for (const [u, row] of [
+      [0, grid[0]!],
+      [1, grid[grid.length - 1]!],
+    ] as const) {
+      row.forEach((p, c) => expect(dist(evalSurface(s, u, v[c]!), p)).toBeLessThan(1e-9));
+    }
+  });
+});
+
+describe('splitSurfaceU', () => {
+  it('returns the original surface unchanged when there are no interior C0 u-creases', () => {
+    const grid = Array.from({ length: 8 }, (_, r) => ring(r * 2.5, 8, 1 + 0.1 * r));
+    const s = interpolateSurface(grid);
+    expect(splitSurfaceU(s)).toEqual([s]);
+  });
+
+  it('splits at every multiplicity-uDegree knot into C² open strips sharing boundary rows', () => {
+    const grid = Array.from({ length: 17 }, (_, r) =>
+      Array.from({ length: 6 }, (_, c) => {
+        const z = r <= 5 ? r : r <= 10 ? 5 - 2 * (r - 5) : -5 + (r - 10);
+        return v3(r, c, z);
+      }),
+    );
+    const s = interpolateSurface(grid, { uBreaks: [5, 10] });
+    const strips = splitSurfaceU(s);
+    expect(strips).toHaveLength(3);
+    // Shared boundary control rows by identity, and no interior multiplicity-3 knots.
+    expect(strips[0]!.ctrl[strips[0]!.ctrl.length - 1]).toBe(strips[1]!.ctrl[0]);
+    expect(strips[1]!.ctrl[strips[1]!.ctrl.length - 1]).toBe(strips[2]!.ctrl[0]);
+    for (const st of strips) {
+      expect(st.uKnots).toHaveLength(st.ctrl.length + st.uDegree + 1);
+      const { values, mults } = knotMultiplicities(st.uKnots);
+      expect(values[0]).toBe(0);
+      expect(values[values.length - 1]).toBe(1);
+      expect(mults.slice(1, -1).every((m) => m < st.uDegree)).toBe(true);
+    }
+    // Every strip evaluates identically to the corresponding u interval of the original surface.
+    const { values, mults } = knotMultiplicities(s.uKnots);
+    const bounds = values.filter(
+      (_, i) => i === 0 || i === values.length - 1 || mults[i] === CUBIC,
+    );
+    strips.forEach((st, k) => {
+      const u0 = bounds[k]!;
+      const u1 = bounds[k + 1]!;
+      for (let i = 0; i <= 10; i++) {
+        const t = i / 10;
+        const u = u0 + (u1 - u0) * t;
+        for (const v of [0, 0.35, 1]) {
+          expect(dist(evalSurface(st, t, v), evalSurface(s, u, v))).toBeLessThan(1e-12);
+        }
+      }
+    });
   });
 });

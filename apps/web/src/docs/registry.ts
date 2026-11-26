@@ -61,6 +61,7 @@ export const DOC_ENTRIES: readonly DocEntry[] = [
     'quad',
     '2+1',
     '5-fin',
+    'twinzer',
   ]),
   ...entries('fin-system', '/docs/fins', ['glass-on', 'fcs-ii', 'fcs-x2', 'futures']),
   ...entries('fin-profile', '/docs/fins', ['thruster', 'single', 'noserider', 'keel']),

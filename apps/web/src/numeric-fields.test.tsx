@@ -132,19 +132,20 @@ describe('fin length fields (P10)', () => {
     act(() => {
       store.getState().load(makeBoard());
       store.getState().setFinSetup('thruster');
-      store.getState().updateFin(0, { base: 11.23456 });
+      store.getState().updateFin(0, { trailingFromTail: 11.23456 });
       store.getState().selectFin(0);
     });
     return store;
   }
+  // A fin's base and depth are its design's now; its placement is the board's to type.
   const base = (store: ReturnType<typeof createBoardStore>) =>
-    store.getState().board!.fins.fins[0]!.base;
+    store.getState().board!.fins.fins[0]!.trailingFromTail;
 
   it('leaving an untouched field commits nothing', () => {
     const store = withFin();
     const before = store.getState().past.length;
     render(<FinPanel store={store} units={DEFAULT_LENGTH_UNIT} />);
-    const field = screen.getByLabelText(/^Base/) as HTMLInputElement;
+    const field = screen.getByLabelText(/^Fin dot from tail/) as HTMLInputElement;
     act(() => field.focus());
     act(() => field.blur());
     expect(store.getState().past).toHaveLength(before);
@@ -155,7 +156,7 @@ describe('fin length fields (P10)', () => {
     const store = withFin();
     const before = store.getState().past.length;
     render(<FinPanel store={store} units={DEFAULT_LENGTH_UNIT} />);
-    const field = screen.getByLabelText(/^Base/) as HTMLInputElement;
+    const field = screen.getByLabelText(/^Fin dot from tail/) as HTMLInputElement;
     const shown = field.value;
     act(() => field.focus());
     fireEvent.change(field, { target: { value: 'abc' } });

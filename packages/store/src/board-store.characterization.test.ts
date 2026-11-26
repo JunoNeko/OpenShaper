@@ -53,7 +53,15 @@ const digest = (store: Store) => {
       sections: b.crossSections.map((cs) => cs.spline.knots.length),
     },
     stations: round(b.crossSections.map((cs) => cs.position)),
-    fins: round(b.fins),
+    // A fin's design is summarised (its splines would swamp the snapshot): its tab, hand
+    // and blade cant, beside the depth and base that follow from it.
+    fins: round({
+      ...b.fins,
+      fins: b.fins.fins.map(({ design, ...f }) => ({
+        ...f,
+        ...(design ? { design: { base: design.base, hand: design.hand, cant: design.cant } } : {}),
+      })),
+    }),
     specs: round({
       length: specs.length,
       maxWidth: specs.maxWidth,

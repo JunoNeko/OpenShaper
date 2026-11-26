@@ -67,6 +67,8 @@ export interface Board3DViewProps {
   targetFaceSize?: number;
   /** Draw the stringer plane's silhouette on the hull (defaults to false). */
   showStringer?: boolean;
+  /** Draw each fin's box or plug on the bottom. */
+  showBoxes?: boolean;
   /** Draw a ring at every real cross-section (defaults to false). */
   showSections?: boolean;
   /** Board-length position of the active cross-section, drawn in cyan. */
@@ -528,6 +530,7 @@ export function Board3DView({
   analysis = 'none',
   targetFaceSize = DEFAULT_FACE_SIZE,
   showStringer = false,
+  showBoxes = true,
   showSections = false,
   activeSectionX = null,
   showRefPoints = false,
@@ -577,7 +580,12 @@ export function Board3DView({
           />
         )}
         {board && board.fins.setup !== 'none' && (
-          <Fins3D board={board} targetFaceSize={targetFaceSize} color={finColor} />
+          <Fins3D
+            board={board}
+            targetFaceSize={targetFaceSize}
+            color={finColor}
+            showBoxes={showBoxes}
+          />
         )}
         {board && showRefPoints && refPoints.length > 0 && (
           <RefPoints3D

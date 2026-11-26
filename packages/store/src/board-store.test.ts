@@ -545,7 +545,27 @@ describe('board store: fins', () => {
 
     store.getState().setFinSystem('futures');
     expect(store.getState().board!.fins.system).toBe('futures');
-    expect(store.getState().board!.fins.fins).toEqual(placedBefore);
+    const place = (fins: typeof placedBefore) =>
+      fins.map(({ side, trailingFromTail, insetFromRail, toe }) => ({ side, trailingFromTail, insetFromRail, toe })); // prettier-ignore
+    expect(place(store.getState().board!.fins.fins)).toEqual(place(placedBefore));
+    // ...and the fins move onto Futures tabs.
+    expect(store.getState().board!.fins.fins.map((f) => f.design?.base)).toEqual(['futures-side', 'futures-side', 'futures-centre', 'futures-centre']); // prettier-ignore
+  });
+
+  it('fins from the library: a set at a size, one fin swapped, FCS plug cants', () => {
+    const store = createBoardStore();
+    store.getState().load(makeBoard());
+    store.getState().setFinSetup('thruster');
+    expect(store.getState().board!.fins.fins.map((f) => f.library?.fin)).toEqual(['thruster-side', 'thruster-side', 'thruster-centre']); // prettier-ignore
+    store.getState().setFinSet('thruster', 'L');
+    expect(store.getState().board!.fins.fins.every((f) => f.library?.size === 'L')).toBe(true);
+    store.getState().setLibraryFin(0, 'keel', 'M');
+    expect(store.getState().board!.fins.fins.map((f) => f.library?.fin)).toEqual(['keel', 'keel', 'thruster-centre']); // prettier-ignore
+    store.getState().setPlugCant('front', 9);
+    expect(store.getState().board!.fins.plugCant).toEqual({ front: 9, rear: 5 });
+    expect(store.getState().board!.fins.fins.map((f) => f.cant)).toEqual([9, 9, 0]);
+    store.getState().undo();
+    expect(store.getState().board!.fins.fins.map((f) => f.cant)).toEqual([5, 5, 0]);
   });
 
   it('updateFin patches a single fin spec and is undoable', () => {
@@ -574,8 +594,8 @@ describe('board store: fins', () => {
     store.getState().moveFin(0, vec2(25, 8));
     const fin = store.getState().board!.fins.fins[0]!;
     expect(fin.side).toBe(side); // side preserved
-    // trailing edge = 25 − base/2 from the tail (x=0).
-    expect(fin.trailingFromTail).toBeCloseTo(25 - fin.base / 2, 6);
+    // The point is the fin dot: its trailing edge is 25 from the tail (x=0).
+    expect(fin.trailingFromTail).toBeCloseTo(25, 6);
   });
 
   it('symmetrical (default): editing a side fin mirrors to its pair, keeping side', () => {

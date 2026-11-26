@@ -382,17 +382,26 @@ export interface SurfaceFitOptions {
    * tangent break. Each becomes an interior knot of multiplicity `uDegree`.
    */
   readonly uBreaks?: readonly number[];
+  /** Column indices (strictly interior, ascending) with a tangent break along v. */
+  readonly vBreaks?: readonly number[];
   readonly uDegree?: number;
   readonly vDegree?: number;
   /** Parameterization exponent along u (default chord length). */
   readonly uExponent?: number;
   /** Parameterization exponent along v (default centripetal). */
   readonly vExponent?: number;
+  /**
+   * Explicit parameters along v, one per column, from 0 to 1 ascending. Replaces the
+   * averaged ones: averaging lets the many points that barely move outvote the few
+   * that move far (a fin's trailing edge running along a nearly level underside).
+   */
+  readonly vParams?: readonly number[];
 }
 
 /**
- * Interpolate `u` through one column of intermediate control points, splitting at
- * `breaks` and concatenating the strips.
+ * Interpolate each list of points along one parameter direction (u through columns
+ * of intermediate control points, or v through grid rows), splitting at `breaks`
+ * and concatenating the strips.
  *
  * Concatenation is exact: each strip is clamped, so its first and last control
  * points ARE the data points at the break rows, and the two strips meeting there
@@ -469,9 +478,13 @@ export const interpolateSurface = (
 
   // v first: interpolate each row across the profile, giving intermediate control
   // points that are then interpolated along the length.
-  const vParams = averageParams(grid.map((row) => pointParams(row, opts.vExponent ?? CENTRIPETAL)));
-  const vKnots = averagedKnots(vParams, vDegree);
-  const intermediate = solveRows(grid, vParams, vDegree, vKnots);
+  // Creases along v split each row into strips exactly as along u, below. Without
+  // any, this is one strip: averaged knots over the whole row, solved in one go.
+  const vParams =
+    opts.vParams ??
+    averageParams(grid.map((row) => pointParams(row, opts.vExponent ?? CENTRIPETAL)));
+  const vBreaks = (opts.vBreaks ?? []).filter((b) => b > 0 && b < cols - 1);
+  const { ctrl: intermediate, knots: vKnots } = interpolateStrips(grid, vParams, vDegree, vBreaks);
 
   // u second, on the columns of the intermediate net.
   const columns: Vert3[][] = [];
@@ -604,4 +617,58 @@ export const knotMultiplicities = (
     }
   }
   return { values, mults };
+};
+
+/**
+ * Split a clamped B-spline surface along every interior C0 u-crease (a knot of
+ * multiplicity `uDegree`) into independent C²-smooth open patches, each re-parameterised
+ * onto u ∈ [0, 1]. Adjacent strips share their boundary control row by identity, so
+ * splitting is exact and matches `evalSurface` across every strip.
+ */
+export const splitSurfaceU = (s: BSplineSurface): BSplineSurface[] => {
+  const p = s.uDegree;
+  const U = s.uKnots;
+  const { values, mults } = knotMultiplicities(U);
+  const breaks: { knot: number; start: number }[] = [];
+  let pos = 0;
+  for (let i = 0; i < values.length; i++) {
+    const m = mults[i]!;
+    if (i > 0 && i < values.length - 1 && m === p) {
+      breaks.push({ knot: values[i]!, start: pos });
+    }
+    pos += m;
+  }
+  if (breaks.length === 0) return [s];
+
+  const out: BSplineSurface[] = [];
+  let ctrlLo = 0;
+  let knotLo = p + 1;
+  let uLo = values[0]!;
+
+  const pushStrip = (ctrlHi: number, interiorKnots: readonly number[], uHi: number) => {
+    const span = uHi - uLo || 1;
+    const norm = (k: number) => (k - uLo) / span;
+    const uKnots = [
+      ...Array<number>(p + 1).fill(0),
+      ...interiorKnots.map(norm),
+      ...Array<number>(p + 1).fill(1),
+    ];
+    out.push({
+      uDegree: p,
+      vDegree: s.vDegree,
+      ctrl: s.ctrl.slice(ctrlLo, ctrlHi + 1),
+      uKnots,
+      vKnots: s.vKnots,
+    });
+  };
+
+  for (const b of breaks) {
+    const ctrlHi = b.start - 1;
+    pushStrip(ctrlHi, U.slice(knotLo, b.start), b.knot);
+    ctrlLo = ctrlHi;
+    knotLo = b.start + p;
+    uLo = b.knot;
+  }
+  pushStrip(s.ctrl.length - 1, U.slice(knotLo, U.length - (p + 1)), values[values.length - 1]!);
+  return out;
 };

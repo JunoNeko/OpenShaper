@@ -46,3 +46,31 @@ export * from './fins';
 export * from './tunni';
 export * from './curvature-comb';
 export * from './reference-points';
+export * from './fin-design/futures-tab';
+export * from './fin-design/fin-tab';
+export * from './fin-library';
+export * from './fin-board';
+export * from './fin-design/fin-design';
+export * from './fin-design/fin-rules';
+export * from './fin-design/fin-readouts';
+export * from './fin-design/blade';
+export * from './fin-design/blade-surface';
+export * from './fin-design/fin-placement';
+export * from './fin-design/fin-clearance';
+export * from './fin-design/naca';
+export * from './fin-design/split-foil';
+export * from './fin-design/mesh-slice';
+export * from './fin-design/fin-mesh';
+export * from './fin-design/fairness';
+export * from './fin-design/smooth-blade';
+export {
+  defaultCanard,
+  defaultFinDesign,
+  defaultKeel,
+  defaultSingleFin,
+  defaultTwinFin,
+  defaultTaper,
+  flatFace,
+} from './fin-design/fin-defaults';
+export * from './fin-design/swept-loft';
+export { yAtX } from './fin-design/curve-shape';

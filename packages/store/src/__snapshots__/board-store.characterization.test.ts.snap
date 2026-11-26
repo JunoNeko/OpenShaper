@@ -205,16 +205,25 @@ exports[`characterization: store actions on the reference shortboard > edit with
 
 exports[`characterization: store actions on the reference shortboard > fin edits 1`] = `
 {
-  "boardHash": "c693acc2c76eaf64",
+  "boardHash": "81e0eec7344dbac9",
   "editing": false,
   "fins": {
     "fins": [
       {
-        "base": 11.187,
+        "base": 11.146105,
         "cant": 4,
-        "depth": 11,
+        "depth": 11.199415,
+        "design": {
+          "base": "futures-side",
+          "cant": 7,
+          "hand": "left",
+        },
         "foil": "80/20",
         "insetFromRail": 2.9,
+        "library": {
+          "fin": "thruster-side",
+          "size": "M",
+        },
         "profile": "thruster",
         "side": -1,
         "sweep": 0,
@@ -222,23 +231,41 @@ exports[`characterization: store actions on the reference shortboard > fin edits
         "trailingFromTail": 29.21,
       },
       {
-        "base": 11.187,
-        "cant": 6,
-        "depth": 11,
+        "base": 11.146105,
+        "cant": 7,
+        "depth": 11.199415,
+        "design": {
+          "base": "futures-side",
+          "cant": 7,
+          "hand": "right",
+        },
         "foil": "80/20",
         "insetFromRail": 0,
+        "library": {
+          "fin": "thruster-side",
+          "size": "M",
+        },
         "profile": "thruster",
         "side": 1,
         "sweep": 0,
         "toe": 4,
-        "trailingFromTail": 14.4065,
+        "trailingFromTail": 20,
       },
       {
-        "base": 10.17,
-        "cant": 4.5,
-        "depth": 10,
+        "base": 9.4375782,
+        "cant": 4,
+        "depth": 9.5994985,
+        "design": {
+          "base": "futures-centre",
+          "cant": 4,
+          "hand": "left",
+        },
         "foil": "80/20",
         "insetFromRail": 4.4,
+        "library": {
+          "fin": "quad-rear",
+          "size": "M",
+        },
         "profile": "thruster",
         "side": -1,
         "sweep": 0,
@@ -246,11 +273,20 @@ exports[`characterization: store actions on the reference shortboard > fin edits
         "trailingFromTail": 15.748,
       },
       {
-        "base": 10.17,
-        "cant": 4.5,
-        "depth": 10,
+        "base": 9.4375782,
+        "cant": 4,
+        "depth": 9.5994985,
+        "design": {
+          "base": "futures-centre",
+          "cant": 4,
+          "hand": "right",
+        },
         "foil": "80/20",
         "insetFromRail": 4.4,
+        "library": {
+          "fin": "quad-rear",
+          "size": "M",
+        },
         "profile": "thruster",
         "side": 1,
         "sweep": 0,

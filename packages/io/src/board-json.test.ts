@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest';
 import {
   board,
   boardChannels,
+  defaultBoardFins,
+  withPlugCant,
+  withCanardBox,
   defaultChannelParams,
   crossSection,
   defaultFinConfig,
@@ -22,6 +25,7 @@ import {
 } from '@openshaper/kernel';
 import { parseBrd } from './brd-reader';
 import { BoardJsonError, readBoardJson, writeBoardJson } from './board-json';
+import { writeFinJson } from './fin-json';
 
 const goldenDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../docs/specs/golden');
 const loadBrd = (name: string) =>
@@ -302,5 +306,41 @@ describe('board-json swallow tail', () => {
     expect(readBoardJson(JSON.stringify(doc)).board.swallow).toBeUndefined();
     doc.swallow = { kind: 'bevel', angle: 400 };
     expect(readBoardJson(JSON.stringify(doc)).board.swallow).toEqual({ kind: 'bevel', angle: 75 });
+  });
+});
+
+describe('board-json fin designs', () => {
+  it('carries each fin design with the board, exactly', () => {
+    const b = loadBrd('shortboard');
+    const fins = withPlugCant(defaultBoardFins('quad', 'fcs-ii'), 'front', 9);
+    const original = board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, fins); // prettier-ignore
+    const { board: restored } = readBoardJson(writeBoardJson(original));
+    expect(restored.fins.plugCant).toEqual({ front: 9, rear: 5 });
+    restored.fins.fins.forEach((f, i) => {
+      const o = original.fins.fins[i]!;
+      expect(f.library).toEqual(o.library);
+      expect(writeFinJson(f.design!)).toBe(writeFinJson(o.design!));
+      expect(f.base).toBeCloseTo(o.base, 9);
+    });
+  });
+
+  it("round-trips a twinzer's canard box, and drops one it doesn't know", () => {
+    const b = loadBrd('shortboard');
+    const fins = withCanardBox(defaultBoardFins('twinzer', 'futures'), 'futures-canard');
+    const original = board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, fins); // prettier-ignore
+    const doc = JSON.parse(writeBoardJson(original));
+    expect(readBoardJson(JSON.stringify(doc)).board.fins.canardBox).toBe('futures-canard');
+    doc.fins.canardBox = 'nonsense';
+    expect(readBoardJson(JSON.stringify(doc)).board.fins.canardBox).toBeUndefined();
+  });
+
+  it('opens a board whose fin design is damaged, with a plain fin there', () => {
+    const b = loadBrd('shortboard');
+    const original = board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, defaultBoardFins('thruster', 'futures')); // prettier-ignore
+    const doc = JSON.parse(writeBoardJson(original));
+    doc.fins.fins[0].design = { format: 'nonsense' };
+    const { board: restored } = readBoardJson(JSON.stringify(doc));
+    expect(restored.fins.fins[0]!.design).toBeUndefined();
+    expect(restored.fins.fins[1]!.design).toBeDefined();
   });
 });

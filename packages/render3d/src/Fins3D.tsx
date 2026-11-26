@@ -1,5 +1,6 @@
 import {
-  buildFinBladeMesh,
+  boardFinMesh,
+  finBoxPatches,
   resolveFins,
   type BezierBoard,
   type BoardMesh,
@@ -10,6 +11,8 @@ import { useBoardOffset } from './use-board-offset';
 
 /** On-brand cyan-blue resin (the OpenShaper accent) so the blades read against the hull. */
 const FIN_COLOR = '#22D3EE';
+/** Fin boxes and plugs are black plastic. */
+const BOX_COLOR = '#16181D';
 
 /** Kernel mesh → BufferGeometry WITHOUT centering (fins are placed in board coords). */
 const rawGeometry = (mesh: BoardMesh): BufferGeometry => {
@@ -31,22 +34,33 @@ export function Fins3D({
   board,
   targetFaceSize,
   color = FIN_COLOR,
+  showBoxes = true,
 }: {
   board: BezierBoard;
   targetFaceSize: number;
   color?: string;
+  /** Draw each fin's box or plug on the bottom (where its system's boxes are known). */
+  showBoxes?: boolean;
 }) {
   // Built from the board the hull was meshed from, not the live one: the hull waits
   // for the worker, and fins built synchronously used to run ahead of it mid-drag.
   const placed = useBoardOffset(board, targetFaceSize);
   const placedBoard = placed?.board ?? null;
 
+  // A fin with a design is OpenFinShaper's own blade (`boardFinMesh`); older ones, generic.
   const geometries = useMemo(
     () =>
-      placedBoard ? resolveFins(placedBoard).map((fin) => rawGeometry(buildFinBladeMesh(fin))) : [],
+      placedBoard
+        ? resolveFins(placedBoard).map((fin) => rawGeometry(boardFinMesh(placedBoard, fin)))
+        : [],
     [placedBoard],
   );
   useEffect(() => () => geometries.forEach((g) => g.dispose()), [geometries]);
+  const boxes = useMemo(
+    () => (placedBoard && showBoxes ? finBoxPatches(placedBoard).map(rawGeometry) : []),
+    [placedBoard, showBoxes],
+  );
+  useEffect(() => () => boxes.forEach((g) => g.dispose()), [boxes]);
 
   if (!placed || geometries.length === 0) return null;
   return (
@@ -54,6 +68,11 @@ export function Fins3D({
       {geometries.map((g, i) => (
         <mesh key={i} geometry={g} castShadow>
           <meshStandardMaterial color={color} roughness={0.35} metalness={0.0} side={DoubleSide} />
+        </mesh>
+      ))}
+      {boxes.map((g, i) => (
+        <mesh key={`box-${i}`} geometry={g}>
+          <meshStandardMaterial color={BOX_COLOR} roughness={0.6} side={DoubleSide} />
         </mesh>
       ))}
     </group>

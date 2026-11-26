@@ -152,6 +152,14 @@ export function ExportPrintBlankDialog({
               onCommit={(v) => set({ fcs2Depth: pos(v) })}
             />
           )}
+          {cavities.some((c) => c.kind === 'FCS single') && (
+            <LenField
+              label="Canard plug depth"
+              valueCm={draft.fcsSingleDepth}
+              units={units}
+              onCommit={(v) => set({ fcsSingleDepth: pos(v) })}
+            />
+          )}
           {cavities.length > 0 && (
             <LenField
               label="Extra room all round"

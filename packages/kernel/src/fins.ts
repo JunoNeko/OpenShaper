@@ -20,20 +20,48 @@
  * Y = width (rail-to-rail, stringer at 0), Z = height (up). Fins hang in −Z below the
  * bottom surface.
  */
-import { valueAt } from './bezier-spline';
+
 import { DEG_TO_RAD } from './constants';
-import { getLength, getRockerAtPos, type BezierBoard } from './board';
+import { getLength, getRockerAtPos, widthBoundsAt, type BezierBoard } from './board';
 import { FIN_TEMPLATES, FIN_TEMPLATE_CHORD } from './fin-templates.generated';
+import type { FinDesign } from './fin-design/fin-design';
+import { finTabOutline } from './fin-design/fin-tab';
+import { findRaisedRear } from './fin-design/raised-rear';
 import type { BoardMesh } from './tessellate';
 import { vec2, type Vec2 } from './vec2';
 
 // --- model -----------------------------------------------------------------
 
 /** Named fin configurations (count of fins differs per setup). */
-export type FinSetup = 'none' | 'single' | 'twin' | 'thruster' | 'quad' | '2+1' | '5-fin';
+export type FinSetup =
+  | 'none'
+  | 'single'
+  | 'twin'
+  | 'thruster'
+  | 'quad'
+  | '2+1'
+  | '5-fin'
+  | 'twinzer';
 
 /** Mounting system — drives the box/plug geometry routed into the board. */
 export type FinSystem = 'glass-on' | 'fcs-ii' | 'fcs-x2' | 'futures';
+
+/**
+ * A twinzer's canard box, chosen apart from its twins' system: an FCS 1 single plug (the
+ * usual choice), or Futures' own canard box, listed but not offered until its
+ * dimensions are known.
+ */
+export type CanardBox = 'fcs-single' | 'futures-canard';
+
+export const CANARD_BOXES: readonly CanardBox[] = ['fcs-single', 'futures-canard'];
+
+export const CANARD_BOX_LABELS: Record<CanardBox, string> = {
+  'fcs-single': 'FCS single plug',
+  'futures-canard': 'Futures canard box',
+};
+
+/** Canard boxes whose dimensions are known; the others are listed as coming soon. */
+export const canardBoxAvailable = (box: CanardBox): boolean => box === 'fcs-single';
 
 /** Foil (cross-section) of a fin blade. Sides are usually flat-inside (80/20). */
 export type FinFoil = 'flat' | '80/20' | '50/50';
@@ -65,6 +93,7 @@ export const FIN_SETUPS: readonly FinSetup[] = [
   'quad',
   '2+1',
   '5-fin',
+  'twinzer',
 ];
 
 export const FIN_SETUP_LABELS: Record<FinSetup, string> = {
@@ -75,6 +104,7 @@ export const FIN_SETUP_LABELS: Record<FinSetup, string> = {
   quad: 'Quad',
   '2+1': '2 + 1',
   '5-fin': '5-Fin',
+  twinzer: 'Twinzer',
 };
 
 export const FIN_SYSTEMS: readonly FinSystem[] = ['glass-on', 'fcs-ii', 'fcs-x2', 'futures'];
@@ -93,9 +123,9 @@ export const FIN_SYSTEM_LABELS: Record<FinSystem, string> = {
 export interface FinSpec {
   /** -1 port, 0 center (on the stringer), +1 starboard. */
   readonly side: -1 | 0 | 1;
-  /** Trailing-edge distance from the tail tip, measured along the stringer (cm). */
+  /** The fin dot's (its trailing-edge root's) distance from the tail tip, along the stringer (cm). */
   readonly trailingFromTail: number;
-  /** Lateral inset from the rail edge at the fin's position (cm); ignored for center fins. */
+  /** The fin dot's inset from the rail edge, square to the stringer there (cm); ignored for centre fins. */
   readonly insetFromRail: number;
   /** Footprint length along the stringer (cm). */
   readonly base: number;
@@ -110,7 +140,132 @@ export interface FinSpec {
   readonly foil: FinFoil;
   /** Blade outline family (pivot / raked / performance). */
   readonly profile: FinProfile;
+  /**
+   * The fin itself, as OpenFinShaper designs it (fin integration): its blade, foil, tab
+   * and the blade's cant. When present, `base`, `depth`, `foil` and `cant` follow it
+   * (`withFinDesign`) and `profile`/`sweep` are unused; the board places it (distance
+   * from the tail, inset, toe) and, on FCS, its plug adds the plug's cant. Absent on
+   * boards from before, which keep their generic blades.
+   */
+  readonly design?: FinDesign;
+  /** The library fin and size it came from (`fin-library.ts`), or absent for one of the person's own. */
+  readonly library?: { readonly fin: string; readonly size: 'S' | 'M' | 'L' };
+  /** A person's own fin's name (from My fins or OpenFinShaper), shown in the Fins panel. */
+  readonly name?: string;
 }
+
+/** Which fins of a setup are sides, rears, centres and canards (a twinzer's small front fins). */
+export type FinGroup = 'side' | 'rear' | 'centre' | 'canard';
+
+/** The group of each of a setup's fins, in the order `defaultFinConfig` lays them out. */
+export const finGroups = (setup: FinSetup): FinGroup[] => {
+  switch (setup) {
+    case 'single':
+      return ['centre'];
+    case 'twin':
+      return ['side', 'side'];
+    case 'thruster':
+      return ['side', 'side', 'centre'];
+    case 'quad':
+      return ['side', 'side', 'rear', 'rear'];
+    case '2+1':
+      return ['side', 'side', 'centre'];
+    case '5-fin':
+      return ['side', 'side', 'rear', 'rear', 'centre'];
+    case 'twinzer':
+      // The canards ahead, then the twins (the twins are the setup's side fins).
+      return ['canard', 'canard', 'side', 'side'];
+    default:
+      return [];
+  }
+};
+
+/** The angles FCS makes its plugs at (deg). */
+export type PlugCant = 5 | 9;
+
+/** Which FCS plugs' cant is set: the front sides', the rears', or a twinzer's canards'. */
+export type PlugCantGroup = 'front' | 'rear' | 'canard';
+
+/** A twinzer's canard plugs' cant when none is set (deg). */
+export const DEFAULT_CANARD_PLUG_CANT: PlugCant = 9;
+
+/**
+ * An FCS plug's cant for a fin of `group`: sides and rears as set, a centre upright. A
+ * twinzer's canards stand in their own FCS single plugs, 9° unless set, whatever the
+ * twins' system (none in a Futures canard box, not known yet).
+ */
+export const plugCantFor = (cfg: FinConfig, group: FinGroup | undefined): number => {
+  if (group === 'canard') {
+    if ((cfg.canardBox ?? 'fcs-single') !== 'fcs-single') return 0;
+    return cfg.plugCant?.canard ?? DEFAULT_CANARD_PLUG_CANT;
+  }
+  if (cfg.system !== 'fcs-ii' && cfg.system !== 'fcs-x2') return 0;
+  if (group === 'side') return cfg.plugCant?.front ?? 5;
+  if (group === 'rear') return cfg.plugCant?.rear ?? 5;
+  return 0;
+};
+
+/** A design's depth (cm): its outline's highest point above the tab. */
+export const designDepth = (d: FinDesign): number => {
+  let top = 0;
+  for (const k of d.outline.knots) top = Math.max(top, k.end.y);
+  // The outline's knots bound it closely; sample the curves for the true top.
+  const n = d.outline.curves.length;
+  for (let i = 0; i < n; i++) {
+    const c = d.outline.curves[i]!;
+    for (let k = 1; k < 16; k++) {
+      const t = k / 16;
+      const mt = 1 - t;
+      const y = mt * mt * mt * c.p0.y + 3 * mt * mt * t * c.c1.y + 3 * mt * t * t * c.c2.y + t * t * t * c.p3.y; // prettier-ignore
+      top = Math.max(top, y);
+    }
+  }
+  return top;
+};
+
+/**
+ * Where a design's fin dot is, along its tab (cm, the designer's frame): the bottom of
+ * its trailing edge. On most fins that is the trailing edge's root; on one with a raised
+ * rear (a keel's, running back behind the tab clear of the board) it is the corner where
+ * the trailing edge meets that rear's underside, marked on the board below it.
+ */
+export const finDotX = (d: FinDesign): number => {
+  const rear = findRaisedRear(d.outline);
+  if (rear) return rear.cornerX;
+  const k = d.outline.knots;
+  return k[k.length - 1]!.end.x;
+};
+
+/** A design's base (cm): from its fin dot to its leading-edge root. */
+export const designChord = (d: FinDesign): number =>
+  Math.abs(d.outline.knots[0]!.end.x - finDotX(d));
+
+/**
+ * `spec` given fin design `d` (and the library fin it came from, if any): the fields
+ * the rest of the app reads follow the design. `plugCant` is the FCS plug's, added to
+ * the blade's own.
+ */
+export const withFinDesign = (
+  spec: FinSpec,
+  d: FinDesign,
+  plugCant = 0,
+  library?: FinSpec['library'],
+): FinSpec => {
+  // A library fin has no name of its own; a person's keeps the one it is given.
+  const { library: _old, name: _name, ...rest } = spec;
+  void _old;
+  void _name;
+  return {
+    ...rest,
+    design: d,
+    base: designChord(d),
+    depth: designDepth(d),
+    sweep: 0,
+    cant: plugCant + d.cant,
+    foil: d.section.inside === null ? '50/50' : '80/20',
+    ...(library ? { library } : {}),
+  };
+};
 
 /** Persisted fin configuration on a {@link BezierBoard}. */
 export interface FinConfig {
@@ -123,6 +278,17 @@ export interface FinConfig {
   readonly symmetrical: boolean;
   /** One spec per fin; `length` matches the setup's fin count (empty for `none`). */
   readonly fins: readonly FinSpec[];
+  /**
+   * FCS plug cants (deg): front sides, and quad / 5-fin rears, 5 when absent; a
+   * twinzer's canards, 9 when absent.
+   */
+  readonly plugCant?: {
+    readonly front: PlugCant;
+    readonly rear: PlugCant;
+    readonly canard?: PlugCant;
+  };
+  /** A twinzer's canard box (its twins take `system`). An FCS single plug when absent. */
+  readonly canardBox?: CanardBox;
 }
 
 export const noFins = (): FinConfig => ({
@@ -199,6 +365,24 @@ export const SYSTEM_BOX: Record<FinSystem, BoxGeometry> = {
     kind: 'shapes',
     footprints: [circle(inch(1.5), inch(0.625)), circle(-inch(1.5), inch(0.625))],
   },
+};
+
+/**
+ * The FCS 1 single plug a canard stands in (owner's measurements, 2026-11, cm): a round
+ * plug 26 mm across and 20 mm tall, its slot 22.8 × 6.3 mm and 16 mm deep.
+ */
+export const FCS_SINGLE_PLUG = {
+  diameter: 2.6,
+  height: 2.0,
+  slotLength: 2.28,
+  slotWidth: 0.63,
+  slotDepth: 1.6,
+} as const;
+
+/** A canard's box in plan: one round plug (the Futures canard box isn't known yet). */
+export const CANARD_BOX: Record<CanardBox, BoxGeometry> = {
+  'fcs-single': { kind: 'shapes', footprints: [circle(0, FCS_SINGLE_PLUG.diameter)] },
+  'futures-canard': { kind: 'none' },
 };
 
 // --- real-world default placements -----------------------------------------
@@ -279,6 +463,10 @@ export function defaultFinConfig(setup: FinSetup, system: FinSystem): FinConfig 
           ...pair(inch(6.2), 4.4, 10, 2, 4.5),
           center(inch(3.5), 11, 'thruster'),
         ];
+      case 'twinzer':
+        // The owner's placement (twinzer_placement.board, 2026-11): canards 343 mm from
+        // the tail, 47 mm in, 4° toe; twins 218 mm, 51 mm in, 2° toe.
+        return [...pair(34.324, 4.656, 7, 4, 0), ...pair(21.84, 5.133, 13, 2, 7, 'keel')];
       default:
         return [];
     }
@@ -290,10 +478,10 @@ export function defaultFinConfig(setup: FinSetup, system: FinSystem): FinConfig 
 export const mirrorFinIndex = (fins: readonly FinSpec[], i: number): number | null => {
   const f = fins[i];
   if (!f || f.side === 0) return null;
-  for (const j of [i - 1, i + 1]) {
-    if (fins[j] && fins[j]!.side === -f.side) return j;
-  }
-  return null;
+  // Pairs are laid out side by side from the start: 0–1, 2–3. (Taking whichever
+  // neighbour faced the other way paired a quad's rear fin with the front fin before it.)
+  const j = i % 2 === 0 ? i + 1 : i - 1;
+  return fins[j] && fins[j]!.side === -f.side ? j : null;
 };
 
 // --- resolution to absolute geometry ---------------------------------------
@@ -318,8 +506,24 @@ export interface ResolvedFin {
   readonly foil: FinFoil;
   readonly box: BoxGeometry;
   readonly toe: number;
+  /** The whole fin's cant (deg): the blade's, plus an FCS plug's. */
   readonly cant: number;
   readonly sweep: number;
+  /** The fin's design, when it has one (then the 3D view draws it). */
+  readonly design?: FinDesign;
+  /** The FCS plug's cant (deg), 0 for any other system. */
+  readonly plugCant: number;
+  /** Where its box or plug is centred in plan: under its tab (or the base centre). */
+  readonly boxCenter: Vec2;
+  /** The fin dot: the trailing edge's root, where its distance and inset are measured. */
+  readonly dot: Vec2;
+  /**
+   * The bottom's slope at the base's middle, along the board (rad, + rising toward the
+   * nose): the fin stands square to the bottom there, its base on the tangent.
+   */
+  readonly pitch: number;
+  /** Its tab's slot in plan (a fin with a design): back and front ends, and width (cm). */
+  readonly slot?: { readonly rear: Vec2; readonly front: Vec2; readonly width: number };
 }
 
 /**
@@ -365,8 +569,36 @@ export function resolveFins(b: BezierBoard, cfg: FinConfig = b.fins): ResolvedFi
   if (!cfg || cfg.setup === 'none' || cfg.fins.length === 0) return [];
   const length = getLength(b);
   const box = SYSTEM_BOX[cfg.system];
-  return cfg.fins.map((spec) => resolveOne(b, spec, box, length));
+  const canard = CANARD_BOX[cfg.canardBox ?? 'fcs-single'];
+  const groups = finGroups(cfg.setup);
+  return cfg.fins.map((spec, i) =>
+    resolveOne(
+      b,
+      spec,
+      groups[i] === 'canard' ? canard : box,
+      length,
+      spec.design ? plugCantFor(cfg, groups[i]) : 0,
+    ),
+  );
 }
+
+/** A design's blade silhouette in the {@link ResolvedFin.template} frame. */
+const designTemplate = (d: FinDesign): Vec2[] => {
+  const te = finDotX(d);
+  const pts: Vec2[] = [];
+  for (const c of d.outline.curves) {
+    for (let i = 0; i < 12; i++) {
+      const t = i / 12;
+      const mt = 1 - t;
+      const w = [mt * mt * mt, 3 * mt * mt * t, 3 * mt * t * t, t * t * t] as const;
+      const x = w[0] * c.p0.x + w[1] * c.c1.x + w[2] * c.c2.x + w[3] * c.p3.x;
+      const y = w[0] * c.p0.y + w[1] * c.c1.y + w[2] * c.c2.y + w[3] * c.p3.y;
+      pts.push(vec2(x - te, y));
+    }
+  }
+  pts.push(vec2(0, 0));
+  return pts;
+};
 
 const clampPos = (x: number, length: number): number => Math.max(0.1, Math.min(length - 0.1, x));
 
@@ -375,27 +607,48 @@ const resolveOne = (
   spec: FinSpec,
   box: BoxGeometry,
   length: number,
+  plugCant: number,
 ): ResolvedFin => {
-  // Base center along the stringer: trailing edge + half the base toward the nose.
-  const cx = clampPos(spec.trailingFromTail + spec.base / 2, length);
+  // The fin dot: the trailing edge's root, the shaper's mark every fin measurement is
+  // taken to (owner, 2026-11). Its distance from the tail, and its inset from the rail
+  // there; toe turns the fin about it. (Measured to the base's middle before, which put
+  // a fin's mark nowhere a shaper would make it, and moved it when the fin changed.)
+  const dotX = clampPos(spec.trailingFromTail, length);
+  const railHalf = widthBoundsAt(b, dotX).yOut; // concave-tail aware
+  const dotY = spec.side === 0 ? 0 : spec.side * Math.max(0, railHalf - spec.insetFromRail);
+  const dot = vec2(dotX, dotY);
 
-  // Lateral position: inset from the rail edge (half-width) for side fins; 0 for center.
-  const railHalf = valueAt(b.outline, cx); // outline value = half-width at cx
-  const cy = spec.side === 0 ? 0 : spec.side * Math.max(0, railHalf - spec.insetFromRail);
-
-  const surfaceZ = getRockerAtPos(b, cx);
-
-  // Plan base line oriented fore-aft, then rotated by toe about the base center.
-  // Nominal fore direction is +x, toward the nose. Toe-in turns the fore end toward the
-  // stringer (y → 0): pick the rotation sign so the fore end's lateral magnitude shrinks.
+  // The base runs forward from the dot, turned by toe. Nominal fore direction is +x,
+  // toward the nose; toe-in turns the fore end toward the stringer (y → 0).
   const toeRad = spec.toe * DEG_TO_RAD;
   const sgn = spec.side === 0 ? 0 : -spec.side; // rotation sign for toe-in
   const a = sgn * toeRad;
   const dx = Math.cos(a);
   const dy = Math.sin(a);
-  const half = spec.base / 2;
-  const fore = vec2(cx + dx * half, cy + dy * half);
-  const aft = vec2(cx - dx * half, cy - dy * half);
+  const at = (u: number) => vec2(dotX + dx * u, dotY + dy * u);
+  const aft = dot;
+  const fore = at(spec.base);
+  const { x: cx, y: cy } = at(spec.base / 2);
+
+  const surfaceZ = getRockerAtPos(b, cx);
+  // The bottom's slope there: the fin sits square to it, its base along it.
+  const h = Math.min(0.5, spec.base / 4) || 0.5;
+  const slope = (getRockerAtPos(b, Math.min(length, cx + h)) - getRockerAtPos(b, Math.max(0, cx - h))) / (2 * h); // prettier-ignore
+  const pitch = Number.isFinite(slope) ? Math.atan(slope) : 0;
+
+  const d = spec.design;
+  // Its box follows from the fin: the back of its tab's slot is the fin's own distance
+  // from its fin dot (`finDotX`) to the back of its tab, so choosing a fin moves the
+  // box, not the dot.
+  let boxCenter = vec2(cx, cy);
+  let slot: ResolvedFin['slot'];
+  if (d) {
+    const te = finDotX(d);
+    const tab = finTabOutline(d.base, d.outline);
+    const rear = tab.rear - te;
+    boxCenter = at(rear + tab.length / 2);
+    slot = { rear: at(rear), front: at(rear + tab.length), width: tab.thickness };
+  }
 
   return {
     spec,
@@ -403,13 +656,21 @@ const resolveOne = (
     center: vec2(cx, cy),
     baseLine: { fore, aft },
     surfaceZ,
-    template: finTemplate(spec.base, spec.depth, spec.sweep, spec.profile ?? 'thruster'),
-    maxThickness: foilThickness(spec.base),
+    template: d
+      ? designTemplate(d)
+      : finTemplate(spec.base, spec.depth, spec.sweep, spec.profile ?? 'thruster'),
+    maxThickness: d ? d.taper.knots[0]!.end.y : foilThickness(spec.base),
     foil: spec.foil,
     box,
     toe: spec.toe,
-    cant: spec.cant,
+    cant: d ? plugCant + d.cant : spec.cant,
     sweep: spec.sweep,
+    ...(d ? { design: d } : {}),
+    plugCant,
+    boxCenter,
+    dot,
+    pitch,
+    ...(slot ? { slot } : {}),
   };
 };
 
@@ -469,7 +730,7 @@ const chordAtDepth = (template: readonly Vec2[], v: number): [number, number] | 
 export const buildFinBladeMesh = (fin: ResolvedFin): BoardMesh => {
   const { template, cant, side, surfaceZ, maxThickness, foil } = fin;
   const maxD = maxDepth(template);
-  if (maxD <= 1e-6) return finalizeMesh([], []);
+  if (maxD <= 1e-6) return meshWithNormals([], []);
 
   // Orientation, as for the 2D placement.
   const baseDir = unit(sub2(fin.baseLine.fore, fin.baseLine.aft)); // toward nose, toed
@@ -481,11 +742,20 @@ export const buildFinBladeMesh = (fin: ResolvedFin): BoardMesh => {
 
   const [innerFrac, outerFrac] = foilOffsets(foil);
 
-  const place = (along: number, depth: number, lateral: number): [number, number, number] => [
-    root.x + baseDir.x * along + outward.x * lateral,
-    root.y + baseDir.y * along + downY * depth + outward.y * lateral,
-    surfaceZ + downZ * depth,
-  ];
+  // Square to the bottom: about the base's middle, along it and down its normal.
+  const half = Math.hypot(fin.baseLine.fore.x - root.x, fin.baseLine.fore.y - root.y) / 2;
+  const pc = Math.cos(fin.pitch);
+  const ps = Math.sin(fin.pitch);
+  const place = (along: number, depth: number, lateral: number): [number, number, number] => {
+    const s = along - half;
+    const down = -downZ * depth; // the depth straight down, before the bottom's slope
+    const a = half + s * pc + down * ps;
+    return [
+      root.x + baseDir.x * a + outward.x * lateral,
+      root.y + baseDir.y * a + downY * depth + outward.y * lateral,
+      surfaceZ + s * ps - down * pc,
+    ];
+  };
 
   const positions: number[] = [];
   const indices: number[] = [];
@@ -530,7 +800,7 @@ export const buildFinBladeMesh = (fin: ResolvedFin): BoardMesh => {
     indices.push(outer[0]![k]!, inner[0]![k + 1]!, outer[0]![k + 1]!);
   }
 
-  return finalizeMesh(positions, indices);
+  return meshWithNormals(positions, indices);
 };
 
 const maxDepth = (template: readonly Vec2[]): number => {
@@ -554,7 +824,7 @@ const pushVert = (positions: number[], v: [number, number, number]): number => {
 };
 
 /** Compute area-weighted vertex normals and return a {@link BoardMesh}. */
-const finalizeMesh = (positions: number[], indices: number[]): BoardMesh => {
+export const meshWithNormals = (positions: number[], indices: number[]): BoardMesh => {
   const normals = new Float32Array(positions.length);
   for (let t = 0; t < indices.length; t += 3) {
     const ia = indices[t]!;

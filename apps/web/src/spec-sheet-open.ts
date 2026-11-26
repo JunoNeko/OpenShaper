@@ -2,6 +2,7 @@ import { boardDiagramSvg, specSheetHtml, type SpecSection } from '@openshaper/ex
 import {
   FIN_SETUP_LABELS,
   FIN_SYSTEM_LABELS,
+  finLabel,
   resolveFins,
   type BezierBoard,
   type FinConfig,
@@ -36,6 +37,7 @@ export const specSheetHtmlFor = (
     ? resolveFins(board, fins).map((fin) => {
         const angles = fin.side === 0 ? '' : ` · toe ${fin.toe}° · cant ${fin.cant}°`;
         const summary =
+          (fin.design ? `${finLabel(fin.spec)} · ` : '') +
           `${L(fin.spec.trailingFromTail)} from tail · base ${L(fin.spec.base)} · ` +
           `depth ${L(fin.spec.depth)}${angles} · ${fin.foil}`;
         return [sideName(fin.side), summary];

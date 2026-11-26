@@ -40,6 +40,7 @@ import {
   drawMeasureCursor,
   drawVProbe,
   MEASURE_COLORS,
+  drawFinBoxes,
   drawFinsPlan,
   drawFinsProfile,
   drawChannelCut,
@@ -785,7 +786,10 @@ export function SplineEditor({
     }
     if (overlays?.fins && overlays.fins.length > 0) {
       if (overlays.finView === 'profile') drawFinsProfile(ctx, overlays.fins, vp, selectedFin);
-      else drawFinsPlan(ctx, overlays.fins, vp, selectedFin);
+      else {
+        if (overlays.finBoxes?.length) drawFinBoxes(ctx, overlays.finBoxes, vp);
+        drawFinsPlan(ctx, overlays.fins, vp, selectedFin);
+      }
     }
     if (ghostSplines) {
       for (const g of ghostSplines) drawGhostSpline(ctx, g, vp, { mirrorX, mirrorY }, ghostColor);
@@ -1271,14 +1275,14 @@ export function SplineEditor({
         const finIndex = hitFin(overlays.fins, vp, p, touch ? TOUCH_HIT_TOL_PX : HIT_TOL_PX);
         if (finIndex !== null) {
           store.getState().selectFin(finIndex);
-          // `moveFin` reads the point as the fin's base centre, so that midpoint is
-          // what the grab offset is measured from (see GRAB_OFFSET).
-          const { fore, aft } = overlays.fins[finIndex]!.baseLine;
+          // `moveFin` reads the point as the fin dot (the trailing edge's root), so
+          // that is what the grab offset is measured from (see GRAB_OFFSET).
+          const { dot } = overlays.fins[finIndex]!;
           const at = screenToWorld(vp, p);
           drag.current = {
             mode: 'fin',
             index: finIndex,
-            grab: { x: (fore.x + aft.x) / 2 - at.x, y: (fore.y + aft.y) / 2 - at.y },
+            grab: { x: dot.x - at.x, y: dot.y - at.y },
             downAt: p,
             started: false,
           };

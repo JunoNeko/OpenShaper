@@ -69,6 +69,8 @@ export interface View3DSettings {
   showStringer: boolean;
   /** Draw a ring at every real cross-section, the active one highlighted. */
   showSections: boolean;
+  /** Draw each fin's box or plug on the bottom (how close a flange comes to the rail). */
+  showBoxes: boolean;
 }
 
 export const DEFAULT_VIEW_3D: View3DSettings = {
@@ -80,4 +82,5 @@ export const DEFAULT_VIEW_3D: View3DSettings = {
   meshQuality: 'standard',
   showStringer: false,
   showSections: false,
+  showBoxes: true,
 };

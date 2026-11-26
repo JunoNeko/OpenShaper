@@ -108,15 +108,17 @@ describe('resolveFins', () => {
     expect(fin!.surfaceZ).toBeCloseTo(getRockerAtPos(b, fin!.center.x), 9);
   });
 
-  it('insets side fins from the rail edge, mirrored across the stringer', () => {
+  it('insets side fins from the rail edge at the fin dot, mirrored across the stringer', () => {
     const b = makeBoard();
     const cfg = defaultFinConfig('twin', 'fcs-ii');
     const fins = resolveFins(b, cfg);
     const port = fins.find((f) => f.side === -1)!;
     const star = fins.find((f) => f.side === 1)!;
-    const railHalf = getWidthAtPos(b, star.center.x) / 2;
-    expect(star.center.y).toBeCloseTo(railHalf - cfg.fins[0]!.insetFromRail, 6);
-    expect(port.center.y).toBeCloseTo(-star.center.y, 6);
+    // The fin dot (the trailing edge's root) is where a shaper measures from.
+    expect(star.dot.x).toBeCloseTo(cfg.fins[0]!.trailingFromTail, 9);
+    const railHalf = getWidthAtPos(b, star.dot.x) / 2;
+    expect(star.dot.y).toBeCloseTo(railHalf - cfg.fins[0]!.insetFromRail, 6);
+    expect(port.dot.y).toBeCloseTo(-star.dot.y, 6);
   });
 
   it('follows the outline: widening the plan-shape moves side fins outward', () => {
