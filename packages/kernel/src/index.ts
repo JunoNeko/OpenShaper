@@ -22,6 +22,7 @@ export * from './channels';
 export * from './channel-layout';
 export * from './channel-apply';
 export * from './polygon';
+export * from './fin-cavities';
 export * from './rail-profile';
 export * from './outline-cutout';
 export * from './board';

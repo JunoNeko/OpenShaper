@@ -18,6 +18,7 @@ export default function DocsExport() {
         { id: 'pdf', label: '1:1 PDF printing' },
         { id: 'rail-bands', label: 'Rail bands' },
         { id: 'spec', label: 'Spec sheet' },
+        { id: 'print-blank', label: 'Printing a blank' },
         { id: 'cnc', label: 'Getting it cut' },
       ]}
     >
@@ -231,6 +232,37 @@ export default function DocsExport() {
           A one-page summary of the board's numbers — dimensions at the standard stations, volume,
           and your board details — opened in a new tab ready to print. This is the sheet you hand to
           someone else, rather than a file for a machine.
+        </p>
+      </Section>
+
+      <Section id="print-blank" title="Printing a blank">
+        <p>
+          <strong>STL blank for printing</strong> exports the board as one closed solid with a
+          cavity in the bottom for each fin&rsquo;s box or plug, and no fins: ready to print, then
+          set the real boxes in resin. Channels are cut in.
+        </p>
+        <p>
+          The cavity outlines are what each system&rsquo;s router jig cuts, measured from published
+          3D-printed jigs for the real hardware: a Futures box is a shallow flange step over a
+          deeper body, an FCS II plug one peanut-shaped pocket. Each sits under its fin, along the
+          fin&rsquo;s base, square to the bottom; the boxes and plugs carry the fin&rsquo;s cant
+          themselves.
+        </p>
+        <Terms>
+          <Term name="Futures">
+            Flange step 2.4 mm deep (a 1.6 mm flange plus 0.8 mm for resin); box body 3/4&quot; for
+            F boxes (thruster sides, quad fronts) and 1/2&quot; for X boxes (centres, quad rears),
+            plus resin. Check these against your boxes.
+          </Term>
+          <Term name="FCS II">18.5 mm deep: plugs vary, and this clears them.</Term>
+          <Term name="Extra room all round">
+            Widens every outline, beyond the room the jigs already leave for resin.
+          </Term>
+        </Terms>
+        <p>
+          The dialog warns if a cavity leaves less than 3 mm of board above it. Glass-on fins need
+          no cavities; FCS X-2 plugs aren&rsquo;t supported yet, so those boards export plain. The
+          cutting runs on your device, like every export.
         </p>
       </Section>
 

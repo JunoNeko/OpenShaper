@@ -5,3 +5,12 @@
  * CNC could mistake text entities for cut paths (DXF gets it as a `999` comment).
  */
 export const BRAND_LINE = 'Made with OpenShaper · openshaper.com';
+
+/** A product's credit: its name, and the line written into an export's metadata. */
+export interface Brand {
+  product: string;
+  line: string;
+}
+
+/** The board editor's credit, written into board exports. */
+export const BOARD_BRAND: Brand = { product: 'OpenShaper', line: BRAND_LINE };

@@ -31,3 +31,6 @@ in this repository.
 OpenShaper's web app bundles open-source libraries including React, Three.js,
 @react-three/fiber + drei, Zustand, and Tailwind CSS, each under their own
 (permissive) licenses. See the respective packages in `node_modules` for details.
+
+The print version's blank export also bundles Manifold (`manifold-3d`, Apache-2.0,
+© the Manifold authors), compiled to WebAssembly, to cut fin box cavities.
