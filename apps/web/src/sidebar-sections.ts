@@ -30,6 +30,7 @@ export type SectionId =
   | 'resize'
   | 'controlPoint'
   | 'analysis'
+  | 'channels'
   | 'boardInfo'
   | 'fins'
   | 'weight'
@@ -145,6 +146,15 @@ export const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
     // Not pre-opened in the cross-section: CoM and volume distribution draw only on the
     // outline and rocker. Grid and comb draw there too, toggled from the View menu.
     relevantTo: ['outline', 'rocker', '3d', 'quad'],
+    defaultOpen: false,
+  },
+  {
+    id: 'channels',
+    title: 'Channels',
+    tab: 'shape',
+    // Laid out from a cross-section, drawn and edited on it, on the outline (walls) and
+    // the rocker (depth), and cut into the 3D view: every view.
+    relevantTo: 'all',
     defaultOpen: false,
   },
 

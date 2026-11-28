@@ -1,11 +1,14 @@
 import {
+  boardChannels,
+  triangulatePolygon,
   buildFinBladeMesh,
+  channelCutAt,
   getLength,
   hasTailCutout,
   loftPoint,
   loftSection,
-  ringFractions,
   resolveFins,
+  stationRing,
   tessellateBoard,
   tessellationSteps,
   type BezierBoard,
@@ -56,10 +59,13 @@ const f = (n: number): string => (Number.isFinite(n) ? n : 0).toExponential(6);
 const sampleRing = (board: BezierBoard, pos: number, ringSteps: number): P3[] | null => {
   const section = loftSection(board, pos);
   if (!section) return null;
-  const fs = ringFractions(board, ringSteps + 1);
+  // The board's ladder, with a point on every channel wall when it has channels.
+  const plan = stationRing(board, section, pos, ringSteps + 1);
+  const cut = boardChannels(board).length > 0;
   const ring: P3[] = [];
-  for (let r = 0; r <= ringSteps; r++) {
-    const p = loftPoint(section, fs[r]!);
+  for (const fr of plan.fs) {
+    // With channels, the cut point: lifted on the bottom, the rail cut off at the floor.
+    const p = cut ? channelCutAt(board, plan, section, fr, pos) : loftPoint(section, fr);
     ring.push({ x: pos, y: p.x, z: p.y + section.rocker });
   }
   return ring;
@@ -135,21 +141,24 @@ const stlFacets = (board: BezierBoard, opts: StlOptions): number[] => {
   for (let j = 0; j < rings.length - 1; j++) {
     const a = rings[j]!;
     const b = rings[j + 1]!;
-    for (let r = 0; r < ringSteps; r++) {
+    // One more point per channel wall than `ringSteps` asks for, on a board with channels.
+    const n = Math.min(a.length, b.length) - 1;
+    for (let r = 0; r < n; r++) {
       // +y side
       const p1 = a[r]!;
       const p2 = b[r]!;
       const p3 = b[r + 1]!;
       const p4 = a[r + 1]!;
-      writeFacet(out, p1, p2, p3);
-      writeFacet(out, p1, p3, p4);
+      // Wound so the faces point out of the board (the ring runs bottom → deck on +y).
+      writeFacet(out, p1, p3, p2);
+      writeFacet(out, p1, p4, p3);
       // mirrored -y side (reverse winding to keep normals outward)
       const m1 = { x: p1.x, y: -p1.y, z: p1.z };
       const m2 = { x: p2.x, y: -p2.y, z: p2.z };
       const m3 = { x: p3.x, y: -p3.y, z: p3.z };
       const m4 = { x: p4.x, y: -p4.y, z: p4.z };
-      writeFacet(out, m1, m3, m2);
-      writeFacet(out, m1, m4, m3);
+      writeFacet(out, m1, m2, m3);
+      writeFacet(out, m1, m3, m4);
     }
   }
 
@@ -163,7 +172,7 @@ const stlFacets = (board: BezierBoard, opts: StlOptions): number[] => {
       cz += p.z;
     }
     const c: P3 = { x: cx / ring.length, y: 0, z: cz / ring.length };
-    for (let r = 0; r < ringSteps; r++) {
+    for (let r = 0; r < ring.length - 1; r++) {
       const p2 = ring[r]!;
       const p3 = ring[r + 1]!;
       if (noseEnd) {
@@ -175,8 +184,20 @@ const stlFacets = (board: BezierBoard, opts: StlOptions): number[] => {
       }
     }
   };
-  cap(rings[0], false);
-  cap(rings[rings.length - 1], true);
+  // With channels running out through an end, its outline is notched and a fan would
+  // web over the channels' mouths: cover exactly the outline (both sides) instead.
+  const capFlat = (ring: P3[] | undefined, noseEnd: boolean): void => {
+    if (!ring || ring.length < 2) return;
+    const full: P3[] = [...ring];
+    for (let r = ring.length - 2; r >= 1; r--) full.push({ ...ring[r]!, y: -ring[r]!.y });
+    for (const [a, b, c] of triangulatePolygon(full.map((p) => ({ x: p.y, y: p.z })))) {
+      if (noseEnd) writeFacet(out, full[a]!, full[b]!, full[c]!);
+      else writeFacet(out, full[c]!, full[b]!, full[a]!);
+    }
+  };
+  const channelled = boardChannels(board).length > 0;
+  (channelled ? capFlat : cap)(rings[0], false);
+  (channelled ? capFlat : cap)(rings[rings.length - 1], true);
 
   // Foiled fin blade solids (same coordinate frame as the hull: X length, Y width, Z up).
   if (opts.includeFins !== false) {
@@ -193,11 +214,21 @@ const stlFacets = (board: BezierBoard, opts: StlOptions): number[] => {
  * reads it. The header deliberately does not start with "solid", which some
  * readers take as the mark of an ASCII file.
  */
-export const exportStl = (board: BezierBoard, opts: StlOptions = {}): Uint8Array => {
-  const facets = stlFacets(board, opts);
+export const exportStl = (board: BezierBoard, opts: StlOptions = {}): Uint8Array =>
+  encodeBinaryStl(stlFacets(board, opts), opts.name ?? 'openshaper', 'OpenShaper');
+
+/**
+ * Facets (12 numbers each: normal, then three vertices) as a binary STL, named in the
+ * header. Shared by the board and print-blank exporters.
+ */
+export const encodeBinaryStl = (
+  facets: readonly number[],
+  name: string,
+  product: string,
+): Uint8Array => {
   const count = facets.length / 12;
   const bytes = new Uint8Array(84 + count * 50);
-  const header = `OpenShaper STL ${opts.name ?? 'openshaper'}`.slice(0, 80);
+  const header = `${product} STL ${name}`.slice(0, 80);
   for (let i = 0; i < header.length; i++) bytes[i] = header.charCodeAt(i) & 0x7f;
   const view = new DataView(bytes.buffer);
   view.setUint32(80, count, true);
@@ -235,15 +266,45 @@ export const exportStlAscii = (board: BezierBoard, opts: StlOptions = {}): strin
   return out.join('\n') + '\n';
 };
 
-/** Write every triangle of a kernel mesh as STL facets. */
-const writeMesh = (out: number[], mesh: BoardMesh): void => {
+/**
+ * The volume a closed mesh encloses, signed: positive when its triangles are wound so
+ * their faces point out (the divergence theorem over the faces).
+ */
+const signedVolume = ({ positions: p, indices: ix }: BoardMesh): number => {
+  let v = 0;
+  for (let t = 0; t < ix.length; t += 3) {
+    const a = ix[t]! * 3;
+    const b = ix[t + 1]! * 3;
+    const c = ix[t + 2]! * 3;
+    v +=
+      p[a]! * (p[b + 1]! * p[c + 2]! - p[b + 2]! * p[c + 1]!) -
+      p[a + 1]! * (p[b]! * p[c + 2]! - p[b + 2]! * p[c]!) +
+      p[a + 2]! * (p[b]! * p[c + 1]! - p[b + 1]! * p[c]!);
+  }
+  return v / 6;
+};
+
+/**
+ * Append a mesh's triangles as facets, coordinates multiplied by `scale` (a unit change),
+ * wound so the faces point out of the solid: a mirrored fin's mesh comes wound inside
+ * out, and a slicer reads an inside-out solid as a hole.
+ */
+export const writeMesh = (out: number[], mesh: BoardMesh, scale = 1): void => {
+  const flip = signedVolume(mesh) < 0;
   const { positions, indices } = mesh;
-  const at = (i: number): P3 => ({
-    x: positions[i * 3]!,
-    y: positions[i * 3 + 1]!,
-    z: positions[i * 3 + 2]!,
-  });
+  const at = (i: number): P3 =>
+    scale === 1
+      ? { x: positions[i * 3]!, y: positions[i * 3 + 1]!, z: positions[i * 3 + 2]! }
+      : {
+          x: positions[i * 3]! * scale,
+          y: positions[i * 3 + 1]! * scale,
+          z: positions[i * 3 + 2]! * scale,
+        };
   for (let t = 0; t < indices.length; t += 3) {
-    writeFacet(out, at(indices[t]!), at(indices[t + 1]!), at(indices[t + 2]!));
+    const a = at(indices[t]!);
+    const b = at(indices[t + 1]!);
+    const c = at(indices[t + 2]!);
+    if (flip) writeFacet(out, a, c, b);
+    else writeFacet(out, a, b, c);
   }
 };

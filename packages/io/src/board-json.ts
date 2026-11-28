@@ -11,6 +11,9 @@ import {
   splineFromKnots,
   vec2,
   type BezierBoard,
+  type BoardChannels,
+  type ChannelParams,
+  type ChannelWall,
   type FinConfig,
   type FinSetup,
   type Knot,
@@ -70,6 +73,8 @@ export interface BoardJson {
   crossSections: CrossSectionJson[];
   /** Parametric fin configuration (v2+). Omitted when there are no fins. */
   fins?: FinConfig;
+  /** Bottom channels. Omitted when there are none. */
+  channels?: ChannelsJson;
   /** Reference points (still v2). Omitted when there are none. */
   referencePoints?: unknown[];
   metadata?: Record<string, unknown>;
@@ -134,6 +139,100 @@ const finConfigFromDoc = (doc: BoardJson): FinConfig => {
   return noFins();
 };
 
+interface ChannelJson {
+  inner: KnotJson[] | null;
+  outer: KnotJson[];
+  depth: KnotJson[];
+  wall: ChannelWall;
+}
+type ChannelsJson =
+  | { from: 'numbers'; params: ChannelParams }
+  | { from: 'drawn'; channels: ChannelJson[]; params?: ChannelParams };
+
+const channelsToJson = (c: BoardChannels): ChannelsJson =>
+  c.from === 'numbers'
+    ? { from: 'numbers', params: c.params }
+    : {
+        from: 'drawn',
+        channels: c.channels.map((ch) => ({
+          inner: ch.inner && splineToJson(ch.inner),
+          outer: splineToJson(ch.outer),
+          depth: splineToJson(ch.depth),
+          wall: ch.wall,
+        })),
+        ...(c.params ? { params: c.params } : {}),
+      };
+
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+const wallFromJson = (w: unknown, where: string): ChannelWall => {
+  if (isObject(w)) {
+    if (w.shape === 'square' || w.shape === 'scoop' || w.shape === 'wave')
+      return { shape: w.shape };
+    if (w.shape === 'step' && finite(w.radius)) {
+      return {
+        shape: 'step',
+        radius: w.radius,
+        lip: finite(w.lip) ? w.lip : 0,
+        ...(w.deepAt === 'stringer' ? { deepAt: 'stringer' as const } : {}),
+      };
+    }
+    if (w.shape === 'bevel' && finite(w.width)) return { shape: 'bevel', width: w.width };
+    if (w.shape === 'round' && finite(w.radius)) return { shape: 'round', radius: w.radius };
+  }
+  throw new BoardJsonError(`Malformed document: ${where} has no valid wall`);
+};
+
+const PARAM_NUMBERS = ['count', 'width', 'depth', 'inner', 'follow', 'start', 'end', 'station', 'fullFrom', 'fullTo'] as const; // prettier-ignore
+
+const paramsFromJson = (p: unknown): ChannelParams => {
+  if (!isObject(p) || !PARAM_NUMBERS.every((k) => finite(p[k]))) {
+    throw new BoardJsonError('Malformed document: the channel numbers are incomplete');
+  }
+  const n = (k: (typeof PARAM_NUMBERS)[number]) => p[k] as number;
+  return {
+    count: n('count'),
+    wall: wallFromJson(p.wall, 'the channel numbers'),
+    width: n('width'),
+    depth: n('depth'),
+    inner: n('inner'),
+    follow: n('follow'),
+    start: n('start'),
+    end: n('end'),
+    station: n('station'),
+    fullFrom: n('fullFrom'),
+    fullTo: n('fullTo'),
+  };
+};
+
+const channelsFromJson = (c: unknown): BoardChannels | undefined => {
+  if (c === undefined) return undefined;
+  if (isObject(c) && c.from === 'numbers') {
+    return { from: 'numbers', params: paramsFromJson(c.params) };
+  }
+  if (isObject(c) && c.from === 'drawn' && Array.isArray(c.channels)) {
+    const channels = c.channels.map((ch: unknown, i) => {
+      const where = `channel ${i + 1}`;
+      if (!isObject(ch)) throw new BoardJsonError(`Malformed document: ${where} is not a channel`);
+      if (ch.inner !== null) assertKnots(ch.inner, `${where}'s inner wall`);
+      assertKnots(ch.outer, `${where}'s outer wall`);
+      assertKnots(ch.depth, `${where}'s depth`);
+      return {
+        inner: ch.inner === null ? null : splineFromJson(ch.inner as KnotJson[]),
+        outer: splineFromJson(ch.outer as KnotJson[]),
+        depth: splineFromJson(ch.depth as KnotJson[]),
+        wall: wallFromJson(ch.wall, where),
+      };
+    });
+    return {
+      from: 'drawn',
+      channels,
+      ...(c.params !== undefined ? { params: paramsFromJson(c.params) } : {}),
+    };
+  }
+  throw new BoardJsonError('Malformed document: the channels are not typed in or drawn');
+};
+
 /** Serialize a board, and the reference points beside it, to a `.board.json` string. */
 export const writeBoardJson = (
   b: BezierBoard,
@@ -152,6 +251,7 @@ export const writeBoardJson = (
       knots: splineToJson(cs.spline),
     })),
     ...(b.fins.setup !== 'none' ? { fins: b.fins } : {}),
+    ...(b.channels ? { channels: channelsToJson(b.channels) } : {}),
     ...(referencePoints?.length ? { referencePoints: refPointsToJson(referencePoints) } : {}),
     ...(metadata ? { metadata } : {}),
   };
@@ -249,6 +349,7 @@ export const readBoardJson = (text: string): ReadBoardJsonResult => {
     doc.crossSections.map((cs) => crossSection(cs.position, splineFromJson(cs.knots))),
     doc.interpolationType ?? 'controlPoint',
     finConfigFromDoc(doc),
+    channelsFromJson(doc.channels),
   );
   const { points, dropped } = reviveRefPoints(doc.referencePoints);
   const droppedNote = `${dropped} damaged reference point${dropped === 1 ? ' was' : 's were'}`;

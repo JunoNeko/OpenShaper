@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   board,
+  defaultChannelParams,
   getLength,
   getMaxWidth,
   getThickness,
@@ -13,7 +14,7 @@ import {
 } from '@openshaper/kernel';
 import { parseBrd, parseBrdFile } from './brd-reader';
 import { latin1Encode } from './legacy-crypto';
-import { writeBrd } from './brd-writer';
+import { brdHasUnwritableChannels, writeBrd } from './brd-writer';
 
 const goldenDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../docs/specs/golden');
 const loadBrd = (name: string) =>
@@ -115,5 +116,22 @@ describe('writeBrd — handle-angle locks', () => {
       b.fins,
     );
     expect(writeBrd(locked)).toBe(writeBrd(b));
+  });
+});
+
+describe('brdHasUnwritableChannels', () => {
+  it('flags boards carrying bottom channels so the app can warn before saving .brd', () => {
+    const b = loadBrd('shortboard');
+    expect(brdHasUnwritableChannels(b)).toBe(false);
+    const channelled = board(
+      b.outline,
+      b.bottom,
+      b.deck,
+      b.crossSections,
+      b.interpolationType,
+      b.fins,
+      { from: 'numbers', params: defaultChannelParams(b, 30) },
+    );
+    expect(brdHasUnwritableChannels(channelled)).toBe(true);
   });
 });

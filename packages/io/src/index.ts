@@ -9,7 +9,7 @@
 export type { ImportWarning, ImportWarningSeverity } from './import-warning';
 export { parseBrd, parseBrdFile } from './brd-reader';
 export type { ParsedBrd, BrdMetadataValue } from './brd-reader';
-export { brdUnwritableRefPoints, writeBrd } from './brd-writer';
+export { brdHasUnwritableChannels, brdUnwritableRefPoints, writeBrd } from './brd-writer';
 export type { BrdWriteMetadata } from './brd-writer';
 export { decodeXmlBytes, parseS3d, parseS3dx } from './s3d-reader';
 export type { ParsedS3d, ParsedS3dx } from './s3d-reader';

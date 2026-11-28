@@ -5,7 +5,7 @@
  */
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RefPoint } from '@openshaper/kernel';
+import { defaultChannelParams, type RefPoint } from '@openshaper/kernel';
 import { parseBrd } from '@openshaper/io';
 import { ExportPdf1to1Dialog } from './ExportPdf1to1Dialog';
 import { downloadBrd, downloadPdf1to1 } from './file-io';
@@ -81,7 +81,21 @@ describe('downloadPdf1to1', () => {
 
 describe('downloadBrd', () => {
   it('reports section points with no cross-section at their station', () => {
-    expect(downloadBrd(board, {}, [outlinePoint, orphan])).toBe(1);
-    expect(downloadBrd(board, {}, [outlinePoint])).toBe(0);
+    expect(downloadBrd(board, {}, [outlinePoint, orphan])).toEqual({
+      refPoints: 1,
+      channels: false,
+    });
+    expect(downloadBrd(board, {}, [outlinePoint])).toEqual({ refPoints: 0, channels: false });
+  });
+
+  it('reports bottom channels that .brd cannot hold', () => {
+    const channelled = {
+      ...board,
+      channels: { from: 'numbers' as const, params: defaultChannelParams(board, 30) },
+    };
+    expect(downloadBrd(channelled, {}, [outlinePoint])).toEqual({
+      refPoints: 0,
+      channels: true,
+    });
   });
 });

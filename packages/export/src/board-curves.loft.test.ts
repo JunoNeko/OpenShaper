@@ -18,15 +18,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyRailProfile,
+  channelCutAt,
   crossSection,
+  defaultChannelParams,
   loftCrossSection,
   loftPoint,
   loftSection,
   pointByTT,
   RAIL_PRESETS,
+  stationRing,
   type BezierBoard,
 } from '@openshaper/kernel';
-import { crossSectionBeziers, crossSectionRing, type Pt } from './board-curves';
+import { crossSectionBeziers, crossSectionRing, flattenBeziers, type Pt } from './board-curves';
 import { makeTestBoard } from './fixture.test-helper';
 
 /**
@@ -113,5 +116,36 @@ describe('exported cross-sections trace the lofted surface', () => {
         expect(nearest(ring, { x: p.x, y: p.y })).toBeLessThan(0.01);
       }
     }
+  });
+
+  it('includes bottom channels in DXF and 1:1 PDF cross-sections, matching the 3D/STL surface', () => {
+    const channelled: BezierBoard = {
+      ...board,
+      channels: {
+        from: 'numbers',
+        params: { ...defaultChannelParams(board, 30), depth: 0.6, start: 0, end: 60, fullFrom: 0, fullTo: 40 }, // prettier-ignore
+      },
+    };
+    const x = 25;
+    const s = loftSection(channelled, x)!;
+    const plan = stationRing(channelled, s, x, 48);
+    const dxfPts = flattenBeziers(crossSectionBeziers(channelled, x)!, 4);
+    const pdfRing = crossSectionRing(channelled, x, 96)!;
+
+    // Every surface point on the cut bottom and deck sits within 0.1 mm of both DXF & PDF contours.
+    for (const f of plan.fs) {
+      const p = channelCutAt(channelled, plan, s, f, x);
+      expect(nearest(dxfPts, { x: p.x, y: p.y })).toBeLessThan(0.01);
+      expect(nearest(pdfRing, { x: p.x, y: p.y })).toBeLessThan(0.01);
+    }
+    // And at the deepest channel floor, the exported ring is lifted by ~depth above uncut.
+    const uncutRing = crossSectionRing(board, x, 96)!;
+    const maxLift = Math.max(
+      ...plan.fs.map((f) => channelCutAt(channelled, plan, s, f, x).y - loftPoint(s, f).y),
+    );
+    expect(maxLift).toBeGreaterThan(0.5);
+    // The channelled ring must diverge from the uncut ring by at least maxLift - 0.05 cm.
+    const maxShift = Math.max(...pdfRing.map((p) => nearest(uncutRing, p)));
+    expect(maxShift).toBeGreaterThan(maxLift - 0.05);
   });
 });

@@ -18,9 +18,12 @@ const third = (ax: number, ay: number, bx: number, by: number): [number, number]
   ax + (bx - ax) / 3,
   ay + (by - ay) / 3,
 ];
-const outlineBoard = (knots: ReturnType<typeof knotFromArray>[]) => {
+const outlineBoard = (
+  knots: ReturnType<typeof knotFromArray>[],
+  channels?: BezierBoard['channels'],
+) => {
   const s = shortboard;
-  return board(splineFromKnots(knots), s.bottom, s.deck, s.crossSections, s.interpolationType, s.fins); // prettier-ignore
+  return board(splineFromKnots(knots), s.bottom, s.deck, s.crossSections, s.interpolationType, s.fins, channels); // prettier-ignore
 };
 
 /**
@@ -56,7 +59,7 @@ describe('the mesh is a closed, consistently wound solid (what a solid modeller 
     expect(winding(shortboard)).toEqual({ twice: 0, unmatched: 0 });
   });
 
-  it('on a square tail drawn dead vertical: the flat cap too', () => {
+  it('on a square tail drawn dead vertical, channels running out through it: the flat cap too', () => {
     const square = [
       knotFromArray([0, 0, 0, 0, ...third(0, 0, 0, 10.5)], false, false),
       knotFromArray([0, 10.5, 0, 7, ...third(0, 10.5, 90, 23.5)], false, false),
@@ -67,6 +70,10 @@ describe('the mesh is a closed, consistently wound solid (what a solid modeller 
       ),
       knotFromArray([L, 0, ...third(L, 0, 90, 23.5), L, 0], false, false),
     ];
-    expect(winding(outlineBoard(square))).toEqual({ twice: 0, unmatched: 0 });
+    const b = outlineBoard(square, {
+      from: 'numbers',
+      params: { count: 4, wall: { shape: 'step', radius: 0.2, lip: 0.1 }, width: 4.5, depth: 0.5, inner: 0, follow: 0, start: 0, end: 60, station: 30, fullFrom: 0, fullTo: 30 }, // prettier-ignore
+    });
+    expect(winding(b)).toEqual({ twice: 0, unmatched: 0 });
   });
 });

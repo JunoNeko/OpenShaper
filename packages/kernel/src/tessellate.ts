@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { getLength, getMaxThickness, getMaxWidth, getWidthAtPos, type BezierBoard } from './board';
+import { boardChannels } from './channel-layout';
+import { triangulatePolygon } from './polygon';
 import {
   MIN_DIM,
+  channelCutAt,
   isFinite3,
   loftPoint,
   loftRing,
   loftSection,
   ringFractions,
   ringHalf,
+  stationRing,
+  type LateralMap,
   type Vert3,
 } from './loft';
 import { CUTOUT_EPS, cachedOutlineSegments, hasTailCutout, yInOut } from './outline-cutout';
@@ -130,10 +135,19 @@ export const tessellateBoard = (board: BezierBoard, opts: TessellateOptions = {}
   // inset that used to be applied unconditionally guarded `getInterpolatedCrossSection`,
   // which the mesh has not gone through since the loft became point-blended.)
   const eps = Math.min(0.5, length * 1e-3);
-  const pointed0 = getWidthAtPos(board, 0) < MIN_DIM;
-  const pointed1 = getWidthAtPos(board, length) < MIN_DIM;
-  const x0 = pointed0 ? eps : 0;
-  const x1 = pointed1 ? length - eps : length;
+  const channelled = boardChannels(board).length > 0;
+  // A square end drawn with a vertical edge has no width at the tip itself (the outline
+  // there is a vertical line), only a hair inside it. With channels running out through
+  // it, fanning that end to an apex webs over their mouths, so (on such a board) it is
+  // capped flat at the inset station instead. Boards without channels keep their meshes.
+  const squareEdge = (tip: number, inset: number) =>
+    channelled && getWidthAtPos(board, tip) < MIN_DIM && getWidthAtPos(board, inset) >= MIN_DIM;
+  const square0 = squareEdge(0, eps);
+  const square1 = squareEdge(length, length - eps);
+  const pointed0 = getWidthAtPos(board, 0) < MIN_DIM && !square0;
+  const pointed1 = getWidthAtPos(board, length) < MIN_DIM && !square1;
+  const x0 = pointed0 || square0 ? eps : 0;
+  const x1 = pointed1 || square1 ? length - eps : length;
 
   const positions: number[] = [];
   const indices: number[] = [];
@@ -191,10 +205,23 @@ export const tessellateBoard = (board: BezierBoard, opts: TessellateOptions = {}
     }
   };
 
+  // A blunt end with channels running out through it: its outline is notched, and a fan
+  // would web over the channels' mouths. Cover exactly the outline instead.
+  const capFlat = (ring: number[], reverse: boolean): void => {
+    const pts = ring.map((vi) => ({ x: positions[vi * 3 + 1]!, y: positions[vi * 3 + 2]! }));
+    for (const [a, b, c] of triangulatePolygon(pts)) {
+      if (reverse) indices.push(ring[c]!, ring[b]!, ring[a]!);
+      else indices.push(ring[a]!, ring[b]!, ring[c]!);
+    }
+  };
   // Wound to match the bands: each ring edge runs one way in its band and the other
-  // in its cap, so the shell is a closed, consistently oriented solid.
-  capEnd(rings[0]!, pointed0 ? 0 : x0, false);
-  capEnd(rings[rings.length - 1]!, pointed1 ? length : x1, true);
+  // in its cap, so the shell is a closed, consistently oriented solid. (Until 2026-11
+  // both caps ran the same way as their bands; the shell was oriented by its majority
+  // and nothing read edge directions, until a solid modeller had to: print blanks.)
+  if (channelled && !pointed0) capFlat(rings[0]!, false);
+  else capEnd(rings[0]!, pointed0 ? 0 : x0, false);
+  if (channelled && !pointed1) capFlat(rings[rings.length - 1]!, true);
+  else capEnd(rings[rings.length - 1]!, pointed1 ? length : x1, true);
 
   return finalizeMesh(positions, indices);
 };
@@ -309,7 +336,8 @@ const tessellateCutout = (
   const x0 = eps;
   const x1 = length - eps;
   const half = ringHalf(ringSteps);
-  const fs = ringFractions(board, half);
+  const ladder = ringFractions(board, half);
+  const cut = boardChannels(board).length > 0;
 
   const positions: number[] = [];
   const indices: number[] = [];
@@ -361,6 +389,17 @@ const tessellateCutout = (
   const rightRows: (number[] | null)[] = [];
   const leftRows: (number[] | null)[] = [];
 
+  /** The notch's remap at x, as a channel sees it. */
+  const lateralAt = (x: number): LateralMap => {
+    let { yIn, yOut } = yInOut(segments, x);
+    if (yIn < CUTOUT_EPS) yIn = 0;
+    if (yOut < yIn + CUTOUT_EPS) yOut = yIn;
+    const k = yOut > 1e-6 ? (yOut - yIn) / yOut : 0;
+    return (px) => yIn + px * k;
+  };
+  // Points per half ring: the ladder's, plus each channel's (the same at every station).
+  let rowLength = half;
+
   for (const x of xs) {
     const section = loftSection(board, x);
     if (!section) {
@@ -375,11 +414,16 @@ const tessellateCutout = (
     yIns.push(yIn);
 
     const scale = yOut > 1e-6 ? (yOut - yIn) / yOut : 0;
+    const ring = cut ? stationRing(board, section, x, half, lateralAt) : null;
+    const fs = ring ? ring.fs : ladder;
+    rowLength = fs.length;
     const right: number[] = [];
     const left: number[] = [];
     let ok = true;
-    for (let i = 0; i < half; i++) {
-      const p = loftPoint(section, fs[i]!);
+    for (let i = 0; i < fs.length; i++) {
+      const p = ring
+        ? channelCutAt(board, ring, section, fs[i]!, x, lateralAt(x))
+        : loftPoint(section, fs[i]!);
       const mapped = yIn + p.x * scale; // p.x ∈ [0, yOut] → [yIn, yOut]
       const z = p.y + section.rocker;
       if (!isFinite3(x, mapped, z)) {
@@ -405,10 +449,10 @@ const tessellateCutout = (
       const b = rows[r + 1];
       if (!a || !b) continue;
       // Close the deck↔bottom wall (the ring's wrap edge) only inside the notch.
-      const cut = yIns[r]! > CUTOUT_EPS || yIns[r + 1]! > CUTOUT_EPS;
-      const lim = cut ? half : half - 1;
+      const wall = yIns[r]! > CUTOUT_EPS || yIns[r + 1]! > CUTOUT_EPS;
+      const lim = wall ? rowLength : rowLength - 1;
       for (let j = 0; j < lim; j++) {
-        const j1 = (j + 1) % half;
+        const j1 = (j + 1) % rowLength;
         const a0 = a[j]!;
         const a1 = a[j1]!;
         const b0 = b[j]!;
@@ -428,8 +472,20 @@ const tessellateCutout = (
   stitch(leftRows, true);
 
   // Fan a half's end ring (rail + wall) to its centroid so the pod tube is capped.
+  // With channels running out through the tail, the end is notched and a fan would web
+  // over the channels' mouths: cover exactly its outline instead (the row is one station,
+  // so it lies in a plane of constant x).
+  const channelled = boardChannels(board).length > 0;
   const capRow = (row: number[] | null, reverse: boolean): void => {
     if (!row || row.length < 3) return;
+    if (channelled) {
+      const pts = row.map((vi) => ({ x: positions[vi * 3 + 1]!, y: positions[vi * 3 + 2]! }));
+      for (const [a, b, c] of triangulatePolygon(pts)) {
+        if (reverse) indices.push(row[c]!, row[b]!, row[a]!);
+        else indices.push(row[a]!, row[b]!, row[c]!);
+      }
+      return;
+    }
     let sx = 0;
     let sy = 0;
     let sz = 0;

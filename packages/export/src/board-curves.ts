@@ -11,10 +11,15 @@
  * and these are printed at 1:1 to be cut against.
  */
 import {
+  boardChannels,
+  channelCutAt,
+  channelFullDepth,
   getLength,
   hasTailCutout,
   loftCrossSection,
+  loftSection,
   pointByTT,
+  stationRing,
   valueAt,
   type BezierBoard,
   type Spline,
@@ -139,10 +144,42 @@ export const chainSegs = (segs: readonly CurveSeg[], closed: boolean): CurveSeg[
 };
 
 /**
+ * Sample the channel-cut +x half-section at `pos` on the loft's own `stationRing` +
+ * `channelCutAt` surface, matching the 3D mesh and STL. Returns `null` when the board has
+ * no channels with depth at `pos` (callers stay on the exact smooth `loftCrossSection`).
+ */
+const channelledHalfPoints = (board: BezierBoard, pos: number, halfSteps: number): Pt[] | null => {
+  const channels = boardChannels(board);
+  if (!channels.length || !channels.some((c) => channelFullDepth(c, pos) > 0)) return null;
+  const section = loftSection(board, pos);
+  if (!section) return null;
+  const plan = stationRing(board, section, pos, Math.max(2, halfSteps));
+  const pts: Pt[] = [];
+  for (const f of plan.fs) {
+    const p = channelCutAt(board, plan, section, f, pos);
+    const prev = pts[pts.length - 1];
+    // Drop coincident points (< 1e-7 cm), while keeping distinct vertical-wall endpoints.
+    if (prev && Math.hypot(p.x - prev.x, p.y - prev.y) < 1e-7) continue;
+    pts.push({ x: p.x, y: p.y });
+  }
+  return pts.length >= 2 ? pts : null;
+};
+
+/**
  * The +x half of the cross-section at `pos` as exact bezier segments — the printable
  * half rib template, mirrored across the stringer to make {@link crossSectionBeziers}.
+ *
+ * Where bottom channels cut the station, the half-section follows `stationRing` +
+ * `channelCutAt` as linear bezier spans so sharp step walls and channel floors match the
+ * 3D mesh and STL without spline ringing.
  */
 export const crossSectionHalfBeziers = (board: BezierBoard, pos: number): CurveSeg[] | null => {
+  const cut = channelledHalfPoints(board, pos, 48);
+  if (cut) {
+    const segs: CurveSeg[] = [];
+    for (let i = 1; i < cut.length; i++) segs.push(linearSeg(cut[i - 1]!, cut[i]!));
+    return segs;
+  }
   const cs = loftCrossSection(board, pos);
   return cs ? splineSegments(cs.spline) : null;
 };
@@ -240,6 +277,8 @@ export const crossSectionHalfRing = (
   pos: number,
   ringSteps: number,
 ): Pt[] | null => {
+  const cut = channelledHalfPoints(board, pos, Math.max(24, Math.floor(ringSteps / 2)));
+  if (cut) return cut;
   const cs = loftCrossSection(board, pos);
   if (!cs) return null;
   const half: Pt[] = [];

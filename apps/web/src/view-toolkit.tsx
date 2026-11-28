@@ -18,7 +18,7 @@ import {
   type EditorOverlays,
   type SectionMarker,
 } from '@openshaper/render2d';
-import type { SplineTarget } from '@openshaper/store';
+import { channelTargets, type SplineTarget } from '@openshaper/store';
 import {
   Button,
   Checkbox,
@@ -29,7 +29,7 @@ import {
   PanelTitle,
   Select,
 } from '@openshaper/ui';
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { fmtLen, LENGTH_UNITS, type LengthUnit } from './format';
 import type { Longitudinal, MeasurementAxis } from './longitudinal';
 import { SelectedPointEditor, SelectedRefPointEditor } from './ControlPointInspector';
@@ -444,6 +444,22 @@ export function makeReadout(kind: EditorKind, units: LengthUnit, longitudinal: L
   };
 }
 
+/** The colour of applied channel walls in the outline view, as their plan lines are drawn. */
+const CHANNEL_WALL_COLOR = '#22C55E';
+
+/**
+ * The walls of the board's applied channels, as targets for the outline view: each
+ * edited there with points and handles like the outline. As a string while subscribed,
+ * so the pane only re-renders when walls are added or removed, not on every edit.
+ */
+function useChannelTargets(kind: EditorKind): SplineTarget[] {
+  const key = useSyncExternalStore(boardStore.subscribe, () => {
+    const b = boardStore.getState().board;
+    return kind === 'outline' && b ? JSON.stringify(channelTargets(b)) : '[]';
+  });
+  return useMemo(() => JSON.parse(key) as SplineTarget[], [key]);
+}
+
 /** Resolve the SplineEditor props for a single editor kind. */
 function paneProps(kind: EditorKind, csIndex: number, settings?: EditorSettings) {
   const targets: SplineTarget[] =
@@ -488,6 +504,7 @@ export function EditorPane({
   onAddSectionAt,
   onScrub,
   overlays,
+  onChannelKeyDrag,
   onTunniChange,
   ghostSplines,
   background,
@@ -519,6 +536,7 @@ export function EditorPane({
   onAddSectionAt?: (x: number) => void;
   onScrub?: (x: number | null) => void;
   overlays?: EditorOverlays;
+  onChannelKeyDrag?: React.ComponentProps<typeof SplineEditor>['onChannelKeyDrag'];
   onTunniChange?: (enabled: boolean) => void;
   ghostSplines?: Spline[];
   background?: React.ComponentProps<typeof SplineEditor>['background'];
@@ -536,7 +554,19 @@ export function EditorPane({
 }) {
   // Stable across re-renders so the editor's target set (and the SplineEditor
   // re-fit/draw effects keyed on it) only changes when the pane actually changes.
-  const p = useMemo(() => paneProps(kind, csIndex, settings), [kind, csIndex, settings]);
+  const base = useMemo(() => paneProps(kind, csIndex, settings), [kind, csIndex, settings]);
+  const walls = useChannelTargets(kind);
+  const p = useMemo(
+    () =>
+      walls.length
+        ? {
+            ...base,
+            targets: [...base.targets, ...walls],
+            colors: [...(base.colors ?? []), ...walls.map(() => CHANNEL_WALL_COLOR)],
+          }
+        : base,
+    [base, walls],
+  );
   // Only the length-wise views have anything to gain from turning the board — a
   // cross-section is already the shape of the pane it sits in. Gated on the pointer
   // rather than on width so a narrow desktop window does not suddenly rotate under
@@ -604,6 +634,7 @@ export function EditorPane({
           readout={makeReadout(kind, units, longitudinal)}
           measureCursor={kind === 'crossSection'}
           overlays={overlays}
+          onChannelKeyDrag={onChannelKeyDrag}
           onTunniChange={onTunniChange}
           ghostSplines={ghostSplines}
           background={background}

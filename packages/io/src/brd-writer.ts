@@ -1,4 +1,5 @@
 import {
+  boardChannels,
   getCenterWidth,
   getLength,
   getLengthOverCurve,
@@ -96,6 +97,9 @@ const curveGroup = (id: number, spline: Spline, guides: readonly Vec2[]): string
 /** Section reference points with no cross-section at their station: `.brd` cannot hold them. */
 export const brdUnwritableRefPoints = (b: BezierBoard, points: RefPoints): RefPoints =>
   points.filter((p) => p.plane === 'section' && refPointSectionIndex(b, p) < 0);
+
+/** Whether `b` has bottom channels, which the legacy `.brd` format cannot hold. */
+export const brdHasUnwritableChannels = (b: BezierBoard): boolean => boardChannels(b).length > 0;
 
 /** Serialize a board to a legacy `.brd` document string. */
 export const writeBrd = (

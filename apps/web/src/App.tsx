@@ -103,6 +103,7 @@ import { Sidebar, type OverlayToggles, type ResizeFields } from './Sidebar';
 import { applyViewChange, DEFAULT_SIDEBAR_STATE, type SidebarState } from './sidebar-sections';
 import sampleBrd from './sample-board.brd?raw';
 import { boardStore } from './store';
+import { useChannelEditing } from './use-channel-editing';
 import { loadRefTolerance, saveRefTolerance } from './ref-tolerance';
 import { SUPPORT_URL } from './support';
 import { BOARD_TEMPLATES } from './templates';
@@ -735,6 +736,11 @@ function AppShell() {
     [specs, foamType, glassSchedule],
   );
 
+  // Channels in the 2D views: the cut, the walls and depth as lines, and the points of
+  // applied channels to drag.
+  const channelEditing = useChannelEditing(board, activeSectionX);
+  const { onChannelKeyDrag } = channelEditing;
+
   const overlaysFor = (kind: EditorKind): EditorOverlays => {
     const longitudinal = kind === 'outline' || kind === 'rocker';
     const verticalMarkers: { x: number; color: string; label?: string }[] = [];
@@ -753,6 +759,9 @@ function AppShell() {
       fins:
         (kind === 'outline' || kind === 'rocker') && resolvedFins.length ? resolvedFins : undefined,
       finView: kind === 'rocker' ? 'profile' : 'plan',
+      channelCut: kind === 'crossSection' ? (channelEditing.sectionCut ?? undefined) : undefined,
+      channelLines: channelEditing.linesFor(kind),
+      channelKeys: channelEditing.keysFor(kind),
       referencePoints: refPointsShown ? (refPointsUnlocked ? 'unlocked' : 'locked') : undefined,
       refTolerance,
       measuredStations: longitudinal && measuredStations.length ? measuredStations : undefined,
@@ -1201,15 +1210,23 @@ function AppShell() {
       disabled: !board,
       onSelect: () => {
         if (!board) return;
-        const left = downloadBrd(board, meta, refPoints);
-        // .brd keeps a section's points inside that section, so one with no section
-        // at its station has nowhere to go: say so rather than drop it silently.
-        if (left > 0)
-          showToast(
-            `${left} reference point${left === 1 ? ' has' : 's have'} no cross-section at ` +
-              `${left === 1 ? 'its' : 'their'} station and ${left === 1 ? 'was' : 'were'} ` +
+        const dropped = downloadBrd(board, meta, refPoints);
+        // .brd cannot represent bottom channels, and keeps a section's reference points
+        // inside that section: tell the user rather than dropping either silently.
+        const notes: string[] = [];
+        if (dropped.channels) {
+          notes.push(
+            'Bottom channels are not supported in .brd files and were not saved (use .board to keep them).',
+          );
+        }
+        if (dropped.refPoints > 0) {
+          notes.push(
+            `${dropped.refPoints} reference point${dropped.refPoints === 1 ? ' has' : 's have'} no cross-section at ` +
+              `${dropped.refPoints === 1 ? 'its' : 'their'} station and ${dropped.refPoints === 1 ? 'was' : 'were'} ` +
               'not saved in the .brd file.',
           );
+        }
+        if (notes.length > 0) showToast(notes.join(' '));
         track('save_board', { format: 'brd' });
         markSave();
       },
@@ -1417,6 +1434,7 @@ function AppShell() {
     onAddSectionAt: addSectionAt,
     onScrub: scrubSection,
     overlays: overlaysFor(kind),
+    onChannelKeyDrag,
     onTunniChange: setTunniOverlay,
     ghostSplines: ghostSplinesFor(kind),
     ...(kind === 'crossSection' ? {} : traceProps(kind)),

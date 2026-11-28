@@ -65,7 +65,9 @@ import {
   arcLengthTable,
   pointAtArcFraction,
   splineFromKnots,
+  valueAt,
   type ArcTable,
+  type Spline,
 } from './bezier-spline';
 import {
   getLength,
@@ -73,8 +75,13 @@ import {
   getRockerAtPos,
   getThicknessAtPos,
   getWidthAtPos,
+  widthBoundsAt,
   type BezierBoard,
 } from './board';
+import { hasTailCutout } from './outline-cutout';
+import { boardChannels } from './channel-layout';
+import type { ChannelKeyPart } from './channel-apply';
+import { channelAnchors, channelDepthAt, channelFullDepth, splineSpan } from './channels';
 import { crossSection, scaleCrossSection, type CrossSection } from './cross-section';
 import { knot } from './knot';
 import { vec2, type Vec2 } from './vec2';
@@ -93,7 +100,7 @@ export interface Vert3 {
  * weighted sum of their points needs no further correction. The weights sum to 1.
  */
 export interface LoftedSection {
-  /** One to four station profiles (arc-length tables) and their weights. */
+  /** One to three station profiles (arc-length tables) and their weights. */
   readonly parts: readonly { readonly table: ArcTable; readonly w: number }[];
   /** Height of the bottom centreline at this station. */
   readonly rocker: number;
@@ -115,7 +122,26 @@ export const MIN_DIM = 0.5;
 
 /**
  * Station weights along the board: a cardinal (Catmull–Rom) spline through the real
- * stations, its swing halved ({@link STATION_TENSION}). See docs/design/smooth-station-loft.md.
+ * stations, its swing halved ({@link STATION_TENSION}).
+ *
+ * The surface passes through every station exactly and flows through it with no corner:
+ * each stretch between two stations is a cubic in the stations around it, its rate of
+ * change at a station the same from both sides. Straight blends between stations turned
+ * a corner at each one; easing that corner while still meeting the station made the
+ * surface curve the wrong way for a few centimetres either side, a shallow dip at every
+ * station (owner report, 2026-11).
+ *
+ * Local: a stretch reads only its two stations and one either side, so editing a
+ * station reshapes only the stretches touching it and the next. Inserting a station on
+ * the existing shape moves the surface near it slightly (well under a millimetre on
+ * the golden boards), where a straight blend moved nothing. A clamped cubic spline
+ * through all the stations, smoother still, moved it up to 4 mm and the hull by 1.3 %
+ * of its volume, and was not taken.
+ *
+ * At the first and last real station the rate of change is 0, so the spline joins the
+ * profile held beyond them with no corner. Weights sum to 1; between stations some are
+ * a little negative, which is what lets the surface curve through a station rather than
+ * turn at it.
  */
 export const STATION_TENSION = 0.5;
 
@@ -351,8 +377,9 @@ export const ringFractions = (b: BezierBoard, n: number): readonly number[] => {
 const uniformLadder = (count: number): number[] =>
   Array.from({ length: count }, (_, i) => i / (count - 1));
 
-const buildLadder = (b: BezierBoard, count: number): readonly number[] => {
-  if (CURVATURE_BIAS <= 0) return uniformLadder(count);
+/** The ladder's point density at each of `LADDER_SAMPLES + 1` arc stops, or null for uniform. */
+const ladderDensity = (b: BezierBoard): number[] | null => {
+  if (CURVATURE_BIAS <= 0) return null;
 
   // Interior stations only — index 0 and the last are the degenerate nose/tail
   // dummies, whose collapsed profiles would report meaningless curvature.
@@ -365,11 +392,11 @@ const buildLadder = (b: BezierBoard, count: number): readonly number[] => {
     for (let i = 0; i < monitor.length; i++) monitor[i] = Math.max(monitor[i]!, kl[i]!);
     any = true;
   }
-  if (!any) return uniformLadder(count);
+  if (!any) return null;
 
   // Box-smooth, so one sample's curvature spike can't claim a disproportionate
   // share of the points, then turn it into a density.
-  const density = monitor.map((_, i) => {
+  return monitor.map((_, i) => {
     let sum = 0;
     let seen = 0;
     for (let j = i - LADDER_SMOOTH; j <= i + LADDER_SMOOTH; j++) {
@@ -380,6 +407,11 @@ const buildLadder = (b: BezierBoard, count: number): readonly number[] => {
     }
     return 1 + CURVATURE_BIAS * Math.sqrt(Math.max(0, sum / Math.max(1, seen)));
   });
+};
+
+const buildLadder = (b: BezierBoard, count: number): readonly number[] => {
+  const density = ladderDensity(b);
+  if (!density) return uniformLadder(count);
 
   // Cumulative density, normalised: cum[i] is the share of the points that
   // should have been used by arc fraction i / LADDER_SAMPLES.
@@ -409,7 +441,566 @@ const buildLadder = (b: BezierBoard, count: number): readonly number[] => {
 };
 
 /**
- * A full closed cross-section ring at station `x`, as `2 * ringHalf - 2` points.
+ * The ladder as a measure: `m(f)`, the share of a plain ring's points up to profile
+ * fraction `f`, and its inverse `f(m)`. Its density is the ladder's, taken linear
+ * between the sample stops, so both are smooth (C¹) and one undoes the other exactly.
+ * Moving points by a share of this measure, rather than by profile fraction, keeps
+ * them as dense as the ladder put them: packed where the profile curves hard.
+ */
+interface LadderMeasure {
+  readonly m: (f: number) => number;
+  readonly f: (m: number) => number;
+}
+
+const IDENTITY_MEASURE: LadderMeasure = { m: (f) => f, f: (m) => m };
+const MEASURE_CACHE = new WeakMap<BezierBoard, LadderMeasure>();
+
+const ladderMeasure = (b: BezierBoard): LadderMeasure => {
+  const hit = MEASURE_CACHE.get(b);
+  if (hit) return hit;
+  const rho = ladderDensity(b);
+  let out = IDENTITY_MEASURE;
+  if (rho) {
+    const n = rho.length - 1;
+    const cum = [0];
+    for (let i = 1; i <= n; i++) cum.push(cum[i - 1]! + (rho[i - 1]! + rho[i]!) / 2);
+    const total = cum[n]!;
+    if (total > 0) {
+      out = {
+        m: (f) => {
+          const u = Math.min(n, Math.max(0, f * n));
+          const i = Math.min(n - 1, Math.floor(u));
+          const t = u - i;
+          const r0 = rho[i]!;
+          const r1 = rho[i + 1]!;
+          return (cum[i]! + r0 * t + ((r1 - r0) * t * t) / 2) / total;
+        },
+        f: (m) => {
+          const c = Math.min(1, Math.max(0, m)) * total;
+          let i = 0;
+          let hi = n - 1;
+          while (i < hi) {
+            const mid = (i + hi + 1) >> 1;
+            if (cum[mid]! <= c) i = mid;
+            else hi = mid - 1;
+          }
+          const r0 = rho[i]!;
+          const r1 = rho[i + 1]!;
+          const d = c - cum[i]!;
+          // r0·t + (r1 − r0)·t²/2 = d, in the form that stays exact as r1 → r0.
+          const t = (2 * d) / (r0 + Math.sqrt(Math.max(0, r0 * r0 + 2 * (r1 - r0) * d)));
+          return Math.min(1, Math.max(0, (i + Math.min(1, Math.max(0, t))) / n));
+        },
+      };
+    }
+  }
+  MEASURE_CACHE.set(b, out);
+  return out;
+};
+
+// --- channels: points on the walls, the bottom lifted ---------------------------
+
+/** Distance from the stringer for a profile point's distance from the centreline. */
+export type LateralMap = (px: number) => number;
+const IDENTITY: LateralMap = (px) => px;
+
+/** Samples used to find where a station's bottom ends. */
+const BOTTOM_END_SAMPLES = 64;
+
+/**
+ * Where the station's bottom ends, as a fraction of its profile: the widest point,
+ * the rail's apex. Points before it are bottom, which channels cut; after it, deck.
+ */
+export const bottomEnd = (s: LoftedSection): number => {
+  let best = 0;
+  let widest = -Infinity;
+  for (let i = 0; i <= BOTTOM_END_SAMPLES; i++) {
+    const f = i / BOTTOM_END_SAMPLES;
+    const x = loftPoint(s, f).x;
+    if (x > widest) {
+      widest = x;
+      best = f;
+    }
+  }
+  // Then exactly, between the samples either side (golden section): a step of the
+  // sampling would move where the cut ends, and the mesh's points near it would jump
+  // from station to station (owner report: rail scalloping, 2026-11).
+  const h = 1 / BOTTOM_END_SAMPLES;
+  let lo = Math.max(0, best - h);
+  let hi = Math.min(1, best + h);
+  const g = (Math.sqrt(5) - 1) / 2;
+  const at = (f: number) => loftPoint(s, f).x;
+  let c = hi - g * (hi - lo);
+  let d = lo + g * (hi - lo);
+  let fc = at(c);
+  let fd = at(d);
+  for (let i = 0; i < BOTTOM_END_REFINE; i++) {
+    if (fc >= fd) {
+      hi = d;
+      d = c;
+      fd = fc;
+      c = hi - g * (hi - lo);
+      fc = at(c);
+    } else {
+      lo = c;
+      c = d;
+      fc = fd;
+      d = lo + g * (hi - lo);
+      fd = at(d);
+    }
+  }
+  return (lo + hi) / 2;
+};
+
+/** Golden-section steps refining where the bottom ends: (0.618)^40 of a sample, far under a micron. */
+const BOTTOM_END_REFINE = 40;
+
+/** Bisection steps finding a wall on a station: 2^-40 of the profile, far under a micron. */
+const WALL_STEPS = 40;
+
+/** The fraction on the bottom (0 to `end`) where the profile is `y` out from the stringer. */
+const bottomFractionAt = (s: LoftedSection, y: number, end: number, map: LateralMap): number => {
+  const at = (f: number) => map(loftPoint(s, f).x);
+  if (at(0) >= y) return 0;
+  if (at(end) <= y) return end;
+  let lo = 0;
+  let hi = end;
+  for (let i = 0; i < WALL_STEPS; i++) {
+    const m = (lo + hi) / 2;
+    if (at(m) < y) lo = m;
+    else hi = m;
+  }
+  return (lo + hi) / 2;
+};
+
+/** The share of a station's bottom anchors may use; the rest is left for the rail. */
+const ANCHOR_REACH = 0.95;
+
+/** How far inside a hard rail's edge (cm) the channel anchors reach at most. */
+const RAIL_EDGE_GAP = 0.05;
+
+/** How much of the bottom, at most, just inside its reach takes the anchors that run past it (cm): narrow, so a wall that fits close to the rail keeps its place. */
+const SQUEEZE_BAND = 0.25;
+
+/**
+ * Where an anchor `y` out from the stringer goes on a bottom `reach` wide, the widest
+ * anchor being `widest`. Strictly increasing in `y` and continuous in all three, so the
+ * anchors keep their order, never meet, and move smoothly along the board.
+ *
+ * - Where they all fit, nothing moves.
+ * - Where some run past the reach (a channel designed off the bottom near the tail), the
+ *   anchors inside the last {@link SQUEEZE_BAND} before it, and those past it, are
+ *   squeezed smoothly into that band; every wall short of it stays exactly where it is.
+ * - Where they run far past it (toward a pointed tail, where walls are held past the
+ *   channel's end), squeezing would crowd them to nothing, so they are scaled in
+ *   together instead, blending over from the squeeze as `widest` passes twice the reach.
+ */
+const ontoBottom = (y: number, reach: number, widest: number): number => {
+  if (!(reach > 0)) return 0;
+  const band = Math.min(SQUEEZE_BAND, reach / 4);
+  const knee = reach - band;
+  const squeezed = y <= knee ? y : knee + band * (1 - Math.exp(-(y - knee) / band));
+  const w = Math.min(1, Math.max(0, widest / reach - 2));
+  if (w === 0) return squeezed;
+  const scaled = widest > reach ? (y * reach) / widest : y;
+  return (1 - w) * squeezed + w * scaled;
+};
+
+/**
+ * The channel anchors at station `x` as fractions of its profile, never decreasing.
+ *
+ * Where they don't fit on this station's bottom (a channel designed off the bottom
+ * near the tail; toward a pointed tail, where the walls are held past the channel's
+ * end; in a swallow's notch, where the bottom starts off the stringer), they are moved
+ * onto it: shifted out to where the bottom starts, and those past {@link ANCHOR_REACH}
+ * of it brought inside ({@link ontoBottom}). Clamping them instead would pile them onto
+ * one point, which a mesh welds into edges shared by four faces. Every wall that fits
+ * keeps its exact place, so only a channel that runs off the bottom (a design problem,
+ * `channelProblems`) loses its edge, and its neighbours don't.
+ */
+const anchorFractions = (
+  b: BezierBoard,
+  s: LoftedSection,
+  x: number,
+  end: number,
+  map: LateralMap,
+): number[] => {
+  const ys = channelAnchors(boardChannels(b), x);
+  const start = map(loftPoint(s, 0).x);
+  // Most of the way to the rail's widest point; on a hard rail, right up to its edge,
+  // where the bottom really ends, so a wall that fits there keeps its place.
+  const reach = Math.max(
+    (map(loftPoint(s, end).x) - start) * ANCHOR_REACH,
+    map(loftPoint(s, railStart(s, end)).x) - start - RAIL_EDGE_GAP,
+  );
+  const widest = ys.length ? ys[ys.length - 1]! : 0;
+  const out = ys.map((y) => bottomFractionAt(s, start + ontoBottom(y, reach, widest), end, map));
+  for (let i = 1; i < out.length; i++) out[i] = Math.max(out[i]!, out[i - 1]!);
+  return out;
+};
+
+/**
+ * A board's ring with channels: the ladder and the anchors in one fixed order, each
+ * entry placed between two of the knots `0, anchor 1, …, anchor k, 1` (interval `k`,
+ * share `t` along it). A station moves the anchors; every other point keeps its share
+ * of the interval it is in, so every ring has the same points in the same order, and
+ * anchor j is point `index[j]` everywhere: a wall is one unbroken edge of the mesh.
+ */
+interface RingPlan {
+  readonly k: readonly number[];
+  readonly t: readonly number[];
+  /** The last anchor at the reference station, or null without anchors. */
+  readonly lastRef: number | null;
+  /** Where the rail starts at the reference station ({@link railStart}). */
+  readonly railRef: number;
+}
+
+/** The least span (profile fraction) past the last anchor over which the rail's points are eased back to their own places. */
+const RAIL_EASE = 0.1;
+
+/**
+ * Where a ring point past the last anchor goes: `fRef` is its own place on the board's
+ * ladder (where it is at the reference station, and on a board without channels), `a`
+ * the last anchor here and `aRef` there.
+ *
+ * Stretching the whole span from the last anchor to the deck centreline with it (as
+ * every other span is) slid the rail's points, which the ladder packs where the rail
+ * curves tightest, off that curve wherever the anchor sits elsewhere than at the
+ * reference: near a tail that faceted the rail by up to 0.4 mm (owner report, 2026-11).
+ * So only the points near the anchor move with it, easing back to their own places by
+ * `D` past it, and the rail and deck are sampled exactly as without channels. Strictly
+ * increasing in `fRef` and continuous in `a`; where the anchor has moved too far for
+ * that (a pointed tail), it blends over to the plain stretch.
+ *
+ * All of it in the ladder's measure (`lm`), not in profile fraction. A wall swept far
+ * across the bottom (from near the rail at the tail to near the stringer up the board)
+ * moves the anchor a long way, and eased by fraction the points it pushed toward the
+ * rail came out evenly spaced, thinned over a hard rail edge the ladder had packed:
+ * each slid over the edge at a different station, which the mesh showed as a serrated
+ * rail (owner report: rail scalloping, 2026-11). Moved by counts of points instead,
+ * they keep the ladder's packing wherever they go.
+ */
+const pastLastAnchor = (
+  fRef: number,
+  a: number,
+  aRef: number,
+  lm: LadderMeasure = IDENTITY_MEASURE,
+  e?: number,
+  eRef?: number,
+): number => {
+  // In the ladder's measure (see LadderMeasure): points move by counts of points, not
+  // by distance, so wherever the ladder packed them (a hard rail edge) they stay
+  // packed, however far the anchor has moved.
+  const mRef = lm.m(fRef);
+  const mA = lm.m(a);
+  const mARef = lm.m(aRef);
+  // With the rail's start known on both stations, it is a fixed boundary: the bottom's
+  // points stay on the bottom, between the last wall and the rail, and the rail's on
+  // the rail, tracking where it starts and easing back to their own places up it. A
+  // point never crosses a hard edge, however fast the wall moves (owner report: rail
+  // cuts wrapping onto the deck, 2026-11).
+  if (e !== undefined && eRef !== undefined && e > a && eRef > aRef) {
+    const mE = lm.m(e);
+    const mERef = lm.m(eRef);
+    if (mRef <= mERef) {
+      return lm.f(mA + ((mRef - mARef) * (mE - mA)) / (mERef - mARef || 1));
+    }
+    const delta = mE - mERef;
+    const rest = 1 - mERef;
+    if (!(rest > 0)) return lm.f(mRef);
+    const span = Math.min(rest, Math.max(RAIL_EASE, 2 * Math.abs(delta)));
+    if (1.5 * Math.abs(delta) >= span) {
+      return lm.f(mE + ((mRef - mERef) * (1 - mE)) / rest);
+    }
+    const v = Math.min(1, (mRef - mERef) / span);
+    return lm.f(mRef + delta * (1 - v * v * (3 - 2 * v)));
+  }
+  const shift = mA - mARef;
+  const span = 1 - mARef;
+  const stretched = mA + ((mRef - mARef) * (1 - mA)) / (span || 1);
+  if (!(span > 0)) return lm.f(stretched);
+  const D = Math.min(span, Math.max(RAIL_EASE, 2 * Math.abs(shift)));
+  const u = Math.min(1, Math.max(0, (mRef - mARef) / D));
+  const eased = mRef + shift * (1 - u * u * (3 - 2 * u));
+  // Its slope is at least 1 - 1.5 |shift| / D: blend to the stretch before that nears 0.
+  const steep = (1.5 * Math.abs(shift)) / D;
+  const lambda = Math.min(1, Math.max(0, (steep - 0.5) / 0.5));
+  return lm.f((1 - lambda) * eased + lambda * stretched);
+};
+
+const PLAN_CACHE = new WeakMap<BezierBoard, Map<number, RingPlan | null>>();
+
+/** Where the plan takes its reference anchors: the middle of the first channel. */
+const referenceX = (b: BezierBoard): number => {
+  const [a, c] = splineSpan(boardChannels(b)[0]!.depth);
+  return Math.min(getLength(b), Math.max(0, (a + c) / 2));
+};
+
+const buildPlan = (
+  b: BezierBoard,
+  half: number,
+  mapAt: (x: number) => LateralMap,
+): RingPlan | null => {
+  const x = referenceX(b);
+  const s = loftSection(b, x);
+  if (!s) return null;
+  const refEnd = bottomEnd(s);
+  const ref = anchorFractions(b, s, x, refEnd, mapAt(x));
+  const knots = [0, ...ref, 1];
+  const entries: { f: number; k: number; t: number }[] = [];
+  for (const f of ringFractions(b, half)) {
+    if (f <= 0) entries.push({ f, k: 0, t: 0 });
+    else if (f >= 1) entries.push({ f, k: knots.length - 2, t: 1 });
+    else {
+      let k = 0;
+      while (k + 2 < knots.length && knots[k + 1]! <= f) k++;
+      const lo = knots[k]!;
+      const hi = knots[k + 1]!;
+      entries.push({ f, k, t: hi > lo ? (f - lo) / (hi - lo) : 0 });
+    }
+  }
+  ref.forEach((f, j) => entries.push({ f, k: j + 1, t: 0 }));
+  // Stable: a ladder point and an anchor at the same place keep this order everywhere.
+  entries.sort((p, q) => p.f - q.f || p.k - q.k || p.t - q.t);
+  return {
+    k: entries.map((e) => e.k),
+    t: entries.map((e) => e.t),
+    lastRef: ref.length ? ref[ref.length - 1]! : null,
+    railRef: railStart(s, refEnd),
+  };
+};
+
+/** A station's ring: fractions along its profile, and where its bottom ends. */
+export interface StationRing {
+  readonly fs: readonly number[];
+  /** Points before this fraction are on the bottom; channels lift them. */
+  readonly bottomEnd: number;
+  /**
+   * Where the bottom turns into the rail ({@link railStart}): a channel that runs out
+   * through the rail cuts it off at its floor from here.
+   */
+  readonly railFrom: number;
+  /**
+   * Where the profile past `railFrom` first rises back above the channel's floor: the
+   * points between are cut away, and spread along the floor ({@link channelCutAt}).
+   * Equal to `railFrom` where no channel reaches the rail.
+   */
+  readonly cutTo: number;
+}
+
+/**
+ * The ring fractions for station `x` of a board: {@link ringFractions} on a board
+ * without channels (the same array, so such a board's mesh is unchanged to the bit),
+ * and with channels the same ladder bent so a point lands exactly on every wall
+ * ({@link RingPlan}). `mapAt(x)` turns a profile's distance from the centreline into
+ * distance from the stringer, where a swallow tail's notch moves the profile out.
+ */
+export const stationRing = (
+  b: BezierBoard,
+  s: LoftedSection,
+  x: number,
+  half: number,
+  mapAt: (x: number) => LateralMap = () => IDENTITY,
+): StationRing => {
+  if (boardChannels(b).length === 0) return { fs: ringFractions(b, half), bottomEnd: 0, railFrom: 0, cutTo: 0 }; // prettier-ignore
+  let plans = PLAN_CACHE.get(b);
+  if (!plans) {
+    plans = new Map();
+    PLAN_CACHE.set(b, plans);
+  }
+  if (!plans.has(half)) plans.set(half, buildPlan(b, half, mapAt));
+  const plan = plans.get(half);
+  const end = bottomEnd(s);
+  const railFrom = railStart(s, end);
+  const cutTo = railCutEnd(b, s, x, railFrom, mapAt(x));
+  if (!plan) return { fs: ringFractions(b, half), bottomEnd: end, railFrom, cutTo };
+  const knots = [0, ...anchorFractions(b, s, x, end, mapAt(x)), 1];
+  const last = knots.length - 2;
+  const { lastRef } = plan;
+  const fs = plan.k.map((k, i) => {
+    const lo = knots[k]!;
+    const t = plan.t[i]!;
+    if (k === last && lastRef !== null && t > 0 && t < 1) {
+      const fRef = lastRef + (1 - lastRef) * t;
+      return pastLastAnchor(fRef, lo, lastRef, ladderMeasure(b), railFrom, plan.railRef);
+    }
+    return lo + (knots[k + 1]! - lo) * t;
+  });
+  return { fs, bottomEnd: end, railFrom, cutTo };
+};
+
+/** The channel floor's height at profile point `f` of `s`, cut from where the rail starts. */
+const floorAt = (
+  b: BezierBoard,
+  s: LoftedSection,
+  x: number,
+  railFrom: number,
+  px: number,
+  map: LateralMap,
+) =>
+  // prettier-ignore
+  loftPoint(s, railFrom).y + channelDepthAt(boardChannels(b), x, map(px));
+
+/**
+ * Where the profile past `railFrom` first rises back above the channel's floor: on the
+ * rail's lower side, or, where the floor is above its widest point, on its upper side.
+ * Sampled, then found by bisection, so it moves smoothly along the board.
+ */
+const railCutEnd = (
+  b: BezierBoard,
+  s: LoftedSection,
+  x: number,
+  railFrom: number,
+  map: LateralMap,
+): number => {
+  // prettier-ignore
+  const above = (f: number) => {
+    const p = loftPoint(s, f);
+    return p.y >= floorAt(b, s, x, railFrom, p.x, map);
+  };
+  if (above(railFrom)) return railFrom;
+  let lo = railFrom;
+  let hi = 1;
+  const n = RAIL_START_SAMPLES;
+  for (let i = 1; i <= n; i++) {
+    const f = railFrom + ((1 - railFrom) * i) / n;
+    if (above(f)) {
+      hi = f;
+      break;
+    }
+    lo = f;
+  }
+  for (let i = 0; i < RAIL_START_STEPS; i++) {
+    const m = (lo + hi) / 2;
+    if (above(m)) hi = m;
+    else lo = m;
+  }
+  return (lo + hi) / 2;
+};
+
+/** Samples, then bisection steps, finding where the bottom turns into the rail. */
+const RAIL_START_SAMPLES = 64;
+const RAIL_START_STEPS = 40;
+
+/**
+ * Where a station's bottom turns into its rail, as a fraction of its profile: the first
+ * point out from the stringer where the profile is steeper than 45°, or `end` (the
+ * rail's widest point) if it never is. On a hard rail that is the edge itself. Found
+ * by bisection, so it moves smoothly along the board.
+ */
+export const railStart = (s: LoftedSection, end: number): number => {
+  const h = 1e-5;
+  const steep = (f: number) => {
+    const a = loftPoint(s, Math.max(0, f - h));
+    const c = loftPoint(s, Math.min(end, f + h));
+    return Math.abs(c.y - a.y) > Math.abs(c.x - a.x);
+  };
+  let lo = 0;
+  let hi = -1;
+  for (let i = 1; i <= RAIL_START_SAMPLES; i++) {
+    const f = (end * i) / RAIL_START_SAMPLES;
+    if (steep(f)) {
+      hi = f;
+      break;
+    }
+    lo = f;
+  }
+  if (hi < 0) return end;
+  for (let i = 0; i < RAIL_START_STEPS; i++) {
+    const m = (lo + hi) / 2;
+    if (steep(m)) hi = m;
+    else lo = m;
+  }
+  return (lo + hi) / 2;
+};
+
+/**
+ * The hull's surface point at fraction `f` of station `x`, with the board's channels
+ * cut: as (x = distance from the centreline, y = height above the rocker) in the frame
+ * of section `s`, like {@link loftPoint}. `map` turns the profile's x into distance
+ * from the stringer.
+ *
+ * The channels take away everything below their cut. On the bottom, up to where it
+ * turns into the rail (`ring.railFrom`), a point is lifted by the channel's depth
+ * there. Where a channel runs out through the rail, the rail is cut off at the
+ * channel's floor: the points up to where the profile rises back above it
+ * (`ring.cutTo`, on the rail's lower side or past its widest point) are cut away, and
+ * spread evenly along the floor from where the rail started to there, in order, so the
+ * surface neither folds nor stacks points on top of each other. (Lifting the rail's
+ * points by the depth folded the cut rail up over the uncut part: ragged flaps in a
+ * print, owner report 2026-11.) Past that, and wherever no channel is, unchanged.
+ */
+export const channelCutAt = (
+  b: BezierBoard,
+  ring: StationRing,
+  s: LoftedSection,
+  f: number,
+  x: number,
+  map: LateralMap = IDENTITY,
+): Vec2 => {
+  const p = loftPoint(s, f);
+  if (f < ring.railFrom) {
+    const d = channelDepthAt(boardChannels(b), x, map(p.x));
+    return d > 0 ? vec2(p.x, p.y + d) : p;
+  }
+  if (!(f < ring.cutTo)) return p;
+  const a = loftPoint(s, ring.railFrom);
+  const z = loftPoint(s, ring.cutTo);
+  const t = (f - ring.railFrom) / (ring.cutTo - ring.railFrom);
+  const px = a.x + (z.x - a.x) * t;
+  return vec2(px, floorAt(b, s, x, ring.railFrom, px, map));
+};
+
+/** Signed polygon area of a half-section curve (bottom centreline → rail → deck centreline). */
+const halfSectionArea = (pts: readonly Vec2[]): number => {
+  let sum = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return sum / 2;
+};
+
+/**
+ * Cross-sectional area removed by the board's bottom channels at station `x` (cm², both
+ * sides of the stringer). Computed from the same {@link stationRing} + {@link channelCutAt}
+ * surface that builds the 3D mesh, STL, DXF and 1:1 PDF, so volume, center of mass and
+ * specs describe the same solid as the exports. Zero where no channel has depth.
+ */
+export const channelCutAreaAt = (b: BezierBoard, x: number): number => {
+  if (!b.channels) return 0;
+  const channels = boardChannels(b);
+  if (!channels.length || !channels.some((c) => channelFullDepth(c, x) > 0)) return 0;
+  const s = loftSection(b, x);
+  if (!s) return 0;
+  const cutout = hasTailCutout(b.outline);
+  const mapAt = cutout
+    ? (pxX: number): LateralMap => {
+        const { yIn, yOut } = widthBoundsAt(b, pxX);
+        const scale = yOut > 1e-6 ? (yOut - yIn) / yOut : 1;
+        return (px) => yIn + px * scale;
+      }
+    : () => IDENTITY;
+  const plan = stationRing(b, s, x, 24, mapAt);
+  const map = mapAt(x);
+  const uncut: Vec2[] = [];
+  const cut: Vec2[] = [];
+  for (const f of plan.fs) {
+    uncut.push(loftPoint(s, f));
+    cut.push(channelCutAt(b, plan, s, f, x, map));
+  }
+  const delta = halfSectionArea(uncut) - halfSectionArea(cut);
+  if (!(delta > 0)) return 0;
+  if (!cutout) return delta * 2;
+  const { yIn, yOut } = widthBoundsAt(b, x);
+  const factor = yOut > 1e-6 ? Math.max(0, (yOut - yIn) / yOut) : 1;
+  return delta * 2 * factor;
+};
+
+/**
+ * A full closed cross-section ring at station `x`, as `2 * ringHalf - 2` points (more
+ * with channels: see {@link stationRing}).
  *
  * Walks the +Y rail from the bottom centreline up to the deck centreline, then
  * mirrors the sweep back down the -Y rail, skipping the two shared centreline
@@ -421,11 +1012,13 @@ export const loftRing = (b: BezierBoard, x: number, ringSteps: number): Vert3[] 
   if (!section) return null;
 
   const half = ringHalf(ringSteps);
-  const fs = ringFractions(b, half);
+  const plan = stationRing(b, section, x, half);
+  const fs = plan.fs;
+  const cut = boardChannels(b).length > 0;
   const ring: Vert3[] = [];
 
   const push = (f: number, mirror: boolean): boolean => {
-    const p = loftPoint(section, f);
+    const p = cut ? channelCutAt(b, plan, section, f, x) : loftPoint(section, f);
     const vy = mirror ? -p.x : p.x;
     const vz = p.y + section.rocker;
     if (!isFinite3(x, vy, vz)) return false;
@@ -433,11 +1026,119 @@ export const loftRing = (b: BezierBoard, x: number, ringSteps: number): Vert3[] 
     return true;
   };
 
-  for (let i = 0; i < half; i++) if (!push(fs[i]!, false)) return null;
-  for (let i = half - 2; i >= 1; i--) if (!push(fs[i]!, true)) return null;
+  const n = fs.length;
+  for (let i = 0; i < n; i++) if (!push(fs[i]!, false)) return null;
+  for (let i = n - 2; i >= 1; i--) if (!push(fs[i]!, true)) return null;
 
   if (ring.length < 3) return null;
   return ring;
+};
+
+/** Samples across a station's bottom when drawing its channel cut. */
+const CUT_SAMPLES = 160;
+
+/** A station's channel cut, for drawing on its cross-section (one side, +y). */
+export interface ChannelCut {
+  /** The cut bottom from the stringer to the rail, as (out from the centreline, height above the bottom). */
+  readonly curve: readonly Vec2[];
+  /** The points the mesh puts on the channels: on the walls, round corners and over the floors. */
+  readonly points: readonly Vec2[];
+}
+
+/**
+ * The board's channels cut into the station at `x`: the cut bottom and the points on
+ * it, in the frame of its cross-section (as `loftPoint`). Null where there are no
+ * channels with depth at `x`.
+ */
+export const channelCut = (b: BezierBoard, x: number): ChannelCut | null => {
+  const channels = boardChannels(b);
+  if (!channels.length || !channels.some((c) => channelFullDepth(c, x) > 0)) return null;
+  const s = loftSection(b, x);
+  if (!s) return null;
+  const end = bottomEnd(s);
+  const lifted = (f: number): Vec2 => {
+    const p = loftPoint(s, f);
+    return vec2(p.x, p.y + channelDepthAt(channels, x, p.x));
+  };
+  const anchors = anchorFractions(b, s, x, end, IDENTITY);
+  const fs = [...anchors];
+  for (let i = 0; i <= CUT_SAMPLES; i++) fs.push((end * i) / CUT_SAMPLES);
+  fs.sort((p, q) => p - q);
+  // The two points either side of a vertical wall are at the same fraction to within a
+  // micron: keep both, in order of depth, so the wall draws as a wall.
+  const curve = fs.map(lifted);
+  return { curve, points: anchors.map(lifted) };
+};
+
+/** A point on an applied channel at a station, to drag in the cross-section view. */
+export interface ChannelKey {
+  /** Stable within a station: `o1`, `i0`, `d2`. */
+  readonly id: string;
+  /** Which channel (index into `boardChannels`). */
+  readonly k: number;
+  readonly part: ChannelKeyPart;
+  /** The next channel, whose inner wall is this outer one: it moves too. */
+  readonly joined?: number;
+  /** The wall's distance from the stringer, or the depth (cm). */
+  readonly value: number;
+  /** Where it is drawn, in the cross-section's frame (as `loftPoint`). */
+  readonly p: Vec2;
+}
+
+/** How far in from a step's wall its depth key sits, past the lip (cm). */
+const DEPTH_KEY_INSET = 0.05;
+
+/**
+ * The points of drawn channels at station `x`, one on each wall where it meets the
+ * bottom and one where each channel is deepest, for dragging in the cross-section view.
+ * Empty for typed-in channels (apply them first) and where no channel runs.
+ */
+export const channelKeys = (b: BezierBoard, x: number): ChannelKey[] => {
+  if (b.channels?.from !== 'drawn') return [];
+  const channels = boardChannels(b);
+  const s = loftSection(b, x);
+  if (!s) return [];
+  const end = bottomEnd(s);
+  const bottomAt = (y: number) => loftPoint(s, bottomFractionAt(s, y, end, IDENTITY)).y;
+  const out: ChannelKey[] = [];
+  const wallAt = (w: Spline) => Math.max(0, valueAt(w, x));
+  channels.forEach((c, k) => {
+    const [a, z] = splineSpan(c.outer);
+    if (!(x > a && x < z)) return;
+    const yo = wallAt(c.outer);
+    const yi = c.inner ? Math.min(yo, wallAt(c.inner)) : null;
+    const prev = channels[k - 1];
+    const sharedWithPrev =
+      yi !== null && prev && Math.abs(wallAt(prev.outer) - yi) < 1e-6 && x > splineSpan(prev.outer)[0] && x < splineSpan(prev.outer)[1]; // prettier-ignore
+    if (yi !== null && !sharedWithPrev) {
+      out.push({ id: `i${k}`, k, part: 'inner', value: yi, p: vec2(yi, bottomAt(yi)) });
+    }
+    const next = channels[k + 1];
+    const joined = next?.inner && Math.abs(wallAt(next.inner) - yo) < 1e-6 ? k + 1 : undefined;
+    out.push({
+      id: `o${k}`,
+      k,
+      part: 'outer',
+      ...(joined !== undefined ? { joined } : {}),
+      value: yo,
+      p: vec2(yo, bottomAt(yo)),
+    });
+    const lo = yi ?? 0;
+    const yd =
+      c.wall.shape === 'step'
+        ? Math.max(lo, yo - c.wall.lip - DEPTH_KEY_INSET)
+        : yi === null
+          ? 0
+          : (lo + yo) / 2;
+    out.push({
+      id: `d${k}`,
+      k,
+      part: 'depth',
+      value: channelFullDepth(c, x),
+      p: vec2(yd, bottomAt(yd) + channelDepthAt(channels, x, yd)),
+    });
+  });
+  return out;
 };
 
 // --- the same surface, as a curve ----------------------------------------------

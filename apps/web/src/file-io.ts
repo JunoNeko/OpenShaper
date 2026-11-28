@@ -32,6 +32,7 @@ import {
   readBoardJson,
   writeBoardJson,
   writeBrd,
+  brdHasUnwritableChannels,
   brdUnwritableRefPoints,
 } from '@openshaper/io';
 import type { ImportWarning } from '@openshaper/io';
@@ -134,12 +135,24 @@ export function downloadBoard(board: BezierBoard, meta?: BoardMeta, refPoints?: 
   recordRecentBoard(meta?.model?.trim() || stem, boardJson);
 }
 
+/** Parts of a board the legacy `.brd` format cannot hold and therefore drops on save. */
+export interface BrdSaveDropped {
+  /** Section reference points with no cross-section at their station. */
+  readonly refPoints: number;
+  /** True when the board has bottom channels (`.brd` has no channel representation). */
+  readonly channels: boolean;
+}
+
 /**
  * Trigger a download of the board in the legacy BoardCAD-LE `.brd` text format, with
- * its reference points as guide points. Returns how many reference points the format
- * could not hold (section points with no cross-section at their station).
+ * its reference points as guide points. Reports what the format could not hold so the
+ * caller can warn the user instead of silently dropping data.
  */
-export function downloadBrd(board: BezierBoard, meta?: BoardMeta, refPoints?: RefPoints): number {
+export function downloadBrd(
+  board: BezierBoard,
+  meta?: BoardMeta,
+  refPoints?: RefPoints,
+): BrdSaveDropped {
   const text = writeBrd(
     board,
     {
@@ -158,7 +171,10 @@ export function downloadBrd(board: BezierBoard, meta?: BoardMeta, refPoints?: Re
     `${slugifyName(meta?.model)}.brd`,
     'application/octet-stream',
   );
-  return refPoints ? brdUnwritableRefPoints(board, refPoints).length : 0;
+  return {
+    refPoints: refPoints ? brdUnwritableRefPoints(board, refPoints).length : 0,
+    channels: brdHasUnwritableChannels(board),
+  };
 }
 
 /** A board opened from a file, with what came with it. */
