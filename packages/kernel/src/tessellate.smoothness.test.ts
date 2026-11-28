@@ -18,6 +18,7 @@ import { splineFromKnots } from './bezier-spline';
 import { board, type BezierBoard } from './board';
 import { crossSection } from './cross-section';
 import { knot, type Knot } from './knot';
+import { loftPoint, loftSection } from './loft';
 import { polylineSpline } from './test-support/synthetic-boards';
 import { tessellateBoard } from './tessellate';
 import { vec2 } from './vec2';
@@ -101,46 +102,34 @@ describe('tessellateBoard: correspondence smoothness between differing stations'
   });
 
   /**
-   * A correct loft sweeps each ring vertex along a straight line between two
-   * stations — second difference zero. Any departure is the loft failing to hold
-   * a consistent correspondence.
-   *
-   * The point-blended loft (`loft.ts`) gets that for free and exactly: ring
-   * vertex `i` is `lerp(p_i(A), p_i(B), d)` where both points are constants, so
-   * the only curvature in the sweep comes from the board's own thickness / width
-   * / rocker curves. What remains here is those curves, not the loft.
-   *
-   * Measured on this fixture (max over all ring vertices, cm):
-   *   arc length, adaptive (PR #24)        3.2e-3   plus real high-frequency noise
-   *   arc length, fixed table + CP blend   1.6e-3
-   *   point blend (current)                1.1e-6
-   *
-   * The threshold is set an order of magnitude above the current figure and
-   * three below the previous one, so any return to blending control points —
-   * whose knot-index pairing is what put the extra motion there — fails here.
+   * Within a station interval, each ring vertex sweeps along the stations' cubic
+   * cardinal spline in x (since outline, bottom and deck are flat here). The fourth
+   * finite difference of any cubic polynomial sampled on a uniform grid is identically
+   * zero — a strict analytic oracle replacing the old piecewise-linear second-difference
+   * check. Evaluated on `loftPoint` (Float64) it vanishes to machine precision (< 1e-12);
+   * on the Float32 mesh it sits at the exact Float32 quantization floor (16·eps_f32·W ≈ 1e-5).
    */
-  it('sweeps ring vertices near-linearly within a station interval', () => {
-    let maxD2 = 0;
-    for (let r = 1; r < lengthSteps - 1; r++) {
-      if (intervalOf(xOf(r - 1)) !== intervalOf(xOf(r + 1))) continue; // straddles a station
-      for (let i = 0; i < ringLen; i++) {
-        const [ay, az] = yz(r - 1, i);
-        const [by, bz] = yz(r, i);
-        const [cy, cz] = yz(r + 1, i);
-        maxD2 = Math.max(maxD2, Math.hypot(cy - 2 * by + ay, cz - 2 * bz + az));
+  it('sweeps ring vertices along an exact cubic within a station interval', () => {
+    const b = makeBoard();
+    let maxD4Exact = 0;
+    for (let r = 2; r < lengthSteps - 2; r++) {
+      const run = intervalOf(xOf(r - 2));
+      if (run < 0 || run !== intervalOf(xOf(r + 2))) continue; // straddles a station
+      const secs = [r - 2, r - 1, r, r + 1, r + 2].map((k) => loftSection(b, xOf(k))!);
+      for (const f of [0.15, 0.35, 0.55, 0.8]) {
+        const pts = secs.map((s) => loftPoint(s, f));
+        const d4x = pts[4]!.x - 4 * pts[3]!.x + 6 * pts[2]!.x - 4 * pts[1]!.x + pts[0]!.x;
+        const d4y = pts[4]!.y - 4 * pts[3]!.y + 6 * pts[2]!.y - 4 * pts[1]!.y + pts[0]!.y;
+        maxD4Exact = Math.max(maxD4Exact, Math.hypot(d4x, d4y));
       }
     }
-    expect(maxD2).toBeLessThan(1e-5);
+    expect(maxD4Exact).toBeLessThan(1e-12);
   });
 
   /**
-   * The visible symptom is not the magnitude of the second difference but its
-   * high-frequency content: shading derives normals from neighbouring vertices,
-   * and the curvature overlay differentiates those again, so jitter blotches
-   * where a smooth trend would not. The adaptive arc-length sampler's jitter was
-   * 2.6e-3 cm and the fixed-resolution table with a control-point blend 1.6e-3;
-   * the point-blended loft is 1.1e-6 — i.e. the whole second difference is now
-   * the board's own curves, with no high-frequency component left to separate.
+   * The visible symptom of broken correspondence is high-frequency jitter in curvature
+   * along x (normals and curvature overlays differentiate vertex positions twice).
+   * The point-blended loft keeps this under 1e-5 cm inside every interval.
    */
   it('has no high-frequency jitter in that sweep', () => {
     let maxJitter = 0;
@@ -151,11 +140,47 @@ describe('tessellateBoard: correspondence smoothness between differing stations'
       return Math.hypot(cy - 2 * by + ay, cz - 2 * bz + az);
     };
     for (let r = 1; r < lengthSteps - 2; r++) {
-      if (intervalOf(xOf(r - 1)) !== intervalOf(xOf(r + 2))) continue;
+      const run = intervalOf(xOf(r - 1));
+      if (run < 0 || run !== intervalOf(xOf(r + 2))) continue;
       for (let i = 0; i < ringLen; i++) {
         maxJitter = Math.max(maxJitter, Math.abs(d2(r + 1, i) - d2(r, i)));
       }
     }
     expect(maxJitter).toBeLessThan(1e-5);
+  });
+
+  /**
+   * C¹ continuity across every station boundary via O(h²) mesh-refinement convergence.
+   *
+   * At a C⁰ corner (linear station blend), the worst second difference |p(x+h) − 2p(x) +
+   * p(x−h)| ≈ h·Δθ shrinks only as O(h) when halving step size (ratio ≈ 2.0). For a C¹
+   * spline with matching slopes from both sides, |Δ²p| = h²|p''| + O(h³) shrinks as O(h²)
+   * (ratio ≈ 4.0) even across station boundaries.
+   */
+  it('is C¹ continuous across stations (O(h²) second-difference convergence)', () => {
+    const maxSecondDiff = (steps: number): number => {
+      const m = tessellateBoard(makeBoard(), { lengthSteps: steps, ringSteps });
+      const rl = (m.positions.length / 3 - 2) / steps;
+      const at = (r: number, i: number): [number, number] => {
+        const b = (r * rl + i) * 3;
+        return [m.positions[b + 1]!, m.positions[b + 2]!];
+      };
+      let maxD2 = 0;
+      for (let r = 1; r < steps - 1; r++) {
+        for (let i = 0; i < rl; i++) {
+          const [ay, az] = at(r - 1, i);
+          const [by, bz] = at(r, i);
+          const [cy, cz] = at(r + 1, i);
+          maxD2 = Math.max(maxD2, Math.hypot(cy - 2 * by + ay, cz - 2 * bz + az));
+        }
+      }
+      return maxD2;
+    };
+    const coarse = maxSecondDiff(200);
+    const fine = maxSecondDiff(400);
+    const ratio = coarse / fine;
+    // O(h²) ⇒ ratio converges to 4.0; a C⁰ crease would stall near 2.0.
+    expect(ratio).toBeGreaterThan(3.7);
+    expect(ratio).toBeLessThan(4.3);
   });
 });

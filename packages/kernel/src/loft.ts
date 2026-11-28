@@ -87,18 +87,14 @@ export interface Vert3 {
 }
 
 /**
- * The two bracketing station profiles at some x, ready to sample.
+ * The station profiles that make the surface at some x, and how much of each.
  *
- * Both are already scaled to the board's thickness and width at that x, so a
- * blend of the two needs no further correction.
+ * All are already scaled to the board's thickness and width at that x, so the
+ * weighted sum of their points needs no further correction. The weights sum to 1.
  */
 export interface LoftedSection {
-  /** Arc-length table of the preceding station's scaled profile. */
-  readonly prev: ArcTable;
-  /** Arc-length table of the following station's scaled profile. */
-  readonly next: ArcTable;
-  /** Blend weight: 0 at `prev`, 1 at `next`. */
-  readonly d: number;
+  /** One to four station profiles (arc-length tables) and their weights. */
+  readonly parts: readonly { readonly table: ArcTable; readonly w: number }[];
   /** Height of the bottom centreline at this station. */
   readonly rocker: number;
 }
@@ -118,12 +114,56 @@ export const isFinite3 = (x: number, y: number, z: number): boolean =>
 export const MIN_DIM = 0.5;
 
 /**
+ * Station weights along the board: a cardinal (Catmull–Rom) spline through the real
+ * stations, its swing halved ({@link STATION_TENSION}). See docs/design/smooth-station-loft.md.
+ */
+export const STATION_TENSION = 0.5;
+
+/** Each real station's weight at `x` (index into the board's sections → weight). */
+const splineWeights = (cs: readonly CrossSection[], x: number): [number, number][] | null => {
+  const xs = cs.slice(1, -1).map((q) => q.position);
+  const n = xs.length;
+  if (n < 2 || xs.some((p, i) => i > 0 && !(p - xs[i - 1]! > 1e-9))) return null;
+  if (x <= xs[0]!) return [[1, 1]];
+  if (x >= xs[n - 1]!) return [[n, 1]];
+  let i = 0;
+  while (i < n - 2 && x > xs[i + 1]!) i++;
+  const h = xs[i + 1]! - xs[i]!;
+  const t = (x - xs[i]!) / h;
+  // Cubic Hermite: the two stations, and the rate of change at each.
+  const h00 = (1 + 2 * t) * (1 - t) * (1 - t);
+  const h10 = t * (1 - t) * (1 - t);
+  const h01 = t * t * (3 - 2 * t);
+  const h11 = t * t * (t - 1);
+  const w = new Map<number, number>();
+  const add = (j: number, v: number) => w.set(j, (w.get(j) ?? 0) + v);
+  add(i, h00);
+  add(i + 1, h01);
+  // The rate of change at station k: the slope across its neighbours, swing halved; 0 at
+  // the first and last (held beyond).
+  const rate = (k: number, by: number) => {
+    if (k <= 0 || k >= n - 1) return;
+    const span = xs[k + 1]! - xs[k - 1]!;
+    add(k + 1, (by * (1 - STATION_TENSION)) / span);
+    add(k - 1, (-by * (1 - STATION_TENSION)) / span);
+  };
+  rate(i, h10 * h);
+  rate(i + 1, h11 * h);
+  const out: [number, number][] = [];
+  for (const [j, v] of w) if (v !== 0) out.push([j + 1, v]);
+  return out;
+};
+
+/**
  * Prepare the surface at station `x` for sampling, or null where there is none.
  *
  * Station bracketing is deliberately identical to `getInterpolatedCrossSection`
  * (`board.ts`), including the order in which `d` is computed relative to the
- * index clamps: the mesh must keep pairing the same stations it always did, so
- * that the only thing this change alters is how the two are blended.
+ * index clamps: the mesh must keep pairing the same stations it always did.
+ *
+ * The stations are weighted by a cardinal spline through them (`splineWeights`):
+ * exact at every station, smooth through it. Past the first and last station the
+ * profile is held.
  */
 export const loftSection = (b: BezierBoard, x: number): LoftedSection | null => {
   const cs = b.crossSections;
@@ -160,16 +200,27 @@ export const loftSection = (b: BezierBoard, x: number): LoftedSection | null => 
   let width = getWidthAtPos(b, x);
   if (width < MIN_DIM) width = MIN_DIM;
 
+  // Station weights: the spline through the stations, or (a single station, or two at
+  // one place) the straight blend.
+  const weights = new Map<number, number>();
+  const add = (i: number, w: number) => weights.set(i, (weights.get(i) ?? 0) + w);
+  const spline = splineWeights(cs, x);
+  if (spline) {
+    for (const [i, w] of spline) add(i, w);
+  } else {
+    add(index, 1 - d);
+    if (nextIndex !== index) add(nextIndex, d);
+  }
+
   // Scale BEFORE building the tables: fractional arc length is not invariant
   // under a non-uniform scale, so sampling an unscaled profile and scaling the
   // result would put the two stations' points at different places on the rail.
-  const prevTable = arcLengthTable(scaleCrossSection(cs[index]!, thickness, width).spline);
-  const nextTable =
-    nextIndex === index
-      ? prevTable
-      : arcLengthTable(scaleCrossSection(cs[nextIndex]!, thickness, width).spline);
-
-  return { prev: prevTable, next: nextTable, d, rocker };
+  const parts: { table: ArcTable; w: number }[] = [];
+  for (const [i, w] of [...weights].sort((p, q) => p[0] - q[0])) {
+    if (w === 0) continue;
+    parts.push({ table: arcLengthTable(scaleCrossSection(cs[i]!, thickness, width).spline), w });
+  }
+  return { parts, rocker };
 };
 
 /**
@@ -179,9 +230,15 @@ export const loftSection = (b: BezierBoard, x: number): LoftedSection | null => 
  * `f = 0` is the bottom centreline, `f = 1` the deck centreline.
  */
 export const loftPoint = (s: LoftedSection, f: number): Vec2 => {
-  const a = pointAtArcFraction(s.prev, f);
-  const b = pointAtArcFraction(s.next, f);
-  return vec2(a.x + (b.x - a.x) * s.d, a.y + (b.y - a.y) * s.d);
+  if (s.parts.length === 1) return pointAtArcFraction(s.parts[0]!.table, f);
+  let x = 0;
+  let y = 0;
+  for (const { table, w } of s.parts) {
+    const p = pointAtArcFraction(table, f);
+    x += w * p.x;
+    y += w * p.y;
+  }
+  return vec2(x, y);
 };
 
 /** Points per rail for a ring of `ringSteps`; both rails share the two centreline points. */

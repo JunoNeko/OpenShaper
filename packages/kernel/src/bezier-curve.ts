@@ -151,9 +151,26 @@ const tForXBisect = (k: Coeffs, x: number, t0: number, t1: number, nrOfSplits: n
   return tForXBisect(k, x, bestT - seg, bestT + seg, Math.floor(nrOfSplits / 2));
 };
 
+/**
+ * y at x, solved to machine precision.
+ *
+ * {@link tForX} stops once x is within `POS_TOLERANCE` (0.03 mm), as the legacy does.
+ * Where a curve is steep in x (an outline running into the nose, rocker kicking up)
+ * that error is multiplied by the slope, and because the iteration count steps as x
+ * moves, y came out as a staircase: small slope breaks that a mesh shows as creases.
+ * A few more Newton steps from that answer make y a smooth function of x. See
+ * docs/specs/divergences.md.
+ */
 export const yForX = (k: Coeffs, x: number): number => {
-  const guess = (x - k.p0x) / (k.p3x - k.p0x);
-  const t = tForX(k, x, guess);
+  let t = tForX(k, x, (x - k.p0x) / (k.p3x - k.p0x));
+  for (let i = 0; i < 8; i++) {
+    const error = x - xValue(k, t);
+    const slope = xDeriv(k, t);
+    if (Math.abs(error) < 1e-12 || slope === 0) break;
+    const next = t + error / slope;
+    if (!(next >= 0 && next <= 1)) break;
+    t = next;
+  }
   return yValue(k, t);
 };
 

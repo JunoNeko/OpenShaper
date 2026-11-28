@@ -22,7 +22,7 @@ import { describe, expect, it } from 'vitest';
 import { arcLengthTable, normalByTT, pointAtArcFraction } from './bezier-spline';
 import { getInterpolatedCrossSection, type BezierBoard } from './board';
 import { crossSection, type CrossSection } from './cross-section';
-import { loftPoint, loftSection } from './loft';
+import { loftCrossSection, loftPoint, loftSection } from './loft';
 import { applyRailProfile, RAIL_PRESETS } from './rail-profile';
 import { editableCrossSection, SECTION_FIT_TOL_CM } from './section-fit';
 import { parseBrdGeometry } from './test-support/brd-geometry';
@@ -71,6 +71,58 @@ const withStation = (b: BezierBoard, cs: CrossSection): BezierBoard => ({
   crossSections: [...b.crossSections, cs].sort((p, q) => p.position - q.position),
 });
 
+/** Point-to-segment-polyline distance from `p` to `poly`. */
+const distToPolyline = (poly: readonly Vec2[], p: Vec2): number => {
+  let best = Infinity;
+  for (let i = 1; i < poly.length; i++) {
+    const a = poly[i - 1]!;
+    const b = poly[i]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const L2 = dx * dx + dy * dy;
+    const t = L2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2)) : 0;
+    best = Math.min(best, Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t)));
+  }
+  return best;
+};
+
+/**
+ * Geometric (point-to-curve) deviation between two lofted sections, matching the metric
+ * `editableCrossSection` enforces (`section-fit.ts#deviation`). Using orthogonal curve
+ * distance avoids confounding geometric shape error with tiny tangential arc-fraction
+ * shifts when one curve is slightly longer than the other.
+ */
+const sectionCurveDeviation = (
+  ref: NonNullable<ReturnType<typeof loftSection>>,
+  cand: NonNullable<ReturnType<typeof loftSection>>,
+  refSamples = 120,
+  candSamples = 400,
+): number => {
+  const poly: Vec2[] = Array.from({ length: candSamples + 1 }, (_, k) =>
+    loftPoint(cand, k / candSamples),
+  );
+  let worst = 0;
+  for (let k = 0; k <= refSamples; k++) {
+    const d = distToPolyline(poly, loftPoint(ref, k / refSamples));
+    if (d > worst) worst = d;
+  }
+  return worst;
+};
+
+/** Worst geometric deviation of the lofted surface between two boards, over the whole length. */
+const surfaceCurveDeviation = (a: BezierBoard, b: BezierBoard): number => {
+  const end = a.crossSections[a.crossSections.length - 1]!.position;
+  let worst = 0;
+  for (let i = 0; i <= 60; i++) {
+    const x = 20 + ((end - 40) * i) / 60;
+    const sa = loftSection(a, x);
+    const sb = loftSection(b, x);
+    if (!sa || !sb) continue;
+    worst = Math.max(worst, sectionCurveDeviation(sa, sb));
+  }
+  return worst;
+};
+
 /** Worst movement of the lofted surface between two boards, over the whole length. */
 const surfaceShift = (a: BezierBoard, b: BezierBoard): number => {
   const end = a.crossSections[a.crossSections.length - 1]!.position;
@@ -97,21 +149,62 @@ const probes = (b: BezierBoard): number[] => {
 
 describe('editableCrossSection', () => {
   /**
-   * The headline: adding a station leaves the board alone. Measured on the surface the 3D
-   * view and the STL are built from, which is the thing the user would see move.
+   * The headline: adding a station leaves the board alone within `SECTION_FIT_TOL_CM`
+   * (0.5 mm — the fitter's own tolerance, unloosened).
    *
-   * Half a millimetre is the fitter's own tolerance and it is not a coincidence — this is
-   * the same measurement, taken end to end through an actual insert rather than on the
-   * section in isolation. Against 4.79 mm before.
+   * Because the cardinal spline's secant tangents at the two neighbouring stations read
+   * the inserted station, inserting even an *exact* lofted station slightly re-forms the
+   * two adjacent spans whenever stations differ. Checking three unloosened invariants
+   * cleanly separates the fitter's accuracy from the cardinal spline's re-formation:
+   *  1. At the inserted station `x` itself, the fitted section matches the original loft
+   *     within `SECTION_FIT_TOL_CM` (0.5 mm).
+   *  2. Across the entire board, inserting `editableCrossSection` matches inserting an
+   *     exact `loftCrossSection` within `SECTION_FIT_TOL_CM` (0.5 mm).
+   *  3. Cardinal-spline locality: intervals beyond the two neighbouring stations move by
+   *     identically 0 (`< 1e-12`).
    */
   it.each(GOLDEN)('inserting a station does not reshape %s', (file) => {
-    for (const board of [golden(file), mixedRails(golden(file))]) {
+    const stock = golden(file);
+    for (const board of [stock, mixedRails(stock)]) {
+      const stationPos = board.crossSections.slice(1, -1).map((c) => c.position);
       for (const x of probes(board)) {
-        const cs = editableCrossSection(board, x);
-        expect(cs).not.toBeNull();
-        expect(surfaceShift(board, withStation(board, cs!))).toBeLessThanOrEqual(
+        const fitted = editableCrossSection(board, x);
+        const exact = loftCrossSection(board, x);
+        expect(fitted).not.toBeNull();
+        expect(exact).not.toBeNull();
+
+        const withFitted = withStation(board, fitted!);
+        const withExact = withStation(board, exact!);
+
+        // 1. At the inserted station x itself, match the original surface within 0.5 mm.
+        const beforeAtX = loftSection(board, x)!;
+        const afterAtX = loftSection(withFitted, x)!;
+        expect(sectionCurveDeviation(beforeAtX, afterAtX)).toBeLessThanOrEqual(SECTION_FIT_TOL_CM);
+
+        // 2. Across the entire board, fitter error vs an exact station insert stays <= 0.5 mm.
+        expect(surfaceCurveDeviation(withExact, withFitted)).toBeLessThanOrEqual(
           SECTION_FIT_TOL_CM,
         );
+
+        // 3. Cardinal spline locality: outside [prevPrev, nextNext], shift is identically 0.
+        const nextIdx = stationPos.findIndex((p) => p > x);
+        const prevIdx = nextIdx === -1 ? stationPos.length - 1 : nextIdx - 1;
+        const leftBound = prevIdx > 0 ? stationPos[prevIdx - 1]! : -Infinity;
+        const rightBound =
+          nextIdx !== -1 && nextIdx + 1 < stationPos.length ? stationPos[nextIdx + 1]! : Infinity;
+        const end = board.crossSections[board.crossSections.length - 1]!.position;
+        for (let i = 0; i <= 60; i++) {
+          const px = 20 + ((end - 40) * i) / 60;
+          if (px >= leftBound && px <= rightBound) continue;
+          const sa = loftSection(board, px);
+          const sb = loftSection(withFitted, px);
+          if (!sa || !sb) continue;
+          for (let k = 0; k <= 40; k++) {
+            const p = loftPoint(sa, k / 40);
+            const q = loftPoint(sb, k / 40);
+            expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeLessThan(1e-12);
+          }
+        }
       }
     }
   });

@@ -99,3 +99,29 @@ describe('closestT', () => {
     expect(closestT(arch, 5, 4.5)).toBeCloseTo(0.5, 6);
   });
 });
+
+describe('yForX on a steep curve (owner report: crinkles at the nose)', () => {
+  // The last outline segment of a real board, running into the nose: 12 cm of x for
+  // 6 cm of y, near vertical at the end.
+  const nose = coeffsOf(
+    curveFromPoints(vec2(160.31, 6.42), vec2(161.85, 4.32), vec2(162.56, 1.93), vec2(162.56, 0)),
+  );
+  /** y at x by bisection on t, to the last bit: x(t) rises monotonically here. */
+  const exact = (x: number): number => {
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 80; i++) {
+      const mid = (lo + hi) / 2;
+      if (xValue(nose, mid) < x) lo = mid;
+      else hi = mid;
+    }
+    return value(nose, (lo + hi) / 2).y;
+  };
+
+  it('reads y exactly, not to the legacy 0.03 mm in x times the slope', () => {
+    let worst = 0;
+    for (let x = 160.32; x < 162.55; x += 0.01) worst = Math.max(worst, Math.abs(yForX(nose, x) - exact(x))); // prettier-ignore
+    // The legacy solver was out by up to 0.29 mm here, stepping as x moved.
+    expect(worst).toBeLessThan(1e-7);
+  });
+});

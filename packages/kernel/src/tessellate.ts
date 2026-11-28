@@ -191,8 +191,10 @@ export const tessellateBoard = (board: BezierBoard, opts: TessellateOptions = {}
     }
   };
 
-  capEnd(rings[0]!, pointed0 ? 0 : x0, true);
-  capEnd(rings[rings.length - 1]!, pointed1 ? length : x1, false);
+  // Wound to match the bands: each ring edge runs one way in its band and the other
+  // in its cap, so the shell is a closed, consistently oriented solid.
+  capEnd(rings[0]!, pointed0 ? 0 : x0, false);
+  capEnd(rings[rings.length - 1]!, pointed1 ? length : x1, true);
 
   return finalizeMesh(positions, indices);
 };
@@ -459,10 +461,11 @@ const tessellateCutout = (
     }
   }
   if (firstIdx !== -1 && lastIdx !== firstIdx) {
-    capRow(rightRows[firstIdx]!, true);
-    capRow(rightRows[lastIdx]!, false);
-    capRow(leftRows[firstIdx]!, false);
-    capRow(leftRows[lastIdx]!, true);
+    // Wound against their bands, as the single-loop caps (see there).
+    capRow(rightRows[firstIdx]!, false);
+    capRow(rightRows[lastIdx]!, true);
+    capRow(leftRows[firstIdx]!, true);
+    capRow(leftRows[lastIdx]!, false);
   }
 
   return finalizeMesh(positions, indices);
