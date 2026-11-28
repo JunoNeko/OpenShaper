@@ -227,13 +227,19 @@ describe('a raised rear behind a steep start at the root (the owner’s twin fin
   const d = defaultTwinFin('right');
   const b = prepareBlade(d);
 
-  it('is found, though the outline leaves the root steeply for its first millimetre', () => {
-    // The root's handle points nearly straight up: the underside starts just above it.
-    const k = d.outline.knots.at(-1)!;
-    expect(Math.abs(k.tangentToPrev.y / (k.tangentToPrev.x - k.end.x))).toBeGreaterThan(1);
+  it('is found, on both the twin fin and when the outline leaves the root steeply', () => {
     expect(b.raisedRear).not.toBeNull();
     expect(b.raisedRear!.cornerX).toBeCloseTo(d.outline.knots.at(-2)!.end.x, 9);
     expect(b.raisedRear!.cornerZ).toBeCloseTo(d.outline.knots.at(-2)!.end.y, 9);
+
+    // Also pin a root handle pointing nearly straight up (>45°).
+    const knots = [...d.outline.knots];
+    const last = knots.at(-1)!;
+    knots[knots.length - 1] = knot(last.end, vec2(-0.016, 0.145), last.tangentToNext, false);
+    const steep = { ...d, outline: splineFromKnots(knots) };
+    const k = steep.outline.knots.at(-1)!;
+    expect(Math.abs(k.tangentToPrev.y / (k.tangentToPrev.x - k.end.x))).toBeGreaterThan(1);
+    expect(prepareBlade(steep).raisedRear).not.toBeNull();
   });
 
   it('keeps the foil’s thickness along the underside, not a minimum-thickness flap', () => {

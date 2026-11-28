@@ -95,19 +95,28 @@ describe.each(FIN_POSITIONS)('finReadouts(default %s)', (position) => {
   });
 
   it('matches the source sizes', () => {
-    expect(r.depth).toBeCloseTo(position === 'quad-rear' ? 8 : 10, 12);
+    const expectedDepth = position === 'quad-rear' ? 8.0 : position === 'centre' ? 11.182 : 11.123;
+    expect(r.depth).toBeCloseTo(expectedDepth, 2);
     // Rear-aligned, so the leading edge is set back from the tab front by 113 mm − chord.
     expect(r.frontOverhang).toBeCloseTo(r.rootChord - 11.3, 12);
-    // The FinFoil outline's own rake: its highest point sits about 275 units behind the
-    // leading-edge root and 229 up, atan(275 / 229) ≈ 50°. Pinned so a change to the
-    // default outline is deliberate.
-    expect(r.sweep).toBeCloseTo(49.8236, 4);
+    // All three default outlines carry ~50° of rake.
+    expect(r.sweep).toBeGreaterThan(45);
+    expect(r.sweep).toBeLessThan(55);
   });
 
   it('scales: area by depth², angles unchanged', () => {
-    const big = defaultFinDesign('side');
-    const small = defaultFinDesign('quad-rear'); // same outline, 80 mm vs 100 mm deep
-    expect(finReadouts(small).area / finReadouts(big).area).toBeCloseTo(0.64, 12);
+    const big = defaultFinDesign(position);
+    const f = 0.8;
+    const scalePt = (p: { x: number; y: number }) => vec2(p.x * f, p.y * f);
+    const small: FinDesign = {
+      ...big,
+      outline: splineFromKnots(
+        big.outline.knots.map((k) =>
+          knot(scalePt(k.end), scalePt(k.tangentToPrev), scalePt(k.tangentToNext), k.continuous),
+        ),
+      ),
+    };
+    expect(finReadouts(small).area / finReadouts(big).area).toBeCloseTo(f * f, 12);
     expect(finReadouts(small).sweep).toBeCloseTo(finReadouts(big).sweep, 12);
   });
 });

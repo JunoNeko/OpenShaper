@@ -271,13 +271,14 @@ describe('.fin.json versions', () => {
   });
 
   it('writes every fin as version 3, the swept loft, leaving out what isn’t set', () => {
-    const doc = JSON.parse(writeFinJson(defaultFinDesign('centre'))) as Record<string, unknown>;
+    const plain = { ...defaultFinDesign('centre'), tipLine: undefined };
+    const doc = JSON.parse(writeFinJson(plain)) as Record<string, unknown>;
     expect(doc.version).toBe(3);
     expect(doc.slices).toBeUndefined();
     expect(doc.tipLine).toBeUndefined();
     expect(doc.thicknessPath).toBeUndefined();
     const d = {
-      ...defaultFinDesign('centre'),
+      ...plain,
       slices: [{ height: 0.5, section: nacaSection('0010') }],
     };
     expect((JSON.parse(writeFinJson(d)) as Record<string, unknown>).version).toBe(3);
@@ -424,18 +425,24 @@ describe('the owner’s twin fin and keel', () => {
   };
 
   it.each([
-    ['twin_fin_default', defaultTwinFin],
-    ['keel_default', defaultKeel],
+    ['fin-side-left', () => defaultFinDesign('side', 'left')],
+    ['fin-centre', () => defaultFinDesign('centre')],
+    ['fin-quad-rear-left', () => defaultFinDesign('quad-rear', 'left')],
+    ['twin_fin_default', () => defaultTwinFin('left')],
+    ['keel_default', () => defaultKeel('left')],
+    ['single-fin-centre', () => defaultSingleFin()],
   ] as const)('starts %s exactly as the owner drew it', (name, make) => {
     const drawn = owner(name);
-    const start = make('right');
+    const start = make();
     same(coords(start.outline), coords(drawn.outline));
     expect(start.outline.knots.map((k) => k.continuous)).toEqual(
       drawn.outline.knots.map((k) => k.continuous),
     );
     same(coords(start.taper), coords(drawn.taper));
     same(coords(start.section.outside), coords(drawn.section.outside));
-    same(coords(start.section.inside!), coords(drawn.section.inside!));
+    if (drawn.section.inside) same(coords(start.section.inside!), coords(drawn.section.inside));
+    else expect(start.section.inside).toBeNull();
+    expect(start.tipLine).toEqual(drawn.tipLine);
     expect([start.position, start.hand, start.cant, start.base]).toEqual([
       drawn.position,
       drawn.hand,

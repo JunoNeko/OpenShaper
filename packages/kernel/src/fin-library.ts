@@ -68,14 +68,14 @@ export interface LibraryFin {
   readonly scaleM: number;
 }
 
-/** OpenFinShaper's starting fins are 100 mm (side, centre) and 80 mm (quad rear) deep. */
+/** OpenFinShaper's starting thruster fins are already M (~111–112 mm); quad rear is 80 mm. */
 export const LIBRARY_FINS: readonly LibraryFin[] = [
-  { id: 'thruster-side', label: 'Thruster side', roles: ['side'], make: (h) => defaultFinDesign('side', h), scaleM: 1.12 }, // prettier-ignore
-  { id: 'thruster-centre', label: 'Thruster centre', roles: ['centre'], make: () => defaultFinDesign('centre'), scaleM: 1.12 }, // prettier-ignore
+  { id: 'thruster-side', label: 'Thruster side', roles: ['side'], make: (h) => defaultFinDesign('side', h), scaleM: 1 }, // prettier-ignore
+  { id: 'thruster-centre', label: 'Thruster centre', roles: ['centre'], make: () => defaultFinDesign('centre'), scaleM: 1 }, // prettier-ignore
   { id: 'quad-rear', label: 'Quad rear', roles: ['rear'], make: (h) => defaultFinDesign('quad-rear', h), scaleM: 1.2 }, // prettier-ignore
   { id: 'twin', label: 'Twin', roles: ['side'], make: (h) => defaultTwinFin(h), scaleM: 1 },
   { id: 'keel', label: 'Keel', roles: ['side'], make: (h) => defaultKeel(h), scaleM: 1 },
-  { id: 'side-bite', label: '2+1 side bite', roles: ['side'], make: (h) => defaultFinDesign('side', h), scaleM: 0.95 }, // prettier-ignore
+  { id: 'side-bite', label: '2+1 side bite', roles: ['side'], make: (h) => defaultFinDesign('side', h), scaleM: 0.85 }, // prettier-ignore
   { id: 'single', label: 'Single', roles: ['centre'], usBox: true, make: () => defaultSingleFin(), scaleM: 1 }, // prettier-ignore
   { id: 'canard', label: 'Canard', roles: ['canard'], make: (h) => defaultCanard(h), scaleM: 1 },
 ];

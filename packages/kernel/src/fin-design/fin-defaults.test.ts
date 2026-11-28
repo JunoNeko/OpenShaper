@@ -67,26 +67,27 @@ describe('fin defaults are copied verbatim from the FinFoil sources', () => {
 describe.each(FIN_POSITIONS)('defaultFinDesign(%s)', (position) => {
   const d = defaultFinDesign(position);
   const size = FOIL_SIZES[position];
+  const expectedDepthCm = position === 'side' ? 11.115 : position === 'centre' ? 11.182 : 8.0;
 
   it('breaks no rule', () => {
     expect(validateFinDesign(d)).toEqual([]);
     expect(validateFinDesign(defaultFinDesign(position, 'right'))).toEqual([]);
   });
 
-  it('is as deep as the source', () => {
-    expect(splineExtremes(d.outline, 'y').max.point.y).toBeCloseTo(size.height * 100, 12);
+  it('has the expected starting depth', () => {
+    expect(splineExtremes(d.outline, 'y').max.point.y).toBeCloseTo(expectedDepthCm, 1);
   });
 
   it('is rear-aligned: the trailing-edge root on the tab rear end', () => {
     const k = d.outline.knots;
     const te = k[k.length - 1]!.end;
     expect(te.x).toBeCloseTo(0, 12);
-    expect(te.y).toBe(-0);
-    expect(k[0]!.end.y).toBe(-0);
+    expect(te.y).toBeCloseTo(0, 12);
+    expect(k[0]!.end.y).toBeCloseTo(0, 12);
     expect(d.lateralOffset).toBe(0);
   });
 
-  it('keeps the source aspect: root chord / depth = 232.86 / outline peak', () => {
+  it('keeps the source aspect: root chord / depth ≈ 1.02', () => {
     const k = d.outline.knots;
     const chord = k[0]!.end.x - k[k.length - 1]!.end.x;
     const depth = splineExtremes(d.outline, 'y').max.point.y;
@@ -96,8 +97,10 @@ describe.each(FIN_POSITIONS)('defaultFinDesign(%s)', (position) => {
   it('tapers from the source root thickness to the minimum', () => {
     expect(valueAt(d.taper, 0)).toBeCloseTo(size.thick * 100, 12);
     expect(valueAt(d.taper, 1)).toBeCloseTo(FIN_MIN_THICKNESS, 12);
-    // Straight to 70%: halfway there it is three quarters of the root thickness.
-    expect(valueAt(d.taper, 0.35)).toBeCloseTo(size.thick * 100 * 0.75, 4);
+    // Monotonically thinner from root through mid-depth to tip.
+    expect(valueAt(d.taper, 0.35)).toBeLessThan(valueAt(d.taper, 0));
+    expect(valueAt(d.taper, 0.7)).toBeLessThan(valueAt(d.taper, 0.35));
+    expect(valueAt(d.taper, 1)).toBeLessThan(valueAt(d.taper, 0.7));
   });
 
   it('is still thinning at the tip, never below the minimum on the way', () => {

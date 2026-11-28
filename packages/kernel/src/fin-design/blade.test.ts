@@ -265,7 +265,7 @@ describe('cant', () => {
     const root = bladeSection(b, 0);
     for (const p of [...root.outside, ...root.inside]) expect(p.z).toBe(0);
     // No slide at the root: the flat face starts on the tab's centre plane.
-    for (const p of root.inside) expect(p.y).toBe(0);
+    for (const p of root.inside) expect(p.y).toBeCloseTo(0, 12);
   });
 });
 

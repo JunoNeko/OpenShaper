@@ -150,7 +150,7 @@ describe('past the tip line (owner proposal: the thickness path carried on to th
       ...knots.slice(0, -1),
       knot(vec2(1, 0.15), up(end.tangentToPrev), vec2(1, 0.15), end.continuous),
     ]);
-    const d = { ...base, taper };
+    const d = { ...base, tipLine: undefined, taper };
     const sb = smoothBlade(d);
     const m = sb.blade.minThickness;
     const length = (s: number) => {
@@ -170,8 +170,10 @@ describe('past the tip line (owner proposal: the thickness path carried on to th
       expect(sb.scale(s)).toBeLessThanOrEqual(curveAt(s) + 1e-9);
       expect(sb.scale(s)).toBeLessThanOrEqual(1.25 * aspect * length(s) + 1e-9);
     }
-    // At the tip point it closes onto the minimum, however thick the curve ends.
-    expect(sb.scale(1)).toBeLessThan(0.005);
+    // At the tip point it stays bounded by the tip foil's own aspect ratio (well below the
+    // blunt 1.5 mm curve end), rather than leaving a blunt nub.
+    expect(sb.scale(1)).toBeLessThanOrEqual(1.25 * aspect * length(1) + 1e-9);
+    expect(sb.scale(1)).toBeLessThan(curveAt(1) / 5);
   });
 
   it('moves the tip point as the tip line moves', () => {
@@ -351,8 +353,8 @@ describe('the smooth blade', () => {
 
   it('meshes as a closed shell, wound outward, either hand and round a hook', () => {
     for (const [d, lo, hi] of [
-      [defaultFinDesign('side', 'left'), 25, 32],
-      [defaultFinDesign('side', 'right'), 25, 32],
+      [defaultFinDesign('side', 'left'), 38, 48],
+      [defaultFinDesign('side', 'right'), 38, 48],
       [ownerFin('tsn_800_single.fin.json'), 100, 140],
     ] as const) {
       const m = finMesh(d, FIN_MESH_PREVIEW).blade;

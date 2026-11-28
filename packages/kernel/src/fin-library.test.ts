@@ -69,7 +69,7 @@ describe('fin library', () => {
       designDepth(withFinSet(defaultBoardFins('thruster', 'futures'), 'thruster', size).fins[0]!.design!); // prettier-ignore
     expect(depth('S')).toBeLessThan(depth('M'));
     expect(depth('M')).toBeLessThan(depth('L'));
-    expect(depth('M')).toBeCloseTo(11.2, 1); // 112 mm: a medium thruster side fin
+    expect(depth('M')).toBeCloseTo(11.12, 1); // ~111 mm: a medium thruster side fin
   });
 
   it('puts each fin on the tab its system takes', () => {
